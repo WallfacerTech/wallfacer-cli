@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/danielgtaylor/openapi-cli-generator/cli"
+	"github.com/WallfacerTech/openapi-cli-generator/cli"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"gopkg.in/h2non/gentleman.v2/context"

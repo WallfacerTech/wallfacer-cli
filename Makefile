@@ -7,5 +7,7 @@ generate: generator
 	./openapi-cli-generator generate openapi.yaml
 	go build -o wallfacer .
 
+# Build the code generator from the sibling openapi-cli-generator repo.
+# Requires: git clone https://github.com/WallfacerTech/openapi-cli-generator.git ../openapi-cli-generator
 generator:
-	cd .. && go build -o wallfacer-cli/openapi-cli-generator .
+	go build -o openapi-cli-generator ../openapi-cli-generator
