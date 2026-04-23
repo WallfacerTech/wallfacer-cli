@@ -11,4 +11,4 @@ generate: build-generator
 # Build the code generator from the sibling openapi-cli-generator repo.
 # Requires: git clone https://github.com/WallfacerTech/openapi-cli-generator.git ../openapi-cli-generator
 build-generator:
-	go build -o openapi-cli-generator ../openapi-cli-generator
+	cd ../openapi-cli-generator && go build -o $(CURDIR)/openapi-cli-generator .

@@ -45,6 +45,8 @@ wallfacer tasks create <account-id> --body '{"prompt": "fix the login bug"}'
 wallfacer <command> --help
 ```
 
+Every command group has its own `--help`. Run `wallfacer --help` to see all available groups, or `wallfacer <group> --help` for details on a specific group (e.g. `wallfacer auth --help`).
+
 If you set `account_id` in the config file, the account-id argument is automatically injected and can be omitted.
 
 ## Configuration
