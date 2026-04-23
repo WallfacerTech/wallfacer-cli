@@ -9,7 +9,7 @@ Command-line interface for the [Wallfacer API](https://api.wallfacer.ai). Built 
 ```bash
 git clone https://github.com/WallfacerTech/wallfacer-cli.git
 cd wallfacer-cli
-make build
+make
 ```
 
 ## Authentication
@@ -24,12 +24,6 @@ Check that it works:
 
 ```bash
 wallfacer auth status
-```
-
-Remove a stored token:
-
-```bash
-wallfacer auth logout
 ```
 
 ## Usage
