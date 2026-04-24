@@ -61,6 +61,16 @@ base_url: https://api.wallfacer.ai  # optional override
 
 Environment variables with the `WALLFACER_` prefix are also supported (e.g. `WALLFACER_TOKEN`).
 
+## Agent Skills
+
+The `skills/wallfacer-cli/` directory contains a Claude Code agent skill that teaches agents how to use this CLI. It includes:
+
+- `SKILL.md` — Skill definition with command map and usage patterns
+- `references/config.md` — Config file layout and auth
+- `references/environments.md` — Environment and snapshot operations
+- `references/tasks.md` — Tasks, sessions, messages, and attachments
+- `references/vms.md` — VM lifecycle, exec, logs, and simulator
+
 ## Development
 
 The CLI commands in `openapi.go` are generated from `openapi.yaml`. To regenerate after updating the spec:
