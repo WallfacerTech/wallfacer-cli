@@ -33,6 +33,30 @@ Environment variables with `WALLFACER_` prefix override config (e.g. `WALLFACER_
 
 When `account_id` is set, the account-id positional arg is auto-injected into all commands and can be omitted. See [references/config.md](references/config.md).
 
+## Shortcuts
+
+### up
+
+Polls an environment until its base snapshot is ready, creates a VM, and waits for it to boot. Handles snapshot propagation retries automatically.
+
+```bash
+wallfacer up <environment-id>
+wallfacer up <environment-id> --poll 10 --max-wait 300
+```
+
+Flags: `--poll` (interval in seconds, default 5), `--max-wait` (timeout in seconds, default 600). Prints VM ID and port mappings when ready.
+
+### exec
+
+Shortcut for running commands in a VM without piping JSON to stdin. Everything after `--` is the shell command:
+
+```bash
+wallfacer exec --vm <vm-id> -- ls -la /workspace
+wallfacer exec --vm <vm-id> --dir /workspace --timeout 60 -- make build
+```
+
+Flags: `--vm` (required), `--dir` (working directory), `--timeout` (seconds, 1-300). Requires `account_id` in config.
+
 ## Command groups
 
 All commands are flat top-level groups (not nested). Write operations take JSON request bodies via **stdin** (piped), not flags. Use `-o json` for JSON output.

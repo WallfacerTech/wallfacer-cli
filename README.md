@@ -41,6 +41,13 @@ wallfacer environments list <account-id>
 # Create a task
 wallfacer tasks create <account-id> --body '{"prompt": "fix the login bug"}'
 
+# Wait for snapshot and boot a VM in one step
+wallfacer up <environment-id>
+
+# Execute a command in a VM (shortcut)
+wallfacer exec --vm <vm-id> -- ls -la /workspace
+wallfacer exec --vm <vm-id> --dir /workspace --timeout 60 -- make build
+
 # Get help for any command
 wallfacer <command> --help
 ```

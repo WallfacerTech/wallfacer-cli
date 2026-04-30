@@ -11,7 +11,13 @@ VM statuses: `creating`, `running`, `stopping`, `stopped`, `failed`. A running V
 
 ## Create
 
-Environment-driven — VMs boot from an environment. Always pass `snapshot_id` alongside `environment_id`:
+The `up` shortcut handles the full flow — wait for snapshot, create VM, wait for boot:
+
+```bash
+wallfacer up <environment-id>
+```
+
+Manual approach (if needed):
 
 ```bash
 echo '{"environment_id":"<uuid>","snapshot_id":"<snapshot-id>"}' | wallfacer vms create
@@ -23,9 +29,18 @@ Optional fields: `env` (per-boot env var overrides).
 
 Returns the new VM with `id`. VMs boot asynchronously — poll `vms get` until `status == "running"` and `ready == true`. With a snapshot, boot takes ~2s; without, setup runs fresh (~30s+).
 
-After snapshot reaches "ready", there may be a 5-15s propagation delay before the first `vms create` succeeds. If you get "Snapshot not found", retry after 10-15s.
+After snapshot reaches "ready", there may be a 5-15s propagation delay before the first `vms create` succeeds. The `up` command handles this automatically; if creating manually, retry after 10-15s.
 
 ## Execute a command
+
+Shortcut (preferred):
+
+```bash
+wallfacer exec --vm <vm-id> -- ls -la /workspace
+wallfacer exec --vm <vm-id> --dir /workspace --timeout 30 -- ls -la
+```
+
+Stdin form (still works):
 
 ```bash
 echo '{"command":"ls -la /workspace","working_directory":"/workspace","timeout":30}' | wallfacer vms commands <vm-id>

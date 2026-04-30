@@ -176,6 +176,8 @@ func main() {
 
 	registerAuthCommands(wfConfig.GetString("base_url"), token)
 	openapiRegister(false)
+	registerExecCommand(accountID)
+	registerUpCommand(accountID)
 
 	if accountID != "" {
 		injectAccountID(cli.Root, accountID)
