@@ -1,6 +1,9 @@
-.PHONY: all build generate build-generator
+.PHONY: all build generate build-generator sync-spec
 
-all: build-generator generate build
+all: build-generator sync-spec generate build
+
+sync-spec:
+	cp -f ../sophon/storage/app/private/scribe/openapi.yaml openapi.yaml
 
 build:
 	go build -o wallfacer .
