@@ -9,6 +9,10 @@ on:
       tag:
         description: 'Tag to release (e.g. v1.2.3). Must already exist as a git tag.'
         required: true
+      draft:
+        description: 'Publish as a draft release (not visible to non-collaborators). Use for end-to-end testing.'
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -134,7 +138,7 @@ jobs:
             ```
 
             Verify a download with `SHA256SUMS`.
-          draft: false
+          draft: ${{ github.event_name == 'workflow_dispatch' && inputs.draft }}
           prerelease: false
           files: |
             dist/*.tar.gz
