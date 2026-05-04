@@ -3,7 +3,11 @@ name: release
 on:
   push:
     tags:
+      # Real releases: vMAJOR.MINOR.PATCH (no suffix).
+      # Prerelease tags like v1.0.0-rc1 do NOT auto-publish — dispatch
+      # the workflow manually against them to produce a draft for testing.
       - 'v*'
+      - '!v*-*'
   workflow_dispatch:
     inputs:
       tag:
