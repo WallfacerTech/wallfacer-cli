@@ -16,6 +16,10 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
+// version is set at build time via -ldflags "-X main.version=<tag>".
+// Defaults to "dev" for local builds.
+var version = "dev"
+
 func configDir() string {
 	home, _ := os.UserHomeDir()
 	return filepath.Join(home, ".wallfacer")
@@ -151,7 +155,7 @@ func main() {
 	cli.Init(&cli.Config{
 		AppName:   "wallfacer",
 		EnvPrefix: "WALLFACER",
-		Version:   "1.0.0",
+		Version:   version,
 	})
 
 	wfConfig := viper.New()

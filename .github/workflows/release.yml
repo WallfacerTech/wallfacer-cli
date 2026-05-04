@@ -1,0 +1,142 @@
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to release (e.g. v1.2.3). Must already exist as a git tag.'
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: build ${{ matrix.os }}/${{ matrix.arch }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: darwin
+            arch: amd64
+          - os: darwin
+            arch: arm64
+          - os: linux
+            arch: amd64
+          - os: linux
+            arch: arm64
+    steps:
+      - name: Resolve tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "tag=${{ github.event.inputs.tag }}" >>"$GITHUB_OUTPUT"
+          else
+            echo "tag=${GITHUB_REF_NAME}" >>"$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout wallfacer-cli
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.tag.outputs.tag }}
+          path: wallfacer-cli
+
+      - name: Checkout openapi-cli-generator
+        uses: actions/checkout@v4
+        with:
+          repository: WallfacerTech/openapi-cli-generator
+          token: ${{ secrets.RELEASE_TOKEN }}
+          path: openapi-cli-generator
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache-dependency-path: wallfacer-cli/go.sum
+
+      - name: Build
+        working-directory: wallfacer-cli
+        env:
+          GOOS: ${{ matrix.os }}
+          GOARCH: ${{ matrix.arch }}
+          CGO_ENABLED: '0'
+          VERSION: ${{ steps.tag.outputs.tag }}
+        run: |
+          go build -trimpath -ldflags "-s -w -X main.version=${VERSION}" -o wallfacer .
+
+      - name: Package tarball
+        working-directory: wallfacer-cli
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+          OS: ${{ matrix.os }}
+          ARCH: ${{ matrix.arch }}
+        run: |
+          name="wallfacer_${TAG}_${OS}_${ARCH}"
+          mkdir -p "dist/${name}"
+          mv wallfacer "dist/${name}/wallfacer"
+          cp README.md "dist/${name}/README.md"
+          tar -czf "dist/${name}.tar.gz" -C dist "${name}"
+          (cd dist && shasum -a 256 "${name}.tar.gz" >"${name}.tar.gz.sha256")
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wallfacer_${{ steps.tag.outputs.tag }}_${{ matrix.os }}_${{ matrix.arch }}
+          path: |
+            wallfacer-cli/dist/*.tar.gz
+            wallfacer-cli/dist/*.tar.gz.sha256
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: publish to WallfacerTech/wallfacer
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "tag=${{ github.event.inputs.tag }}" >>"$GITHUB_OUTPUT"
+          else
+            echo "tag=${GITHUB_REF_NAME}" >>"$GITHUB_OUTPUT"
+          fi
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Aggregate checksums
+        working-directory: dist
+        run: |
+          cat *.tar.gz.sha256 | sort >SHA256SUMS
+          rm -f *.tar.gz.sha256
+          ls -la
+
+      - name: Create release on WallfacerTech/wallfacer
+        uses: softprops/action-gh-release@v2
+        with:
+          repository: WallfacerTech/wallfacer
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: ${{ steps.tag.outputs.tag }}
+          body: |
+            Wallfacer CLI ${{ steps.tag.outputs.tag }}
+
+            Install:
+            ```
+            curl -fsSL https://raw.githubusercontent.com/WallfacerTech/wallfacer/main/install.sh | sh
+            ```
+
+            Verify a download with `SHA256SUMS`.
+          draft: false
+          prerelease: false
+          files: |
+            dist/*.tar.gz
+            dist/SHA256SUMS
+          token: ${{ secrets.RELEASE_TOKEN }}
