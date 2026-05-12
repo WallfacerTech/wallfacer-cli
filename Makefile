@@ -1,11 +1,17 @@
-.PHONY: build generate generator
+.PHONY: all build generate build-generator sync-spec
+
+all: build-generator sync-spec generate build
+
+sync-spec:
+	cp -f ../sophon/storage/app/private/scribe/openapi.yaml openapi.yaml
 
 build:
 	go build -o wallfacer .
 
-generate: generator
+generate: build-generator
 	./openapi-cli-generator generate openapi.yaml
-	go build -o wallfacer .
 
-generator:
-	cd .. && go build -o wallfacer-cli/openapi-cli-generator .
+# Build the code generator from the sibling openapi-cli-generator repo.
+# Requires: git clone https://github.com/WallfacerTech/openapi-cli-generator.git ../openapi-cli-generator
+build-generator:
+	cd ../openapi-cli-generator && go build -o $(CURDIR)/openapi-cli-generator .

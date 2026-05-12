@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/danielgtaylor/openapi-cli-generator/cli"
+	"github.com/WallfacerTech/openapi-cli-generator/cli"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"gopkg.in/h2non/gentleman.v2/context"
@@ -92,6 +92,7 @@ func registerAuthCommands(baseURL, token string) {
 			}
 
 			req, _ := http.NewRequest("GET", serverURL+"/v1/accounts", nil)
+			req.Header.Set("Accept", "application/json")
 			req.Header.Set("Authorization", "Bearer "+token)
 			resp, err := http.DefaultClient.Do(req)
 			if err != nil {
@@ -166,6 +167,7 @@ func main() {
 
 	token := wfConfig.GetString("token")
 	cli.Client.UseRequest(func(ctx *context.Context, h context.Handler) {
+		ctx.Request.Header.Set("Accept", "application/json")
 		if token != "" {
 			ctx.Request.Header.Set("Authorization", "Bearer "+token)
 		}
@@ -176,6 +178,8 @@ func main() {
 
 	registerAuthCommands(wfConfig.GetString("base_url"), token)
 	openapiRegister(false)
+	registerExecCommand(accountID)
+	registerUpCommand(accountID)
 
 	if accountID != "" {
 		injectAccountID(cli.Root, accountID)

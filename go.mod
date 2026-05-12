@@ -1,14 +1,15 @@
-module wallfacer-cli
+module github.com/WallfacerTech/wallfacer-cli
 
-go 1.25.3
+go 1.24
 
 require (
-	github.com/danielgtaylor/openapi-cli-generator v0.0.0
+	github.com/WallfacerTech/openapi-cli-generator v0.0.0
 	github.com/pkg/errors v0.8.1
 	github.com/rs/zerolog v1.11.0
 	github.com/spf13/cobra v0.0.3
 	github.com/spf13/viper v1.2.1
 	gopkg.in/h2non/gentleman.v2 v2.0.3
+	gopkg.in/yaml.v2 v2.2.4
 )
 
 require (
@@ -33,7 +34,6 @@ require (
 	golang.org/x/net v0.0.0-20200202094626-16171245cfb2 // indirect
 	golang.org/x/sys v0.0.0-20190412213103-97732733099d // indirect
 	golang.org/x/text v0.3.0 // indirect
-	gopkg.in/yaml.v2 v2.2.4 // indirect
 )
 
-replace github.com/danielgtaylor/openapi-cli-generator => ../
+replace github.com/WallfacerTech/openapi-cli-generator => ../openapi-cli-generator

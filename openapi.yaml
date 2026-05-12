@@ -24,13 +24,19 @@ tags:
     description: 'Manage membership and roles on an account. Admins+ can add, update, and remove users.'
   -
     name: Attachments
-    description: "Attachments carry arbitrary content along with a task, such as a GitHub issue body, an external ticket, or an S3 reference. Text content is prepended to the agent's first message; binary and URI-only content is referenced but not fetched in v1."
+    description: "Attachments carry arbitrary content along with a task, such as a ticket body, an external reference, or a file. Text content is prepended to the agent's first message; binary and URI-only content is referenced but not fetched."
+  -
+    name: Events
+    description: 'Lifecycle event timeline for environment snapshot generation. One row per state transition (setup started, service healthy, environment ready, etc.).'
   -
     name: Invitations
     description: 'Create and manage account invitations. Invitations are for emails that do not yet belong to a Wallfacer user; once accepted, the invitee is attached to the account with the invited role.'
   -
     name: Logs
     description: "Per-manifest-step logs for VMs and environment snapshots. Each entry captures one step's stdout/stderr, status, exit code, and timing."
+  -
+    name: Secrets
+    description: "Manage encrypted environment secrets. Reference a secret as `${secrets.NAME}` from any string-valued field in the environment's manifest (env values, command lines, working directories, healthcheck URLs and commands, source repo and branch fields, callback URLs); the platform substitutes the decrypted value before the manifest reaches the booting VM. A reference to a secret that does not exist on the environment fails the boot with a diagnostic listing every unresolved name. Values are write-only after creation; once stored, a value cannot be retrieved through any endpoint and must be rotated to replace."
   -
     name: Snapshots
     description: 'Manage snapshots of environments. Each snapshot represents one generation attempt. Successful ones are `ready`; failed ones are preserved so their logs can be inspected.'
@@ -68,6 +74,8 @@ components:
         email:
           type: string
           description: 'Primary email on the user account.'
+        avatar_url:
+          type: string
         github_username:
           type: string
           nullable: true
@@ -116,7 +124,7 @@ components:
           additionalProperties: true
         text:
           type: string
-          description: "Inline text content. Mutually exclusive with `blob`. For resolver-backed attachments, populated with the resolver's rendering (e.g. the GitHub issue body as markdown)."
+          description: 'Inline text content. Mutually exclusive with `blob`.'
           nullable: true
         blob:
           type: string
@@ -127,37 +135,30 @@ components:
           description: 'Attachment ID.'
         status:
           type: string
-          description: "Content-availability status:\n\n- `ready`: content is available, either inline or fetched successfully by the resolver.\n- `failed`: the resolver fetch failed; inspect `error` for the reason.\n\nInline and URI-only attachments (those with no resolver) are always `ready`."
+          description: "Content-availability status:\n\n- `ready`: content is available.\n- `failed`: content could not be made available. Inspect `error` for the reason."
           enum:
             - ready
             - failed
         error:
           type: string
           nullable: true
-          description: 'Machine-readable failure code when `status: "failed"`. Null when `status: "ready"`. New resolvers may introduce additional codes.'
-          enum:
-            - null
-            - no_github_connection
-            - not_found
-            - forbidden
-            - rate_limited
-            - upstream_error
+          description: 'Machine-readable failure code when `status: "failed"`. Null when `status: "ready"`.'
         metadata:
           type: object
           nullable: true
-          description: "Resolver-populated display data. Always keyed on `provider`; remaining keys depend on the resolver. Null for inline attachments with no matching resolver.\n\n**GitHub resolver** (URIs matching `https://github.com/{owner}/{repo}/issues/{n}` or `.../pull/{n}`):\n- `provider`: `\"github\"`\n- `type`: `\"issue\"` | `\"pull_request\"`\n- `repo`: `\"owner/repo\"`\n- `number`: issue/PR number as string\n- `state`: `\"open\"` | `\"closed\"` (plus `\"merged\"` for PRs)\n- `author`: GitHub login of the author\n- `labels`: array of label-name strings\n- `assignees`: array of GitHub login strings\n- `url`: canonical `html_url` back to GitHub"
+          description: 'Free-form display data keyed on `provider`. Stored as-is alongside the attachment.'
           additionalProperties: true
         last_fetched_at:
           type: string
           nullable: true
-          description: 'ISO 8601 timestamp of the most recent resolver fetch for URI-backed attachments. Null for inline-only attachments.'
+          description: 'ISO 8601 timestamp of the most recent content fetch. Null when no remote source applies.'
         created_at:
           type: string
           description: 'ISO 8601 timestamp of when the attachment was created.'
         updated_at:
           type: string
           description: 'ISO 8601 timestamp of the most recent change to the attachment record.'
-      description: 'Content carried alongside a task: a GitHub issue, an external ticket, an S3 reference, inline markdown. MCP-aligned field names (see `docs/api-principles.md`).'
+      description: 'Content carried alongside a task. Field names follow the MCP Resource and ResourceContents specifications.'
     Environment:
       type: object
       properties:
@@ -177,6 +178,13 @@ components:
           type: string
           nullable: true
           description: 'Optional longer description.'
+        visibility:
+          type: string
+          description: "Who in the account can see and use this environment, and who can change it:\n\n- `private`: only the creator can see, use, or change it. Other account members see a 404.\n- `account_read`: any account member can see it and use it (boot VMs, attach to tasks). Only the creator can edit it, delete it, or manage its snapshots.\n- `account_edit`: any account member can see, use, edit, and delete it. The default for newly-created environments is `private`. Only the creator can change `visibility`."
+          enum:
+            - private
+            - account_read
+            - account_edit
         manifest:
           type: string
           nullable: true
@@ -240,63 +248,25 @@ components:
       type: object
       properties:
         id:
-          type: integer
-          description: 'Message ID.'
-        session_id:
           type: string
-          description: 'Session the message belongs to.'
+          description: 'Log entry ID.'
+        event:
+          type: string
+          description: 'Event name. Namespaced (for example, `ios_app.rebuild_started`, `ios_app.rebuild_completed`, `ios_app.rebuild_failed`) so the taxonomy is extensible without breaking clients.'
+        level:
+          type: string
+          description: 'Severity. `info` for normal progress events; `error` for failures. Additional levels may be added as the event taxonomy grows.'
+          enum:
+            - info
+            - error
         payload:
           type: object
-          properties:
-            type:
-              type: string
-            message:
-              type: object
-              properties:
-                role:
-                  type: string
-                content:
-                  type: array
-                  items:
-                    type: object
-                    properties:
-                      text:
-                        type: string
-                      type:
-                        type: string
+          nullable: true
           description: "The raw Claude Code SDK JSONL transcript entry this message wraps. Shape varies by `type`. Treat as opaque except for the subset documented for each `type`.\n\n**For `type:\"user\"`:** `{ message: { role: \"user\", content: [{ text, type: \"text\" }] }, uuid, promptId, timestamp, ... }`.\n**For `type:\"assistant\"`:** `{ message: { id, role: \"assistant\", model, usage, stop_reason, content: [ ... mixed content blocks ... ] }, uuid, timestamp, ... }`.\n**For `type:\"last-prompt\"`:** `{ type, sessionId, lastPrompt }`, with no `message` key.\n**For `type:\"queue-operation\"`:** `{ type, operation, sessionId, timestamp }`.\n**For `type:\"ai-title\"`:** `{ type, aiTitle, sessionId }`."
           additionalProperties: true
-        type:
-          type: string
-          description: "Discriminator for the message. Determines the shape of `payload`.\n\n- `user`: a user turn. `payload.message.content[]` has text blocks. Has `display_text` when the platform prepended context (attachments, planning prompts); clients should prefer `display_text` when it is present.\n- `assistant`: a model response. `payload.message.content[]` is a Claude content-blocks array: `{type:\"text\", text}`, `{type:\"thinking\", thinking, signature}`, `{type:\"tool_use\", id, name, input}`. Carries `stop_reason`, `usage`, and `model` on `payload.message`.\n- `attachment`: an in-VM file-reference marker. No `message.content`. Rarely user-visible.\n- `last-prompt`: end-of-turn marker from the in-VM agent. Payload is `{type, sessionId, lastPrompt}` only. Not user-visible; skip rendering.\n- `queue-operation`: queue bookkeeping from the in-VM agent. Payload is `{type, operation, sessionId, timestamp}` only. Not user-visible; skip.\n- `ai-title`: session title emitted by the in-VM agent. Payload is `{type, aiTitle, sessionId}`. Not a conversation turn.\n\nConversation UIs should render `user` and `assistant` only."
-          enum:
-            - user
-            - assistant
-            - last-prompt
-            - queue-operation
-            - attachment
-            - ai-title
-        sequence:
-          type: integer
-          description: 'Order within the session, assigned when the message is sent. Queued messages have `sequence: null` and are ordered by `created_at`. Render by `sequence ASC` then `created_at ASC`.'
-          nullable: true
-        status:
-          type: string
-          description: "Delivery status:\n\n- `queued`: not yet sent to the agent.\n- `sent`: delivered and part of the transcript.\n- `failed`: delivery failed terminally."
-          enum:
-            - queued
-            - sent
-            - failed
-        display_text:
-          type: string
-          nullable: true
-          description: 'Clean user-facing text when `payload` contains server-prepended context (for example, attachment preambles on a user turn). Only set on `type:"user"` messages that needed stripping. When null, fall back to `payload.message.content[0].text`.'
         created_at:
           type: string
-          description: 'ISO 8601 timestamp of when this message was created (that is, when it entered the queue or was delivered, depending on `status`).'
-        updated_at:
-          type: string
-          description: 'ISO 8601 timestamp of the most recent change to the message record (for example, when it flipped from `queued` to `sent`).'
+          description: 'ISO 8601 timestamp of when the log entry was recorded.'
       description: 'A single entry in a session transcript. The shape of `payload` varies by `type`; the `type` field is the discriminator.'
     PaginationLinks:
       type: object
@@ -375,6 +345,28 @@ components:
           nullable: true
         total:
           type: integer
+    Secret:
+      type: object
+      properties:
+        id:
+          type: string
+          description: 'Stable identifier for the secret.'
+        environment_id:
+          type: string
+          description: 'Environment that owns this secret. Secrets are scoped to a single environment and never shared across environments or accounts.'
+        name:
+          type: string
+          description: 'Reference key the value can be substituted under inside an environment manifest. Always uppercase letters, digits, and underscores.'
+        last_accessed_at:
+          type: string
+          nullable: true
+          description: 'ISO 8601 timestamp of the most recent successful unwrap on behalf of a booting VM. Null until the first access.'
+        created_at:
+          type: string
+          description: 'ISO 8601 timestamp of when the secret was created.'
+        updated_at:
+          type: string
+          description: 'ISO 8601 timestamp of the most recent rotation. Equals `created_at` until the first rotation.'
     Session:
       type: object
       properties:
@@ -403,12 +395,37 @@ components:
             - closed
         branch_name:
           type: string
-          description: 'The git branch this session is working on. Auto-generated from the task title when not supplied on create.'
+          description: "The git branch this session is working on. Sessions (not tasks) own branch identity, so a task with multiple sessions produces multiple distinct branches. Auto-generated at create time from the creator's initials, the task's first linked issue number (if any), the session title, and a short hash of the session id."
           nullable: true
         base_branch:
           type: string
           nullable: true
-          description: "The branch the session's working branch was cut from. Auto-detected from the repository's default branch via GitHub when not supplied on create."
+          description: "The branch the session's working branch was cut from. In multi-source environments each source can have its own base branch; see `sources[].base_branch` for the per-source values."
+        sources:
+          type: array
+          items:
+            type: object
+            properties:
+              repo:
+                type: string
+              workspace:
+                type: string
+              head_branch:
+                type: string
+              base_branch:
+                type: string
+              base_commit_sha:
+                type: string
+                nullable: true
+              has_changes:
+                type: boolean
+              commit_count:
+                type: integer
+              lines_added:
+                type: integer
+              lines_removed:
+                type: integer
+          description: "Per-source git state. One entry per repo the session is working on. Always returned as an array; single-source sessions return a one-element array so clients have one rendering path.\n\nFields per source:\n\n- `repo`: the git repo URL.\n- `workspace`: absolute path to the cloned workspace inside the VM.\n- `head_branch`: the session's working branch. Same value across every source.\n- `base_branch`: the branch this source was cut from. Can differ across sources when the environment's manifest tracks different defaults per repo.\n- `base_commit_sha`: the commit the working branch diverged from on this source. Cached on push; null until the first push or VM boot.\n- `has_changes`: whether the workspace has uncommitted changes as of the last check.\n- `commit_count`: number of commits on the working branch ahead of `base_commit_sha`.\n- `lines_added` / `lines_removed`: summed line deltas across all commits on the working branch for this source."
         close_reason:
           type: string
           nullable: true
@@ -429,7 +446,7 @@ components:
           description: 'Seconds of inactivity after which this session goes idle and its VM is destroyed. Inherited from the task unless overridden on session create.'
         created_by:
           type: integer
-          description: 'ID of the user who owns the session.'
+          description: "ID of the user who owns the session. Always matches the parent task's owner, regardless of which API token created the session."
         started_at:
           type: string
           description: 'ISO 8601 timestamp of when the session record was created.'
@@ -495,13 +512,13 @@ components:
         account_id:
           type: string
           description: 'Account that owns this task.'
+        environment_id:
+          type: string
+          description: 'Environment this task defaults its sessions to. Null when the task spans multiple environments and each session picks its own.'
+          nullable: true
         title:
           type: string
           description: 'Human-readable title. Auto-generated from the prompt when not supplied at create time.'
-          nullable: true
-        branch:
-          type: string
-          description: 'The git branch sessions under this task will work on. Auto-generated from the task title, or from the first attached GitHub issue number when an issue attachment is present, at the moment the first session starts.'
           nullable: true
         prompt:
           type: string
@@ -944,7 +961,7 @@ components:
         - name
       description: 'PortMapping declares a port exposed by a service.'
     AesSecrets:
-      properties: {}
+      properties: {  }
       additionalProperties: false
       type: object
       description: 'Secrets is a placeholder for future encrypted secret declarations.'
@@ -1134,15 +1151,15 @@ paths:
                 example:
                   data:
                     -
-                      id: 019db65d-cc8f-70e9-a486-fb30e4c95fbd
+                      id: 019e1caf-2f41-70d9-b1e4-10b5876af5fd
                       name: 'Price Ltd'
-                      created_at: '2026-04-22T18:04:53.000000Z'
-                      updated_at: '2026-04-22T18:04:53.000000Z'
+                      created_at: '2026-05-12T14:55:03.000000Z'
+                      updated_at: '2026-05-12T14:55:03.000000Z'
                     -
-                      id: 019db65d-cc99-7042-a602-7a407b0fbb98
+                      id: 019e1caf-2f4b-7216-bcb5-5028f0cc883e
                       name: 'Dare Group'
-                      created_at: '2026-04-22T18:04:53.000000Z'
-                      updated_at: '2026-04-22T18:04:53.000000Z'
+                      created_at: '2026-05-12T14:55:03.000000Z'
+                      updated_at: '2026-05-12T14:55:03.000000Z'
                   links:
                     first: null
                     last: null
@@ -1206,10 +1223,10 @@ paths:
                 type: object
                 example:
                   data:
-                    id: 019db65d-ce11-720a-b5af-b7a479203eb7
+                    id: 019e1caf-30fc-733a-a10c-98c40f406abb
                     name: 'Price Ltd'
-                    created_at: '2026-04-22T18:04:54.000000Z'
-                    updated_at: '2026-04-22T18:04:54.000000Z'
+                    created_at: '2026-05-12T14:55:03.000000Z'
+                    updated_at: '2026-05-12T14:55:03.000000Z'
                 properties:
                   data:
                     $ref: '#/components/schemas/Account'
@@ -1296,6 +1313,123 @@ paths:
                           example: not_found
       tags:
         - Accounts
+    patch:
+      summary: 'Update an account'
+      operationId: updateAnAccount
+      description: "Rename an account. Requires the `admin` or `owner` role on the account.\n\nOnly the `name` field is mutable through the public API."
+      parameters: []
+      responses:
+        200:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  data:
+                    id: 019e1caf-3107-7265-9375-b46f7d73600c
+                    name: 'Bailey Inc'
+                    created_at: '2026-05-12T14:55:03.000000Z'
+                    updated_at: '2026-05-12T14:55:03.000000Z'
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Account'
+        401:
+          description: 'Missing or invalid API token.'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: Unauthenticated.
+                      code: unauthenticated
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: Unauthenticated.
+                        code: unauthenticated
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: Unauthenticated.
+                        code:
+                          type: string
+                          example: unauthenticated
+        403:
+          description: 'Caller is a member of the account but is not an admin or owner.'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: 'This action requires at least the admin role.'
+                      code: insufficient_role
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: 'This action requires at least the admin role.'
+                        code: insufficient_role
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: 'This action requires at least the admin role.'
+                        code:
+                          type: string
+                          example: insufficient_role
+        404:
+          description: 'Account not found.'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: 'Resource not found.'
+                      code: not_found
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: 'Resource not found.'
+                        code: not_found
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: 'Resource not found.'
+                        code:
+                          type: string
+                          example: not_found
+      tags:
+        - Accounts
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  description: 'A human-readable name for the account. Must not be greater than 255 characters.'
+                  example: 'Acme Inc.'
+              required:
+                - name
     parameters:
       -
         in: path
@@ -1331,25 +1465,27 @@ paths:
                 example:
                   data:
                     -
-                      id: 019db65d-cf0d-7394-9017-5f4adc4aa9eb
-                      account_id: 019db65d-ce68-70bf-b11f-874ee9886032
-                      created_by: 573
+                      id: 019e1caf-325e-70ff-bd94-b68f9978094d
+                      account_id: 019e1caf-318f-7175-af1a-281243d02443
+                      created_by: 1228
                       name: 'aut adipisci'
                       description: null
+                      visibility: account_edit
                       manifest: null
                       base_snapshot: null
-                      created_at: '2026-04-22T18:04:54.000000Z'
-                      updated_at: '2026-04-22T18:04:54.000000Z'
+                      created_at: '2026-05-12T14:55:04.000000Z'
+                      updated_at: '2026-05-12T14:55:04.000000Z'
                     -
-                      id: 019db65d-cfb3-73bd-8bc5-97768aef51af
-                      account_id: 019db65d-cf10-73c3-aa73-5120c6680518
-                      created_by: 574
+                      id: 019e1caf-3320-7073-bffb-020a90eebe22
+                      account_id: 019e1caf-3263-7147-a9ff-c76525137ea4
+                      created_by: 1229
                       name: 'facere tempora'
                       description: null
+                      visibility: account_edit
                       manifest: null
                       base_snapshot: null
-                      created_at: '2026-04-22T18:04:54.000000Z'
-                      updated_at: '2026-04-22T18:04:54.000000Z'
+                      created_at: '2026-05-12T14:55:04.000000Z'
+                      updated_at: '2026-05-12T14:55:04.000000Z'
                   links:
                     first: null
                     last: null
@@ -1428,7 +1564,7 @@ paths:
     post:
       summary: 'Create an environment'
       operationId: createAnEnvironment
-      description: 'Creates a new environment. If a manifest is provided, a snapshot is generated automatically for faster VM boot times.'
+      description: 'Creates a new environment. If a manifest is provided, a snapshot is generated automatically for faster VM boot times. Manifests that reference `${secrets.NAME}` are rejected at this stage because no secrets are configured yet on a brand-new environment; create the environment without secret references, POST the secrets, then PATCH the manifest in.'
       parameters:
         -
           in: header
@@ -1446,15 +1582,16 @@ paths:
                 type: object
                 example:
                   data:
-                    id: 019db65d-d060-703a-b3be-f8c8789a9c1f
-                    account_id: 019db65d-cfbc-72ba-8e62-60b92c08f992
-                    created_by: 575
+                    id: 019e1caf-33ed-73aa-b08f-646f8a6c77fe
+                    account_id: 019e1caf-332a-71e4-986a-96ebc7846935
+                    created_by: 1230
                     name: 'architecto eius'
                     description: null
+                    visibility: account_edit
                     manifest: null
                     base_snapshot: null
-                    created_at: '2026-04-22T18:04:54.000000Z'
-                    updated_at: '2026-04-22T18:04:54.000000Z'
+                    created_at: '2026-05-12T14:55:04.000000Z'
+                    updated_at: '2026-05-12T14:55:04.000000Z'
                 properties:
                   data:
                     $ref: '#/components/schemas/Environment'
@@ -1513,32 +1650,79 @@ paths:
                           type: string
                           example: forbidden
         422:
-          description: 'Validation failed.'
+          description: ''
           content:
             application/json:
               schema:
-                type: object
-                example:
-                  errors:
-                    -
-                      message: 'The field is required.'
-                      code: validation_error
-                properties:
-                  errors:
-                    type: array
+                oneOf:
+                  -
+                    description: 'Validation failed.'
+                    type: object
                     example:
-                      -
-                        message: 'The field is required.'
-                        code: validation_error
-                    items:
-                      type: object
-                      properties:
-                        message:
-                          type: string
-                          example: 'The field is required.'
-                        code:
-                          type: string
-                          example: validation_error
+                      errors:
+                        -
+                          message: 'The field is required.'
+                          code: validation_error
+                    properties:
+                      errors:
+                        type: array
+                        example:
+                          -
+                            message: 'The field is required.'
+                            code: validation_error
+                        items:
+                          type: object
+                          properties:
+                            message:
+                              type: string
+                              example: 'The field is required.'
+                            code:
+                              type: string
+                              example: validation_error
+                  -
+                    description: 'The manifest references one or more secrets that are not configured on the environment.'
+                    type: object
+                    example:
+                      errors:
+                        -
+                          message: 'Manifest references secrets that are not configured on this environment.'
+                          code: missing_secrets
+                          missing_secrets:
+                            - DB_PASSWORD
+                          field_paths:
+                            - 'env.DATABASE_URL: ${secrets.DB_PASSWORD}'
+                    properties:
+                      errors:
+                        type: array
+                        example:
+                          -
+                            message: 'Manifest references secrets that are not configured on this environment.'
+                            code: missing_secrets
+                            missing_secrets:
+                              - DB_PASSWORD
+                            field_paths:
+                              - 'env.DATABASE_URL: ${secrets.DB_PASSWORD}'
+                        items:
+                          type: object
+                          properties:
+                            message:
+                              type: string
+                              example: 'Manifest references secrets that are not configured on this environment.'
+                            code:
+                              type: string
+                              example: missing_secrets
+                            missing_secrets:
+                              type: array
+                              example:
+                                - DB_PASSWORD
+                              items:
+                                type: string
+                            field_paths:
+                              type: array
+                              example:
+                                - 'env.DATABASE_URL: ${secrets.DB_PASSWORD}'
+                              items:
+                                type: string
         429:
           description: 'Rate limit exceeded. Check Retry-After header.'
           content:
@@ -1584,6 +1768,14 @@ paths:
                   description: 'Optional description of what this environment is for. Must not be greater than 5000 characters.'
                   example: 'Node.js API with PostgreSQL and Redis'
                   nullable: true
+                visibility:
+                  type: string
+                  description: "Who in the account can see and use the new environment. Defaults to `private`. One of:\n\n- `private`: only you can see, use, or change it.\n- `account_read`: any account member can see it and use it; only you can edit or delete.\n- `account_edit`: any account member can see, use, edit, and delete it."
+                  example: private
+                  enum:
+                    - private
+                    - account_read
+                    - account_edit
                 manifest:
                   description: 'AES manifest defining the VM platform, sources, setup, services, and health checks.'
                   allOf:
@@ -1615,15 +1807,16 @@ paths:
                 type: object
                 example:
                   data:
-                    id: 019db65d-d115-710f-a218-e2eec3fe825f
-                    account_id: 019db65d-d067-7101-bc8f-f28e7a306d5a
-                    created_by: 576
+                    id: 019e1caf-34b4-731c-ab42-99e69fc5baa7
+                    account_id: 019e1caf-33f6-724c-a92a-b406b5e4dab3
+                    created_by: 1231
                     name: 'aut adipisci'
                     description: null
+                    visibility: account_edit
                     manifest: null
                     base_snapshot: null
-                    created_at: '2026-04-22T18:04:54.000000Z'
-                    updated_at: '2026-04-22T18:04:54.000000Z'
+                    created_at: '2026-05-12T14:55:04.000000Z'
+                    updated_at: '2026-05-12T14:55:04.000000Z'
                 properties:
                   data:
                     $ref: '#/components/schemas/Environment'
@@ -1724,15 +1917,16 @@ paths:
                 type: object
                 example:
                   data:
-                    id: 019db65d-d1c2-73fc-bb0e-e405224ffa79
-                    account_id: 019db65d-d11e-721c-8565-96d268f9ce19
-                    created_by: 577
+                    id: 019e1caf-3564-7211-a27e-f8b32fe9613b
+                    account_id: 019e1caf-34bd-724e-a416-20bd952059e2
+                    created_by: 1232
                     name: 'architecto eius'
                     description: null
+                    visibility: account_edit
                     manifest: null
                     base_snapshot: null
-                    created_at: '2026-04-22T18:04:55.000000Z'
-                    updated_at: '2026-04-22T18:04:55.000000Z'
+                    created_at: '2026-05-12T14:55:05.000000Z'
+                    updated_at: '2026-05-12T14:55:05.000000Z'
                 properties:
                   data:
                     $ref: '#/components/schemas/Environment'
@@ -1818,32 +2012,79 @@ paths:
                           type: string
                           example: not_found
         422:
-          description: 'Validation failed.'
+          description: ''
           content:
             application/json:
               schema:
-                type: object
-                example:
-                  errors:
-                    -
-                      message: 'The field is required.'
-                      code: validation_error
-                properties:
-                  errors:
-                    type: array
+                oneOf:
+                  -
+                    description: 'Validation failed.'
+                    type: object
                     example:
-                      -
-                        message: 'The field is required.'
-                        code: validation_error
-                    items:
-                      type: object
-                      properties:
-                        message:
-                          type: string
-                          example: 'The field is required.'
-                        code:
-                          type: string
-                          example: validation_error
+                      errors:
+                        -
+                          message: 'The field is required.'
+                          code: validation_error
+                    properties:
+                      errors:
+                        type: array
+                        example:
+                          -
+                            message: 'The field is required.'
+                            code: validation_error
+                        items:
+                          type: object
+                          properties:
+                            message:
+                              type: string
+                              example: 'The field is required.'
+                            code:
+                              type: string
+                              example: validation_error
+                  -
+                    description: 'The new manifest references one or more secrets that are not configured on the environment.'
+                    type: object
+                    example:
+                      errors:
+                        -
+                          message: 'Manifest references secrets that are not configured on this environment.'
+                          code: missing_secrets
+                          missing_secrets:
+                            - DB_PASSWORD
+                          field_paths:
+                            - 'env.DATABASE_URL: ${secrets.DB_PASSWORD}'
+                    properties:
+                      errors:
+                        type: array
+                        example:
+                          -
+                            message: 'Manifest references secrets that are not configured on this environment.'
+                            code: missing_secrets
+                            missing_secrets:
+                              - DB_PASSWORD
+                            field_paths:
+                              - 'env.DATABASE_URL: ${secrets.DB_PASSWORD}'
+                        items:
+                          type: object
+                          properties:
+                            message:
+                              type: string
+                              example: 'Manifest references secrets that are not configured on this environment.'
+                            code:
+                              type: string
+                              example: missing_secrets
+                            missing_secrets:
+                              type: array
+                              example:
+                                - DB_PASSWORD
+                              items:
+                                type: string
+                            field_paths:
+                              type: array
+                              example:
+                                - 'env.DATABASE_URL: ${secrets.DB_PASSWORD}'
+                              items:
+                                type: string
         429:
           description: 'Rate limit exceeded. Check Retry-After header.'
           content:
@@ -1889,6 +2130,14 @@ paths:
                   description: 'Optional description of what this environment is for. Must not be greater than 5000 characters.'
                   example: 'Node.js API with PostgreSQL and Redis'
                   nullable: true
+                visibility:
+                  type: string
+                  description: "Who in the account can see and use this environment. Only the creator can change this. One of:\n\n- `private`: only you can see, use, or change it.\n- `account_read`: any account member can see it and use it; only you can edit or delete.\n- `account_edit`: any account member can see, use, edit, and delete it."
+                  example: account_read
+                  enum:
+                    - private
+                    - account_read
+                    - account_edit
                 manifest:
                   description: 'AES manifest defining the VM platform, sources, setup, services, and health checks.'
                   allOf:
@@ -2030,7 +2279,7 @@ paths:
         in: path
         name: environment_id
         description: 'The ID of the environment.'
-        example: 019db032-92b8-719e-964e-02ef04880acc
+        example: 019e084d-225e-713f-ba36-2677be6befe9
         required: true
         schema:
           type: string
@@ -2060,8 +2309,8 @@ paths:
                 example:
                   data:
                     -
-                      id: 019db65d-ce21-70d1-985e-4fe079ab88fd
-                      account_id: 019db65d-ce1f-710a-92f6-d136fefcfb4c
+                      id: 019e1caf-3121-70fc-8068-978607ce5939
+                      account_id: 019e1caf-311d-732f-bc33-39c042e3a7c5
                       status: running
                       ready: false
                       ready_at: null
@@ -2073,13 +2322,13 @@ paths:
                           name: app
                           url: 'https://3000.vm.example.com'
                           protocol: https
-                      last_activity_at: '2026-04-22T18:04:54.000000Z'
+                      last_activity_at: '2026-05-12T14:55:03.000000Z'
                       destroyed_at: null
-                      created_at: '2026-04-22T18:04:54.000000Z'
-                      updated_at: '2026-04-22T18:04:54.000000Z'
+                      created_at: '2026-05-12T14:55:03.000000Z'
+                      updated_at: '2026-05-12T14:55:03.000000Z'
                     -
-                      id: 019db65d-ce23-7136-97a1-15f31a598496
-                      account_id: 019db65d-ce23-7136-97a1-15f319902b05
+                      id: 019e1caf-3127-7183-9dbc-987d3dd6c277
+                      account_id: 019e1caf-3126-726f-886c-1f1514f675c8
                       status: running
                       ready: false
                       ready_at: null
@@ -2091,10 +2340,10 @@ paths:
                           name: app
                           url: 'https://3000.vm.example.com'
                           protocol: https
-                      last_activity_at: '2026-04-22T18:04:54.000000Z'
+                      last_activity_at: '2026-05-12T14:55:03.000000Z'
                       destroyed_at: null
-                      created_at: '2026-04-22T18:04:54.000000Z'
-                      updated_at: '2026-04-22T18:04:54.000000Z'
+                      created_at: '2026-05-12T14:55:03.000000Z'
+                      updated_at: '2026-05-12T14:55:03.000000Z'
                   links:
                     first: null
                     last: null
@@ -2191,8 +2440,8 @@ paths:
                 type: object
                 example:
                   data:
-                    id: 019db65d-ce32-7065-96f4-1d6f67afb24f
-                    account_id: 019db65d-ce31-7229-bb22-795e531085c9
+                    id: 019e1caf-313e-7287-bae1-a9a050439e99
+                    account_id: 019e1caf-313d-7144-a314-750231dda436
                     status: running
                     ready: false
                     ready_at: null
@@ -2204,10 +2453,10 @@ paths:
                         name: app
                         url: 'https://3000.vm.example.com'
                         protocol: https
-                    last_activity_at: '2026-04-22T18:04:54.000000Z'
+                    last_activity_at: '2026-05-12T14:55:03.000000Z'
                     destroyed_at: null
-                    created_at: '2026-04-22T18:04:54.000000Z'
-                    updated_at: '2026-04-22T18:04:54.000000Z'
+                    created_at: '2026-05-12T14:55:03.000000Z'
+                    updated_at: '2026-05-12T14:55:03.000000Z'
                 properties:
                   data:
                     $ref: '#/components/schemas/VirtualMachine'
@@ -2293,32 +2542,85 @@ paths:
                           type: string
                           example: forbidden
         422:
-          description: 'Validation failed.'
+          description: ''
           content:
             application/json:
               schema:
-                type: object
-                example:
-                  errors:
-                    -
-                      message: 'The environment_id field is required.'
-                      code: validation_error
-                properties:
-                  errors:
-                    type: array
+                oneOf:
+                  -
+                    description: 'Validation failed.'
+                    type: object
                     example:
-                      -
-                        message: 'The environment_id field is required.'
-                        code: validation_error
-                    items:
-                      type: object
-                      properties:
-                        message:
-                          type: string
-                          example: 'The environment_id field is required.'
-                        code:
-                          type: string
-                          example: validation_error
+                      errors:
+                        -
+                          message: 'The environment_id field is required.'
+                          code: validation_error
+                    properties:
+                      errors:
+                        type: array
+                        example:
+                          -
+                            message: 'The environment_id field is required.'
+                            code: validation_error
+                        items:
+                          type: object
+                          properties:
+                            message:
+                              type: string
+                              example: 'The environment_id field is required.'
+                            code:
+                              type: string
+                              example: validation_error
+                  -
+                    description: 'The environment manifest references one or more secrets that have not been configured. `missing_secrets` lists the unresolved names; `field_paths` lists every manifest field where they appear.'
+                    type: object
+                    example:
+                      errors:
+                        -
+                          message: 'Manifest references secrets that are not configured on this environment.'
+                          code: missing_secrets
+                          missing_secrets:
+                            - DB_PASSWORD
+                            - STRIPE_KEY
+                          field_paths:
+                            - 'env.DATABASE_URL: ${secrets.DB_PASSWORD}'
+                            - 'services[0].run: ${secrets.STRIPE_KEY}'
+                    properties:
+                      errors:
+                        type: array
+                        example:
+                          -
+                            message: 'Manifest references secrets that are not configured on this environment.'
+                            code: missing_secrets
+                            missing_secrets:
+                              - DB_PASSWORD
+                              - STRIPE_KEY
+                            field_paths:
+                              - 'env.DATABASE_URL: ${secrets.DB_PASSWORD}'
+                              - 'services[0].run: ${secrets.STRIPE_KEY}'
+                        items:
+                          type: object
+                          properties:
+                            message:
+                              type: string
+                              example: 'Manifest references secrets that are not configured on this environment.'
+                            code:
+                              type: string
+                              example: missing_secrets
+                            missing_secrets:
+                              type: array
+                              example:
+                                - DB_PASSWORD
+                                - STRIPE_KEY
+                              items:
+                                type: string
+                            field_paths:
+                              type: array
+                              example:
+                                - 'env.DATABASE_URL: ${secrets.DB_PASSWORD}'
+                                - 'services[0].run: ${secrets.STRIPE_KEY}'
+                              items:
+                                type: string
         429:
           description: 'Rate limit exceeded. Check Retry-After header.'
           content:
@@ -2421,8 +2723,8 @@ paths:
                 type: object
                 example:
                   data:
-                    id: 019db65d-ce3f-7385-8b72-9e4e9dc9ab82
-                    account_id: 019db65d-ce3e-7231-bf87-ea5b182f56fd
+                    id: 019e1caf-3151-7139-b51e-e3a894089266
+                    account_id: 019e1caf-3150-7225-adab-7b0942b02629
                     status: running
                     ready: false
                     ready_at: null
@@ -2434,10 +2736,10 @@ paths:
                         name: app
                         url: 'https://3000.vm.example.com'
                         protocol: https
-                    last_activity_at: '2026-04-22T18:04:54.000000Z'
+                    last_activity_at: '2026-05-12T14:55:04.000000Z'
                     destroyed_at: null
-                    created_at: '2026-04-22T18:04:54.000000Z'
-                    updated_at: '2026-04-22T18:04:54.000000Z'
+                    created_at: '2026-05-12T14:55:04.000000Z'
+                    updated_at: '2026-05-12T14:55:04.000000Z'
                 properties:
                   data:
                     $ref: '#/components/schemas/VirtualMachine'
@@ -2660,7 +2962,7 @@ paths:
         in: path
         name: vm_id
         description: 'The ID of the vm.'
-        example: 019dadf8-f1ad-7210-a390-9ea2efe6e4ed
+        example: 019dbbc6-79ce-712b-9146-eb4cabfdd5cd
         required: true
         schema:
           type: string
@@ -2876,8 +3178,8 @@ paths:
                   example: 'ls -la /workspace'
                 working_directory:
                   type: string
-                  description: 'Working directory for the command.'
-                  example: /workspace
+                  description: "Absolute path to run the command in. When omitted, the command runs from the in-VM agent's startup directory, which depends on the environment's platform and source layout."
+                  example: null
                 timeout:
                   type: integer
                   description: 'Maximum execution time in seconds (1-300).'
@@ -2897,7 +3199,7 @@ paths:
         in: path
         name: vm_id
         description: 'The ID of the vm.'
-        example: 019dadf8-f1ad-7210-a390-9ea2efe6e4ed
+        example: 019dbbc6-79ce-712b-9146-eb4cabfdd5cd
         required: true
         schema:
           type: string
@@ -3028,7 +3330,7 @@ paths:
         in: path
         name: vm_id
         description: 'The ID of the vm.'
-        example: 019dadf8-f1ad-7210-a390-9ea2efe6e4ed
+        example: 019dbbc6-79ce-712b-9146-eb4cabfdd5cd
         required: true
         schema:
           type: string
@@ -3169,7 +3471,7 @@ paths:
         in: path
         name: vm_id
         description: 'The ID of the vm.'
-        example: 019dadf8-f1ad-7210-a390-9ea2efe6e4ed
+        example: 019dbbc6-79ce-712b-9146-eb4cabfdd5cd
         required: true
         schema:
           type: string
@@ -3319,7 +3621,7 @@ paths:
         in: path
         name: vm_id
         description: 'The ID of the vm.'
-        example: 019dadf8-f1ad-7210-a390-9ea2efe6e4ed
+        example: 019dbbc6-79ce-712b-9146-eb4cabfdd5cd
         required: true
         schema:
           type: string
@@ -3339,17 +3641,17 @@ paths:
                 example:
                   data:
                     -
-                      id: 019db65e-0057-7113-9703-f849bcb6cb6b
+                      id: 019e1caf-5a62-70f0-bd4a-c203f2c6e4a0
                       event: ios_app.rebuild_started
                       level: info
                       payload: null
-                      created_at: '2026-04-22T18:05:07.000000Z'
+                      created_at: '2026-05-12T14:55:14.000000Z'
                     -
-                      id: 019db65e-005a-7204-b31c-bb9d7a2dfb4f
+                      id: 019e1caf-5a65-731e-bdef-d5429c337a90
                       event: ios_app.rebuild_failed
                       level: info
                       payload: null
-                      created_at: '2026-04-22T18:05:07.000000Z'
+                      created_at: '2026-05-12T14:55:14.000000Z'
                   links:
                     first: '/?page=1'
                     last: '/?page=1'
@@ -3382,51 +3684,8 @@ paths:
                 properties:
                   data:
                     type: array
-                    example:
-                      -
-                        id: 019db65e-0057-7113-9703-f849bcb6cb6b
-                        event: ios_app.rebuild_started
-                        level: info
-                        payload: null
-                        created_at: '2026-04-22T18:05:07.000000Z'
-                      -
-                        id: 019db65e-005a-7204-b31c-bb9d7a2dfb4f
-                        event: ios_app.rebuild_failed
-                        level: info
-                        payload: null
-                        created_at: '2026-04-22T18:05:07.000000Z'
                     items:
-                      type: object
-                      properties:
-                        id:
-                          type: string
-                          example: 019db65e-0057-7113-9703-f849bcb6cb6b
-                          description: 'Log entry ID.'
-                        event:
-                          type: string
-                          example: ios_app.rebuild_started
-                          description: 'Event name. Namespaced (for example, `ios_app.rebuild_started`, `ios_app.rebuild_completed`, `ios_app.rebuild_failed`) so the taxonomy is extensible without breaking clients.'
-                        level:
-                          type: string
-                          example: info
-                          description: 'Severity. `info` for normal progress events; `error` for failures. Additional levels may be added as the event taxonomy grows.'
-                          enum:
-                            - info
-                            - error
-                        payload:
-                          type: string
-                          example: null
-                          description: 'Event-specific structured payload. The shape is keyed on `event` (for example, `ios_app.rebuild_completed` payloads include `exit_code` and `duration_ms`).'
-                        created_at:
-                          type: string
-                          example: '2026-04-22T18:05:07.000000Z'
-                          description: 'ISO 8601 timestamp of when the log entry was recorded.'
-                    required:
-                      - id
-                      - event
-                      - level
-                      - payload
-                      - created_at
+                      $ref: '#/components/schemas/Message'
                   links:
                     $ref: '#/components/schemas/PaginationLinks'
                   meta:
@@ -3500,7 +3759,7 @@ paths:
         in: path
         name: vm_id
         description: 'The ID of the vm.'
-        example: 019dadf8-f1ad-7210-a390-9ea2efe6e4ed
+        example: 019dbbc6-79ce-712b-9146-eb4cabfdd5cd
         required: true
         schema:
           type: string
@@ -3540,29 +3799,29 @@ paths:
                 example:
                   data:
                     -
-                      id: 019db65d-d40a-72ed-ab4c-ef69a23f47bb
-                      account_id: 019db65d-d2a8-7277-a5db-d4287d1cefe2
-                      title: 'Adipisci quidem nostrum qui commodi incidunt iure.'
-                      branch: ba/adipisci-quidem-nost-7bb
-                      prompt: 'Et modi ipsum nostrum omnis autem et consequatur. Dolores enim non facere tempora. Voluptatem laboriosam praesentium quis adipisci.'
+                      id: 019e1caf-3c13-7329-a4ba-2cfb37d67028
+                      account_id: 019e1caf-3ac1-7356-937d-4c2aafd081e5
+                      environment_id: 019e1caf-3c11-72b1-bb0a-25f30c434892
+                      title: 'Recusandae est sint tempora cumque.'
+                      prompt: 'Molestiae saepe cupiditate ab id debitis aut. Accusantium nam rerum earum velit. Omnis minus consequatur est omnis et sit. Dolorum explicabo et quaerat est maiores aut.'
                       idle_timeout_seconds: 300
                       started_at: null
                       completed_at: null
-                      created_at: '2026-04-22T18:04:55.000000Z'
-                      updated_at: '2026-04-22T18:04:55.000000Z'
-                      created_by: 579
+                      created_at: '2026-05-12T14:55:06.000000Z'
+                      updated_at: '2026-05-12T14:55:06.000000Z'
+                      created_by: 1240
                     -
-                      id: 019db65d-d564-7120-85d8-fa1f3d2d8d9e
-                      account_id: 019db65d-d417-7084-aa10-16097cc6f8e2
-                      title: 'Odit doloribus repellat officiis corporis nesciunt ut ratione iure.'
-                      branch: mf/odit-doloribus-repel-d9e
-                      prompt: 'Ut rem est esse sint. Molestiae sunt suscipit doloribus fugiat ut aut. Et error neque recusandae et. Et ut dicta vitae assumenda consequatur. Et sunt quisquam sit repellendus ut.'
+                      id: 019e1caf-3d6d-71e0-bab9-23813fba5fdd
+                      account_id: 019e1caf-3c20-710b-ab89-a5914eed32bb
+                      environment_id: 019e1caf-3d6c-7027-b81d-47352daf4801
+                      title: 'Suscipit aut facere perferendis molestiae.'
+                      prompt: 'Quidem id odio nesciunt illo. Ipsam excepturi qui velit quo nobis. Odio molestiae est sed vel earum. Voluptas porro accusamus debitis unde pariatur.'
                       idle_timeout_seconds: 300
                       started_at: null
                       completed_at: null
-                      created_at: '2026-04-22T18:04:56.000000Z'
-                      updated_at: '2026-04-22T18:04:56.000000Z'
-                      created_by: 581
+                      created_at: '2026-05-12T14:55:07.000000Z'
+                      updated_at: '2026-05-12T14:55:07.000000Z'
+                      created_by: 1242
                   links:
                     first: null
                     last: null
@@ -3659,17 +3918,17 @@ paths:
                 type: object
                 example:
                   data:
-                    id: 019db65d-d6fb-7317-9fe7-7e919a335670
-                    account_id: 019db65d-d572-7193-9794-c274ef3d9619
+                    id: 019e1caf-3ef3-7375-a4a6-63e51bafa3f8
+                    account_id: 019e1caf-3d7a-7111-8acf-c5ec9b20f3fe
+                    environment_id: 019e1caf-3ef2-716f-8e6b-6537ff436241
                     title: 'Eius et animi quos velit et.'
-                    branch: ah/eius-et-animi-quos-v-670
                     prompt: 'Nihil accusantium harum mollitia modi deserunt. Ab provident perspiciatis quo omnis nostrum aut adipisci. Nostrum qui commodi incidunt iure.'
                     idle_timeout_seconds: 300
                     started_at: null
                     completed_at: null
-                    created_at: '2026-04-22T18:04:56.000000Z'
-                    updated_at: '2026-04-22T18:04:56.000000Z'
-                    created_by: 583
+                    created_at: '2026-05-12T14:55:07.000000Z'
+                    updated_at: '2026-05-12T14:55:07.000000Z'
+                    created_by: 1244
                 properties:
                   data:
                     $ref: '#/components/schemas/Task'
@@ -3811,11 +4070,13 @@ paths:
                   nullable: true
                 attachments:
                   type: array
-                  description: 'MCP-aligned attachments carried with the task. Each item must have a `uri`, or inline `text`/`blob` with a `mimeType`. GitHub issue and PR URIs are resolved synchronously by the GitHub resolver; failures still create an attachment with `status: "failed"` and a stable `error` code.'
+                  description: 'MCP-aligned attachments carried with the task. Each item must include `name`, a `mimeType`, and inline `text` or `blob`. Optionally include a `uri` to reference an external source.'
                   example:
                     -
                       name: 'PROJ-42 Login bug'
-                      uri: 'https://github.com/acme-corp/frontend/issues/42'
+                      uri: 'https://example.com/tickets/42'
+                      mimeType: text/markdown
+                      text: '# PROJ-42: Login redirect on Safari'
                   items:
                     type: object
                     nullable: true
@@ -3831,7 +4092,7 @@ paths:
                         nullable: true
                       mimeType:
                         type: string
-                        description: 'MIME type. Required when inline `text` or `blob` is provided. Must not be greater than 255 characters.'
+                        description: 'MIME type for the inline content. Must not be greater than 255 characters.'
                         example: text/markdown
                         nullable: true
                       annotations:
@@ -3842,23 +4103,23 @@ paths:
                         nullable: true
                       metadata:
                         type: object
-                        description: 'Resolver-populated display data. Always keyed on `provider`; resolvers own the remaining keys. Typically omitted on create; the matching resolver fills it in.'
+                        description: 'Free-form display data, keyed on `provider`. Stored as-is alongside the attachment.'
                         example: null
                         properties: {  }
                         nullable: true
                       uri:
                         type: string
-                        description: 'Resource URI. Required if no inline `text`/`blob`. Resolved synchronously if a resolver matches, else stored as-is. Must not be greater than 2048 characters.'
+                        description: 'Optional resource URI stored as a reference alongside the inline content. Must not be greater than 2048 characters.'
                         example: 'https://github.com/acme/foo/issues/42'
                         nullable: true
                       text:
                         type: string
-                        description: 'Inline text content. Mutually exclusive with `blob`.'
+                        description: 'Inline text content. Required when no `blob` is provided. Mutually exclusive with `blob`.'
                         example: null
                         nullable: true
                       blob:
                         type: string
-                        description: 'Inline binary content, base64-encoded. Mutually exclusive with `text`.'
+                        description: 'Inline binary content, base64-encoded. Required when no `text` is provided. Mutually exclusive with `text`.'
                         example: null
                         nullable: true
                     required:
@@ -3891,17 +4152,17 @@ paths:
                 type: object
                 example:
                   data:
-                    id: 019db65d-d8a2-72d0-8346-33619840771d
-                    account_id: 019db65d-d70a-702b-a3d4-030fdec2e79b
+                    id: 019e1caf-409c-71e2-a9e5-c5ccfe99164f
+                    account_id: 019e1caf-3eff-7382-834c-4bef11f4c6af
+                    environment_id: 019e1caf-409b-73de-83af-48c8a5cc87b7
                     title: 'Adipisci quidem nostrum qui commodi incidunt iure.'
-                    branch: ba/adipisci-quidem-nost-71d
                     prompt: 'Et modi ipsum nostrum omnis autem et consequatur. Dolores enim non facere tempora. Voluptatem laboriosam praesentium quis adipisci.'
                     idle_timeout_seconds: 300
                     started_at: null
                     completed_at: null
-                    created_at: '2026-04-22T18:04:56.000000Z'
-                    updated_at: '2026-04-22T18:04:56.000000Z'
-                    created_by: 585
+                    created_at: '2026-05-12T14:55:07.000000Z'
+                    updated_at: '2026-05-12T14:55:07.000000Z'
+                    created_by: 1246
                 properties:
                   data:
                     $ref: '#/components/schemas/Task'
@@ -4002,17 +4263,17 @@ paths:
                 type: object
                 example:
                   data:
-                    id: 019db65d-da31-7058-8d03-4e981a379b37
-                    account_id: 019db65d-d8b3-727e-9405-780ce1d40ed4
+                    id: 019e1caf-4220-7005-b07f-674dcd215fd9
+                    account_id: 019e1caf-40a9-711e-873f-9faef4333528
+                    environment_id: 019e1caf-421f-7190-a315-7e14178df5fb
                     title: 'Eius et animi quos velit et.'
-                    branch: ah/eius-et-animi-quos-v-b37
                     prompt: 'Nihil accusantium harum mollitia modi deserunt. Ab provident perspiciatis quo omnis nostrum aut adipisci. Nostrum qui commodi incidunt iure.'
                     idle_timeout_seconds: 300
                     started_at: null
                     completed_at: null
-                    created_at: '2026-04-22T18:04:57.000000Z'
-                    updated_at: '2026-04-22T18:04:57.000000Z'
-                    created_by: 587
+                    created_at: '2026-05-12T14:55:08.000000Z'
+                    updated_at: '2026-05-12T14:55:08.000000Z'
+                    created_by: 1248
                 properties:
                   data:
                     $ref: '#/components/schemas/Task'
@@ -4354,24 +4615,35 @@ paths:
                 example:
                   data:
                     -
-                      id: 019db65d-e1dd-717d-8a13-14d753178511
-                      task_id: 019db65d-e134-71f1-ab66-23a0be14e254
-                      environment_id: 019db65d-e133-72f8-8b8b-9cf9cf34048b
-                      title: 'Adipisci quidem nostrum qui commodi incidunt iure.'
+                      id: 019e1caf-48a9-70a0-bbf3-a7c9f9779bd1
+                      task_id: 019e1caf-47f7-7033-a8cf-48559531b8e3
+                      environment_id: 019e1caf-48a7-7222-8982-16b343ebb28a
+                      title: 'Asperiores et ipsa quas dignissimos nemo et placeat.'
                       status: starting
-                      branch_name: feature-odit
+                      branch_name: feature-cum
                       base_branch: null
+                      sources:
+                        -
+                          repo: mina.cole/aliquid-vel-non
+                          workspace: /workspace
+                          head_branch: feature-cum
+                          base_branch: main
+                          base_commit_sha: null
+                          has_changes: false
+                          commit_count: 0
+                          lines_added: 0
+                          lines_removed: 0
                       close_reason: null
                       message_count: 0
                       idle_timeout_seconds: 300
-                      created_by: 599
-                      started_at: '2026-04-22T18:04:58.000000Z'
+                      created_by: 1256
+                      started_at: '2026-05-12T14:55:09.000000Z'
                       last_message_at: null
                       closed_at: null
-                      created_at: '2026-04-22T18:04:59.000000Z'
-                      updated_at: '2026-04-22T18:04:59.000000Z'
+                      created_at: '2026-05-12T14:55:09.000000Z'
+                      updated_at: '2026-05-12T14:55:09.000000Z'
                       virtual_machine:
-                        id: 019db65d-e1dc-7374-a93b-5555a027fc38
+                        id: 019e1caf-47fb-718a-94df-cb8c5b5c1302
                         status: running
                         ready: false
                         ports:
@@ -4381,24 +4653,35 @@ paths:
                             url: 'https://3000.vm.example.com'
                             protocol: https
                     -
-                      id: 019db65d-e414-7377-9506-65c4851fbc63
-                      task_id: 019db65d-e34d-7168-8bea-f2033fe4136a
-                      environment_id: 019db65d-e34c-7106-80c0-7ab3f4f8546a
-                      title: 'Vitae assumenda consequatur ut et sunt.'
+                      id: 019e1caf-4ab3-711a-b3d9-e9bd64900e48
+                      task_id: 019e1caf-4a09-70c2-b027-ee5a6408b04d
+                      environment_id: 019e1caf-4ab2-73a4-ada1-7d3c926e20cc
+                      title: 'Ea amet blanditiis voluptas dolor odit repellat et.'
                       status: starting
-                      branch_name: feature-quisquam
+                      branch_name: feature-maxime
                       base_branch: null
+                      sources:
+                        -
+                          repo: rowe.mikel/quisquam-nihil-nihil
+                          workspace: /workspace
+                          head_branch: feature-maxime
+                          base_branch: main
+                          base_commit_sha: null
+                          has_changes: false
+                          commit_count: 0
+                          lines_added: 0
+                          lines_removed: 0
                       close_reason: null
                       message_count: 0
                       idle_timeout_seconds: 300
-                      created_by: 602
-                      started_at: '2026-04-22T18:04:59.000000Z'
+                      created_by: 1259
+                      started_at: '2026-05-12T14:55:10.000000Z'
                       last_message_at: null
                       closed_at: null
-                      created_at: '2026-04-22T18:04:59.000000Z'
-                      updated_at: '2026-04-22T18:04:59.000000Z'
+                      created_at: '2026-05-12T14:55:10.000000Z'
+                      updated_at: '2026-05-12T14:55:10.000000Z'
                       virtual_machine:
-                        id: 019db65d-e413-7388-ae25-1609946c05e1
+                        id: 019e1caf-4a0c-723a-af0b-b8b67b8bc547
                         status: running
                         ready: false
                         ports:
@@ -4503,24 +4786,35 @@ paths:
                 type: object
                 example:
                   data:
-                    id: 019db65d-eadf-735e-927d-2db3e0c7a6b6
-                    task_id: 019db65d-ea28-7201-9998-c31a35990cf1
-                    environment_id: 019db65d-ea27-717b-aa55-540e31608588
+                    id: 019e1caf-4e9a-71e4-bbff-1bcd6976ef89
+                    task_id: 019e1caf-4dcb-70dc-bd5b-8d002f74d1ef
+                    environment_id: 019e1caf-4e99-7324-aa65-8b58224b7678
                     title: 'Eius et animi quos velit et.'
                     status: starting
                     branch_name: feature-fugiat
                     base_branch: null
+                    sources:
+                      -
+                        repo: tobin24/corporis-nesciunt-ut
+                        workspace: /workspace
+                        head_branch: feature-fugiat
+                        base_branch: main
+                        base_commit_sha: null
+                        has_changes: false
+                        commit_count: 0
+                        lines_added: 0
+                        lines_removed: 0
                     close_reason: null
                     message_count: 0
                     idle_timeout_seconds: 300
-                    created_by: 605
-                    started_at: '2026-04-22T18:05:00.000000Z'
+                    created_by: 1262
+                    started_at: '2026-05-12T14:55:10.000000Z'
                     last_message_at: null
                     closed_at: null
-                    created_at: '2026-04-22T18:05:01.000000Z'
-                    updated_at: '2026-04-22T18:05:01.000000Z'
+                    created_at: '2026-05-12T14:55:11.000000Z'
+                    updated_at: '2026-05-12T14:55:11.000000Z'
                     virtual_machine:
-                      id: 019db65d-eadd-7246-91dd-e36d2faaf601
+                      id: 019e1caf-4dd0-7053-8458-aef33973653e
                       status: running
                       ready: false
                       ports:
@@ -4676,7 +4970,7 @@ paths:
                   nullable: true
                 branch_name:
                   type: string
-                  description: 'Git branch to create for this session. When omitted, a branch name is generated from the task title. Must not be greater than 255 characters.'
+                  description: "Git branch to create for this session. When omitted, a name is generated from the creator's initials, the task's first linked issue number (if any), the session title, and a short hash of the session id, so distinct sessions of the same task produce distinct branches. Must not be greater than 255 characters."
                   example: fix/auth-jwt
                   nullable: true
                 base_branch:
@@ -4720,24 +5014,35 @@ paths:
                 type: object
                 example:
                   data:
-                    id: 019db65d-ef24-70ea-960e-82864b75990b
-                    task_id: 019db65d-ee7a-736d-8c07-6b03426dfe8a
-                    environment_id: 019db65d-ee79-7298-8223-9944ed94fbac
+                    id: 019e1caf-5113-73f8-87be-035b30ef3ace
+                    task_id: 019e1caf-5069-7336-a9c3-8ed6b952525b
+                    environment_id: 019e1caf-5112-7255-ba62-9ad10a6a6af6
                     title: 'Adipisci quidem nostrum qui commodi incidunt iure.'
                     status: starting
                     branch_name: feature-odit
                     base_branch: null
+                    sources:
+                      -
+                        repo: mack.quigley/error-neque-recusandae
+                        workspace: /workspace
+                        head_branch: feature-odit
+                        base_branch: main
+                        base_commit_sha: null
+                        has_changes: false
+                        commit_count: 0
+                        lines_added: 0
+                        lines_removed: 0
                     close_reason: null
                     message_count: 0
                     idle_timeout_seconds: 300
-                    created_by: 608
-                    started_at: '2026-04-22T18:05:02.000000Z'
+                    created_by: 1265
+                    started_at: '2026-05-12T14:55:11.000000Z'
                     last_message_at: null
                     closed_at: null
-                    created_at: '2026-04-22T18:05:02.000000Z'
-                    updated_at: '2026-04-22T18:05:02.000000Z'
+                    created_at: '2026-05-12T14:55:12.000000Z'
+                    updated_at: '2026-05-12T14:55:12.000000Z'
                     virtual_machine:
-                      id: 019db65d-ef22-7210-9732-0a90c1d4a13b
+                      id: 019e1caf-506d-70c6-8767-45dd4571aee7
                       status: running
                       ready: false
                       ports:
@@ -4846,24 +5151,35 @@ paths:
                 type: object
                 example:
                   data:
-                    id: 019db65d-f4f9-70dc-8dab-7ed3b348a14e
-                    task_id: 019db65d-f43c-71ec-8d77-f335c435d54e
-                    environment_id: 019db65d-f43c-71ec-8d77-f335c3568bba
+                    id: 019e1caf-53bd-7292-b834-ae7f4f24b777
+                    task_id: 019e1caf-530a-71d1-ac19-5fd23c71404f
+                    environment_id: 019e1caf-53bb-725a-bdc3-ceb1beb9eb3a
                     title: 'Adipisci quidem nostrum qui commodi incidunt iure.'
                     status: starting
                     branch_name: feature-odit
                     base_branch: null
+                    sources:
+                      -
+                        repo: hbernhard/ipsam-dolorem-et
+                        workspace: /workspace
+                        head_branch: feature-odit
+                        base_branch: main
+                        base_commit_sha: null
+                        has_changes: false
+                        commit_count: 0
+                        lines_added: 0
+                        lines_removed: 0
                     close_reason: null
                     message_count: 0
                     idle_timeout_seconds: 300
-                    created_by: 611
-                    started_at: '2026-04-22T18:05:03.000000Z'
+                    created_by: 1268
+                    started_at: '2026-05-12T14:55:12.000000Z'
                     last_message_at: null
                     closed_at: null
-                    created_at: '2026-04-22T18:05:04.000000Z'
-                    updated_at: '2026-04-22T18:05:04.000000Z'
+                    created_at: '2026-05-12T14:55:12.000000Z'
+                    updated_at: '2026-05-12T14:55:12.000000Z'
                     virtual_machine:
-                      id: 019db65d-f4f8-72f1-a6ce-1a86d71c7618
+                      id: 019e1caf-530f-73a7-a8c5-e6da499d05e0
                       status: running
                       ready: false
                       ports:
@@ -5019,7 +5335,7 @@ paths:
         in: path
         name: session_id
         description: 'The ID of the session.'
-        example: 019dadf8-f1af-734b-ba23-eec4dfd62f41
+        example: 019dd403-36e8-73ad-a38b-535304acb347
         required: true
         schema:
           type: string
@@ -5077,7 +5393,7 @@ paths:
         in: path
         name: session_id
         description: 'The ID of the session.'
-        example: 019dadf8-f1af-734b-ba23-eec4dfd62f41
+        example: 019dd403-36e8-73ad-a38b-535304acb347
         required: true
         schema:
           type: string
@@ -5107,39 +5423,39 @@ paths:
                 example:
                   data:
                     -
-                      id: 42
-                      session_id: 019db65d-f98a-7389-9e69-dffda9b3ca83
+                      id: 264
+                      session_id: 019e1caf-55cf-71f1-8528-548856387506
                       payload:
                         type: user
                         message:
                           role: user
                           content:
                             -
-                              text: 'Id ipsam odit voluptatem ab laborum omnis praesentium quia.'
+                              text: 'Quis corrupti perferendis atque.'
                               type: text
                       type: user
-                      sequence: 9
+                      sequence: 68
                       status: sent
                       display_text: null
-                      created_at: '2026-04-22T18:05:05.000000Z'
-                      updated_at: '2026-04-22T18:05:05.000000Z'
+                      created_at: '2026-05-12T14:55:13.000000Z'
+                      updated_at: '2026-05-12T14:55:13.000000Z'
                     -
-                      id: 43
-                      session_id: 019db65d-fbf2-7273-b22e-85cb752fb90d
+                      id: 265
+                      session_id: 019e1caf-5735-7207-9ee7-c586bf51c5b7
                       payload:
                         type: user
                         message:
                           role: user
                           content:
                             -
-                              text: 'Nihil quam qui in assumenda vero.'
+                              text: 'Suscipit est fugiat debitis eum quasi consequatur dolores vero.'
                               type: text
                       type: user
-                      sequence: 42
+                      sequence: 99
                       status: sent
                       display_text: null
-                      created_at: '2026-04-22T18:05:05.000000Z'
-                      updated_at: '2026-04-22T18:05:05.000000Z'
+                      created_at: '2026-05-12T14:55:13.000000Z'
+                      updated_at: '2026-05-12T14:55:13.000000Z'
                   links:
                     first: null
                     last: null
@@ -5153,8 +5469,123 @@ paths:
                 properties:
                   data:
                     type: array
+                    example:
+                      -
+                        id: 264
+                        session_id: 019e1caf-55cf-71f1-8528-548856387506
+                        payload:
+                          type: user
+                          message:
+                            role: user
+                            content:
+                              -
+                                text: 'Quis corrupti perferendis atque.'
+                                type: text
+                        type: user
+                        sequence: 68
+                        status: sent
+                        display_text: null
+                        created_at: '2026-05-12T14:55:13.000000Z'
+                        updated_at: '2026-05-12T14:55:13.000000Z'
+                      -
+                        id: 265
+                        session_id: 019e1caf-5735-7207-9ee7-c586bf51c5b7
+                        payload:
+                          type: user
+                          message:
+                            role: user
+                            content:
+                              -
+                                text: 'Suscipit est fugiat debitis eum quasi consequatur dolores vero.'
+                                type: text
+                        type: user
+                        sequence: 99
+                        status: sent
+                        display_text: null
+                        created_at: '2026-05-12T14:55:13.000000Z'
+                        updated_at: '2026-05-12T14:55:13.000000Z'
                     items:
-                      $ref: '#/components/schemas/Message'
+                      type: object
+                      properties:
+                        id:
+                          type: integer
+                          example: 264
+                          description: 'Message ID.'
+                        session_id:
+                          type: string
+                          example: 019e1caf-55cf-71f1-8528-548856387506
+                          description: 'Session the message belongs to.'
+                        payload:
+                          type: object
+                          properties:
+                            type:
+                              type: string
+                              example: user
+                            message:
+                              type: object
+                              properties:
+                                role:
+                                  type: string
+                                  example: user
+                                content:
+                                  type: array
+                                  example:
+                                    -
+                                      text: 'Quis corrupti perferendis atque.'
+                                      type: text
+                                  items:
+                                    type: object
+                                    properties:
+                                      text: { type: string, example: 'Quis corrupti perferendis atque.' }
+                                      type: { type: string, example: text }
+                          description: 'The raw Claude Code SDK JSONL transcript entry this message wraps. Shape varies by `type`. Treat as opaque except for the fields documented on the `Message` schema for the specific `type` you care about.'
+                        type:
+                          type: string
+                          example: user
+                          description: 'Discriminator for the message. Determines the shape of `payload`. Conversation UIs should render `user` and `assistant` turns, and skip or collapse the rest. Full per-variant payload shapes are documented on the `Message` schema in this spec.'
+                          enum:
+                            - user
+                            - assistant
+                            - last-prompt
+                            - queue-operation
+                            - attachment
+                            - ai-title
+                        sequence:
+                          type: integer
+                          example: 68
+                          description: 'Order within the session, assigned when the message is delivered to the agent. Queued messages have `sequence: null`. Render with `ORDER BY sequence ASC` then `created_at ASC` to show the conversation top-to-bottom.'
+                          nullable: true
+                        status:
+                          type: string
+                          example: sent
+                          description: "Delivery status:\n\n- `queued`: not yet sent to the agent.\n- `sent`: delivered and part of the transcript.\n- `failed`: delivery failed terminally."
+                          enum:
+                            - queued
+                            - sent
+                            - failed
+                        display_text:
+                          type: string
+                          example: null
+                          description: 'Clean user-facing text when the underlying `payload` contains server-prepended context (for example, attachment preambles on a user turn). Only set on `type:"user"` messages that needed stripping. Null when the payload is already clean, in which case clients should fall back to `payload.message.content[0].text`.'
+                          nullable: true
+                        created_at:
+                          type: string
+                          example: '2026-05-12T14:55:13.000000Z'
+                          description: 'ISO 8601 timestamp of when this message was created (that is, when it entered the queue or was delivered, depending on `status`).'
+                        updated_at:
+                          type: string
+                          example: '2026-05-12T14:55:13.000000Z'
+                          description: 'ISO 8601 timestamp of the most recent change to the message record (for example, when it flipped from `queued` to `sent`).'
+                    required:
+                      - id
+                      - session_id
+                      - payload
+                      - type
+                      - sequence
+                      - status
+                      - display_text
+                      - created_at
+                      - updated_at
                   links:
                     $ref: '#/components/schemas/PaginationLinks'
                   meta:
@@ -5236,8 +5667,8 @@ paths:
                 type: object
                 example:
                   data:
-                    id: 44
-                    session_id: 019db65d-fe30-7105-82ff-384e8f769e9c
+                    id: 266
+                    session_id: 019e1caf-58b2-731c-8a60-58ecdb81850a
                     payload:
                       type: user
                       message:
@@ -5250,11 +5681,95 @@ paths:
                     sequence: 86
                     status: sent
                     display_text: null
-                    created_at: '2026-04-22T18:05:06.000000Z'
-                    updated_at: '2026-04-22T18:05:06.000000Z'
+                    created_at: '2026-05-12T14:55:14.000000Z'
+                    updated_at: '2026-05-12T14:55:14.000000Z'
                 properties:
                   data:
-                    $ref: '#/components/schemas/Message'
+                    type: object
+                    properties:
+                      id:
+                        type: integer
+                        example: 266
+                        description: 'Message ID.'
+                      session_id:
+                        type: string
+                        example: 019e1caf-58b2-731c-8a60-58ecdb81850a
+                        description: 'Session the message belongs to.'
+                      payload:
+                        type: object
+                        properties:
+                          type:
+                            type: string
+                            example: user
+                          message:
+                            type: object
+                            properties:
+                              role:
+                                type: string
+                                example: user
+                              content:
+                                type: array
+                                example:
+                                  -
+                                    text: 'Eius et animi quos velit et.'
+                                    type: text
+                                items:
+                                  type: object
+                                  properties:
+                                    text:
+                                      type: string
+                                      example: 'Eius et animi quos velit et.'
+                                    type:
+                                      type: string
+                                      example: text
+                        description: 'The raw Claude Code SDK JSONL transcript entry this message wraps. Shape varies by `type`. Treat as opaque except for the fields documented on the `Message` schema for the specific `type` you care about.'
+                      type:
+                        type: string
+                        example: user
+                        description: 'Discriminator for the message. Determines the shape of `payload`. Conversation UIs should render `user` and `assistant` turns, and skip or collapse the rest. Full per-variant payload shapes are documented on the `Message` schema in this spec.'
+                        enum:
+                          - user
+                          - assistant
+                          - last-prompt
+                          - queue-operation
+                          - attachment
+                          - ai-title
+                      sequence:
+                        type: integer
+                        example: 86
+                        description: 'Order within the session, assigned when the message is delivered to the agent. Queued messages have `sequence: null`. Render with `ORDER BY sequence ASC` then `created_at ASC` to show the conversation top-to-bottom.'
+                        nullable: true
+                      status:
+                        type: string
+                        example: sent
+                        description: "Delivery status:\n\n- `queued`: not yet sent to the agent.\n- `sent`: delivered and part of the transcript.\n- `failed`: delivery failed terminally."
+                        enum:
+                          - queued
+                          - sent
+                          - failed
+                      display_text:
+                        type: string
+                        example: null
+                        description: 'Clean user-facing text when the underlying `payload` contains server-prepended context (for example, attachment preambles on a user turn). Only set on `type:"user"` messages that needed stripping. Null when the payload is already clean, in which case clients should fall back to `payload.message.content[0].text`.'
+                        nullable: true
+                      created_at:
+                        type: string
+                        example: '2026-05-12T14:55:14.000000Z'
+                        description: 'ISO 8601 timestamp of when this message was created (that is, when it entered the queue or was delivered, depending on `status`).'
+                      updated_at:
+                        type: string
+                        example: '2026-05-12T14:55:14.000000Z'
+                        description: 'ISO 8601 timestamp of the most recent change to the message record (for example, when it flipped from `queued` to `sent`).'
+                    required:
+                      - id
+                      - session_id
+                      - payload
+                      - type
+                      - sequence
+                      - status
+                      - display_text
+                      - created_at
+                      - updated_at
         401:
           description: 'Missing or invalid API token.'
           content:
@@ -5399,7 +5914,7 @@ paths:
         in: path
         name: session_id
         description: 'The ID of the session.'
-        example: 019dadf8-f1af-734b-ba23-eec4dfd62f41
+        example: 019dd403-36e8-73ad-a38b-535304acb347
         required: true
         schema:
           type: string
@@ -5418,8 +5933,8 @@ paths:
                 type: object
                 example:
                   data:
-                    id: 45
-                    session_id: 019db65e-0035-7214-848f-4d6357b1ca57
+                    id: 267
+                    session_id: 019e1caf-5a31-7077-b88b-ec83169ad921
                     payload:
                       type: user
                       message:
@@ -5432,11 +5947,95 @@ paths:
                     sequence: 32
                     status: sent
                     display_text: null
-                    created_at: '2026-04-22T18:05:07.000000Z'
-                    updated_at: '2026-04-22T18:05:07.000000Z'
+                    created_at: '2026-05-12T14:55:14.000000Z'
+                    updated_at: '2026-05-12T14:55:14.000000Z'
                 properties:
                   data:
-                    $ref: '#/components/schemas/Message'
+                    type: object
+                    properties:
+                      id:
+                        type: integer
+                        example: 267
+                        description: 'Message ID.'
+                      session_id:
+                        type: string
+                        example: 019e1caf-5a31-7077-b88b-ec83169ad921
+                        description: 'Session the message belongs to.'
+                      payload:
+                        type: object
+                        properties:
+                          type:
+                            type: string
+                            example: user
+                          message:
+                            type: object
+                            properties:
+                              role:
+                                type: string
+                                example: user
+                              content:
+                                type: array
+                                example:
+                                  -
+                                    text: 'Adipisci quidem nostrum qui commodi incidunt iure.'
+                                    type: text
+                                items:
+                                  type: object
+                                  properties:
+                                    text:
+                                      type: string
+                                      example: 'Adipisci quidem nostrum qui commodi incidunt iure.'
+                                    type:
+                                      type: string
+                                      example: text
+                        description: 'The raw Claude Code SDK JSONL transcript entry this message wraps. Shape varies by `type`. Treat as opaque except for the fields documented on the `Message` schema for the specific `type` you care about.'
+                      type:
+                        type: string
+                        example: user
+                        description: 'Discriminator for the message. Determines the shape of `payload`. Conversation UIs should render `user` and `assistant` turns, and skip or collapse the rest. Full per-variant payload shapes are documented on the `Message` schema in this spec.'
+                        enum:
+                          - user
+                          - assistant
+                          - last-prompt
+                          - queue-operation
+                          - attachment
+                          - ai-title
+                      sequence:
+                        type: integer
+                        example: 32
+                        description: 'Order within the session, assigned when the message is delivered to the agent. Queued messages have `sequence: null`. Render with `ORDER BY sequence ASC` then `created_at ASC` to show the conversation top-to-bottom.'
+                        nullable: true
+                      status:
+                        type: string
+                        example: sent
+                        description: "Delivery status:\n\n- `queued`: not yet sent to the agent.\n- `sent`: delivered and part of the transcript.\n- `failed`: delivery failed terminally."
+                        enum:
+                          - queued
+                          - sent
+                          - failed
+                      display_text:
+                        type: string
+                        example: null
+                        description: 'Clean user-facing text when the underlying `payload` contains server-prepended context (for example, attachment preambles on a user turn). Only set on `type:"user"` messages that needed stripping. Null when the payload is already clean, in which case clients should fall back to `payload.message.content[0].text`.'
+                        nullable: true
+                      created_at:
+                        type: string
+                        example: '2026-05-12T14:55:14.000000Z'
+                        description: 'ISO 8601 timestamp of when this message was created (that is, when it entered the queue or was delivered, depending on `status`).'
+                      updated_at:
+                        type: string
+                        example: '2026-05-12T14:55:14.000000Z'
+                        description: 'ISO 8601 timestamp of the most recent change to the message record (for example, when it flipped from `queued` to `sent`).'
+                    required:
+                      - id
+                      - session_id
+                      - payload
+                      - type
+                      - sequence
+                      - status
+                      - display_text
+                      - created_at
+                      - updated_at
         401:
           description: 'Missing or invalid API token.'
           content:
@@ -5664,7 +6263,7 @@ paths:
         in: path
         name: session_id
         description: 'The ID of the session.'
-        example: 019dadf8-f1af-734b-ba23-eec4dfd62f41
+        example: 019dd403-36e8-73ad-a38b-535304acb347
         required: true
         schema:
           type: string
@@ -5712,17 +6311,19 @@ paths:
                 example:
                   data:
                     -
-                      id: 624
-                      name: 'Quentin Hackett'
-                      email: kkuhic@example.net
+                      id: 1279
+                      name: 'Isaias Zieme PhD'
+                      email: jaclyn14@example.net
+                      avatar_url: 'https://www.gravatar.com/avatar/f95772ab28b0ff69f8f990dbf0c37182?d=mp&s=200'
                       github_username: null
                       role: null
                       joined_at: null
                       removed_at: null
                     -
-                      id: 625
-                      name: 'Delaney McGlynn'
-                      email: pbartoletti@example.org
+                      id: 1280
+                      name: 'Carolina Wilkinson'
+                      email: luettgen.lelia@example.net
+                      avatar_url: 'https://www.gravatar.com/avatar/3b7d4f534cfbd67ce8111c6c97bb02a3?d=mp&s=200'
                       github_username: null
                       role: null
                       joined_at: null
@@ -5835,9 +6436,10 @@ paths:
                 type: object
                 example:
                   data:
-                    id: 627
+                    id: 1282
                     name: 'Ms. Audra Crooks II'
                     email: gulgowski.asia@example.com
+                    avatar_url: 'https://www.gravatar.com/avatar/d6cb3c29392b2d22a8c56ef184a71c72?d=mp&s=200'
                     github_username: null
                     role: null
                     joined_at: null
@@ -5974,9 +6576,10 @@ paths:
                 type: object
                 example:
                   data:
-                    id: 626
+                    id: 1281
                     name: 'Morgan Hirthe'
-                    email: imclaughlin@example.org
+                    email: okeefe.isidro@example.org
+                    avatar_url: 'https://www.gravatar.com/avatar/78bab266e3eebbfbe4087fe9d8230a0a?d=mp&s=200'
                     github_username: null
                     role: null
                     joined_at: null
@@ -6027,9 +6630,10 @@ paths:
                 type: object
                 example:
                   data:
-                    id: 628
+                    id: 1283
                     name: 'Morgan Hirthe'
-                    email: okeefe.isidro@example.org
+                    email: ztromp@example.org
+                    avatar_url: 'https://www.gravatar.com/avatar/6cd50441d2d36bba61ad2691cdc0926e?d=mp&s=200'
                     github_username: null
                     role: null
                     joined_at: null
@@ -6166,37 +6770,37 @@ paths:
                 example:
                   data:
                     -
-                      uri: 'wallfacer://attachments/019db65d-dbb6-70a3-b787-037022793570'
-                      name: 'Minima omnis et vel et.'
+                      uri: 'wallfacer://attachments/019e1caf-4380-72c7-ab6a-1244f6af541f'
+                      name: 'Adipisci quidem nostrum qui commodi.'
                       description: null
                       mimeType: text/markdown
-                      size: 155
+                      size: 182
                       annotations: null
-                      text: 'Sit earum voluptatem consequatur libero repellat aliquid vitae nostrum. Dolores incidunt ex fugiat saepe. Consequatur ratione quam sit doloribus assumenda.'
+                      text: 'Odit et et modi. Nostrum omnis autem et consequatur aut. Enim non facere tempora ex voluptatem laboriosam praesentium. Adipisci molestias fugit deleniti distinctio eum doloremque id.'
                       blob: null
-                      id: 019db65d-dbb6-70a3-b787-037022793570
+                      id: 019e1caf-4380-72c7-ab6a-1244f6af541f
                       status: ready
                       error: null
                       metadata: null
                       last_fetched_at: null
-                      created_at: '2026-04-22T18:04:57.000000Z'
-                      updated_at: '2026-04-22T18:04:57.000000Z'
+                      created_at: '2026-05-12T14:55:08.000000Z'
+                      updated_at: '2026-05-12T14:55:08.000000Z'
                     -
-                      uri: 'wallfacer://attachments/019db65d-dd04-7139-9299-a3ed331bf90d'
-                      name: 'Quia ducimus unde magni aut.'
+                      uri: 'wallfacer://attachments/019e1caf-44e0-7017-8f15-95dead8e1680'
+                      name: 'Sunt quisquam sit.'
                       description: null
                       mimeType: text/markdown
-                      size: 208
+                      size: 187
                       annotations: null
-                      text: 'Blanditiis debitis aut qui saepe voluptas tempora. Voluptates non repellat aspernatur accusantium ut voluptatum autem ut. Illum est cumque sequi voluptas. Vel iure ut aperiam magni expedita voluptas officiis.'
+                      text: 'Eaque alias ratione dolores sed rem ea ut. Deserunt sint quis in quod. Aspernatur consectetur id a consectetur assumenda eaque neque. Sunt nihil accusantium odit ut. Rem dolorem aut quis.'
                       blob: null
-                      id: 019db65d-dd04-7139-9299-a3ed331bf90d
+                      id: 019e1caf-44e0-7017-8f15-95dead8e1680
                       status: ready
                       error: null
                       metadata: null
                       last_fetched_at: null
-                      created_at: '2026-04-22T18:04:57.000000Z'
-                      updated_at: '2026-04-22T18:04:57.000000Z'
+                      created_at: '2026-05-12T14:55:09.000000Z'
+                      updated_at: '2026-05-12T14:55:09.000000Z'
                 properties:
                   data:
                     type: array
@@ -6288,7 +6892,7 @@ paths:
     post:
       summary: 'Create an attachment'
       operationId: createAnAttachment
-      description: 'Attaches content to a task. Provide `uri` alone for a reference-only record, or inline `text`/`blob` with a `mimeType` (adding an optional `uri` as metadata). Inline-only attachments receive a canonical `wallfacer://attachments/{id}` URI.'
+      description: 'Attaches content to a task. Provide a `name`, a `mimeType`, and inline `text` or `blob`. Optionally include a `uri` to reference an external source. Inline-only attachments receive a canonical `wallfacer://attachments/{id}` URI.'
       parameters:
         -
           in: header
@@ -6306,7 +6910,7 @@ paths:
                 type: object
                 example:
                   data:
-                    uri: 'wallfacer://attachments/019db65d-de6c-7176-baed-fe6fc4e589ba'
+                    uri: 'wallfacer://attachments/019e1caf-4683-7269-8a61-59d5cec7e449'
                     name: 'Eius et animi quos.'
                     description: null
                     mimeType: text/markdown
@@ -6314,13 +6918,13 @@ paths:
                     annotations: null
                     text: 'Fugiat sunt nihil accusantium harum mollitia. Deserunt aut ab provident perspiciatis quo omnis nostrum. Adipisci quidem nostrum qui commodi incidunt iure.'
                     blob: null
-                    id: 019db65d-de6c-7176-baed-fe6fc4e589ba
+                    id: 019e1caf-4683-7269-8a61-59d5cec7e449
                     status: ready
                     error: null
                     metadata: null
                     last_fetched_at: null
-                    created_at: '2026-04-22T18:04:58.000000Z'
-                    updated_at: '2026-04-22T18:04:58.000000Z'
+                    created_at: '2026-05-12T14:55:09.000000Z'
+                    updated_at: '2026-05-12T14:55:09.000000Z'
                 properties:
                   data:
                     $ref: '#/components/schemas/Attachment'
@@ -6479,7 +7083,7 @@ paths:
                   nullable: true
                 mimeType:
                   type: string
-                  description: 'MIME type. Required when inline `text` or `blob` is provided. Must not be greater than 255 characters.'
+                  description: 'MIME type for the inline content. Must not be greater than 255 characters.'
                   example: text/markdown
                   nullable: true
                 annotations:
@@ -6490,23 +7094,23 @@ paths:
                   nullable: true
                 metadata:
                   type: object
-                  description: 'Resolver-populated display data. Always keyed on `provider`; resolvers own the remaining keys. Typically omitted on create; the matching resolver fills it in.'
+                  description: 'Free-form display data, keyed on `provider`. Stored as-is alongside the attachment.'
                   example: null
                   properties: {  }
                   nullable: true
                 uri:
                   type: string
-                  description: 'Resource URI. Required if no inline `text`/`blob`. Resolved synchronously if a resolver matches, else stored as-is. Must not be greater than 2048 characters.'
+                  description: 'Optional resource URI stored as a reference alongside the inline content. Must not be greater than 2048 characters.'
                   example: 'https://github.com/acme/foo/issues/42'
                   nullable: true
                 text:
                   type: string
-                  description: 'Inline text content. Mutually exclusive with `blob`.'
+                  description: 'Inline text content. Required when no `blob` is provided. Mutually exclusive with `blob`.'
                   example: null
                   nullable: true
                 blob:
                   type: string
-                  description: 'Inline binary content, base64-encoded. Mutually exclusive with `text`.'
+                  description: 'Inline binary content, base64-encoded. Required when no `text` is provided. Mutually exclusive with `text`.'
                   example: null
                   nullable: true
               required:
@@ -6824,19 +7428,22 @@ paths:
         required: true
         schema:
           type: string
-  '/v1/accounts/{account_id}/tasks/{task_id}/attachments/{attachment_id}/refresh':
-    post:
-      summary: 'Refresh an attachment'
-      operationId: refreshAnAttachment
-      description: 'Re-fetches a URI-backed attachment through its matching resolver. URIs with no matching resolver return the row unchanged. On resolver success, everything except `id` and `uri` is replaced and `last_fetched_at` is set. On resolver failure the row becomes `status: "failed"` with a stable `error` code but is still returned, so the caller can inspect the error and retry.'
+  '/v1/accounts/{account_id}/environments/{environment_id}/events':
+    get:
+      summary: 'List environment generation events'
+      operationId: listEnvironmentGenerationEvents
+      description: "Returns lifecycle events for the environment's most recent snapshot generation VM, oldest first. Live while the env is `generating` (poll every 1–2s); persisted after the generation lands so a failed attempt remains inspectable. Use this alongside `/snapshots/{snap}/logs` (per-step stdout) to render a full progress timeline in the UI."
       parameters:
         -
-          in: header
-          name: Idempotency-Key
-          description: ''
-          example: optional-unique-request-id
+          in: query
+          name: per_page
+          description: 'Results per page (max 200).'
+          example: 50
+          required: false
           schema:
-            type: string
+            type: integer
+            description: 'Results per page (max 200).'
+            example: 50
       responses:
         200:
           description: ''
@@ -6846,24 +7453,56 @@ paths:
                 type: object
                 example:
                   data:
-                    uri: 'wallfacer://attachments/019db65d-dfda-701b-b85e-20b22640ba0c'
-                    name: 'Adipisci quidem nostrum qui commodi.'
-                    description: null
-                    mimeType: text/markdown
-                    size: 182
-                    annotations: null
-                    text: 'Odit et et modi. Nostrum omnis autem et consequatur aut. Enim non facere tempora ex voluptatem laboriosam praesentium. Adipisci molestias fugit deleniti distinctio eum doloremque id.'
-                    blob: null
-                    id: 019db65d-dfda-701b-b85e-20b22640ba0c
-                    status: ready
-                    error: null
-                    metadata: null
-                    last_fetched_at: null
-                    created_at: '2026-04-22T18:04:58.000000Z'
-                    updated_at: '2026-04-22T18:04:58.000000Z'
+                    -
+                      id: 019e1caf-357b-7077-b6e2-fb7390d43bd2
+                      event: ios_app.rebuild_started
+                      level: info
+                      payload: null
+                      created_at: '2026-05-12T14:55:05.000000Z'
+                    -
+                      id: 019e1caf-3580-71ee-b7b9-d35243952640
+                      event: ios_app.rebuild_failed
+                      level: info
+                      payload: null
+                      created_at: '2026-05-12T14:55:05.000000Z'
+                  links:
+                    first: '/?page=1'
+                    last: '/?page=1'
+                    prev: null
+                    next: null
+                  meta:
+                    current_page: 1
+                    from: 1
+                    last_page: 1
+                    links:
+                      -
+                        url: null
+                        label: Previous
+                        page: null
+                        active: false
+                      -
+                        url: '/?page=1'
+                        label: '1'
+                        page: 1
+                        active: true
+                      -
+                        url: null
+                        label: Next
+                        page: null
+                        active: false
+                    path: /
+                    per_page: 50
+                    to: 2
+                    total: 2
                 properties:
                   data:
-                    $ref: '#/components/schemas/Attachment'
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Message'
+                  links:
+                    $ref: '#/components/schemas/PaginationLinks'
+                  meta:
+                    $ref: '#/components/schemas/PaginationMeta8'
         401:
           description: ''
           content:
@@ -6927,26 +7566,26 @@ paths:
                 example:
                   errors:
                     -
-                      message: 'Resource not found.'
+                      message: 'No generation VM has run for this environment yet.'
                       code: not_found
                 properties:
                   errors:
                     type: array
                     example:
                       -
-                        message: 'Resource not found.'
+                        message: 'No generation VM has run for this environment yet.'
                         code: not_found
                     items:
                       type: object
                       properties:
                         message:
                           type: string
-                          example: 'Resource not found.'
+                          example: 'No generation VM has run for this environment yet.'
                         code:
                           type: string
                           example: not_found
       tags:
-        - Attachments
+        - Events
     parameters:
       -
         in: path
@@ -6958,17 +7597,9 @@ paths:
           type: string
       -
         in: path
-        name: task_id
-        description: 'The ID of the task.'
-        example: 019dadf8-f1a4-7176-851e-21a75445b77f
-        required: true
-        schema:
-          type: string
-      -
-        in: path
-        name: attachment_id
-        description: 'The ID of the attachment.'
-        example: architecto
+        name: environment_id
+        description: 'The ID of the environment.'
+        example: 019e084d-225e-713f-ba36-2677be6befe9
         required: true
         schema:
           type: string
@@ -6987,19 +7618,19 @@ paths:
                 type: object
                 example:
                   data:
-                    id: 019db65d-cd58-704e-bafd-126d261f03e6
-                    email: orpha.reilly@example.com
+                    id: 019e1caf-301b-7253-906a-7460c50e9dda
+                    email: jeremy02@example.net
                     role: member
                     account:
-                      id: 019db65d-ccb2-72d0-b1a7-f4da6cb9d83f
-                      name: Brown-Hauck
-                      created_at: '2026-04-22T18:04:53.000000Z'
-                      updated_at: '2026-04-22T18:04:53.000000Z'
+                      id: 019e1caf-2f67-73fe-a12e-df24e4a3d4ae
+                      name: 'Rice, Emard and Cassin'
+                      created_at: '2026-05-12T14:55:03.000000Z'
+                      updated_at: '2026-05-12T14:55:03.000000Z'
                     invited_by:
-                      name: 'Dayne Daugherty'
+                      name: 'Tristin Conroy'
                     accepted_at: null
-                    expires_at: '2026-04-29T18:04:53.000000Z'
-                    created_at: '2026-04-22T18:04:53.000000Z'
+                    expires_at: '2026-05-19T14:55:03.000000Z'
+                    created_at: '2026-05-12T14:55:03.000000Z'
                 properties:
                   data:
                     $ref: '#/components/schemas/Invitation'
@@ -7073,9 +7704,10 @@ paths:
                 type: object
                 example:
                   data:
-                    id: 572
+                    id: 1227
                     name: 'Morgan Hirthe'
                     email: dare.emelie@example.com
+                    avatar_url: 'https://www.gravatar.com/avatar/8c831de5bf7d8002bc5ad0a1cb2bb80d?d=mp&s=200'
                     github_username: null
                     role: null
                     joined_at: null
@@ -7162,33 +7794,33 @@ paths:
                 example:
                   data:
                     -
-                      id: 019db65e-04c3-7080-b9e3-79d4b3fd5010
+                      id: 019e1caf-5f13-7302-87f7-4f44d08832f8
                       email: price.amber@example.org
                       role: member
                       account:
-                        id: 019db65e-041a-70b2-9cf5-6bb9f943fefd
+                        id: 019e1caf-5e57-7093-a622-f576cd9b14b1
                         name: 'Leuschke Inc'
-                        created_at: '2026-04-22T18:05:07.000000Z'
-                        updated_at: '2026-04-22T18:05:07.000000Z'
+                        created_at: '2026-05-12T14:55:15.000000Z'
+                        updated_at: '2026-05-12T14:55:15.000000Z'
                       invited_by:
                         name: 'Prof. Mina Bauch'
                       accepted_at: null
-                      expires_at: '2026-04-29T18:05:07.000000Z'
-                      created_at: '2026-04-22T18:05:08.000000Z'
+                      expires_at: '2026-05-19T14:55:15.000000Z'
+                      created_at: '2026-05-12T14:55:15.000000Z'
                     -
-                      id: 019db65e-0574-723c-a38e-da35b3ed16a3
-                      email: matilda.feeney@example.net
+                      id: 019e1caf-5fd8-72cb-8ea1-c7f12d84e289
+                      email: oking@example.net
                       role: member
                       account:
-                        id: 019db65e-04c7-71a5-8027-aa08df2da4f7
-                        name: 'Raynor Ltd'
-                        created_at: '2026-04-22T18:05:08.000000Z'
-                        updated_at: '2026-04-22T18:05:08.000000Z'
+                        id: 019e1caf-5f17-7251-b4fd-a6476beaf513
+                        name: Torp-Doyle
+                        created_at: '2026-05-12T14:55:15.000000Z'
+                        updated_at: '2026-05-12T14:55:15.000000Z'
                       invited_by:
-                        name: 'Theron Considine'
+                        name: "Prof. Ashtyn O'Connell"
                       accepted_at: null
-                      expires_at: '2026-04-29T18:05:08.000000Z'
-                      created_at: '2026-04-22T18:05:08.000000Z'
+                      expires_at: '2026-05-19T14:55:15.000000Z'
+                      created_at: '2026-05-12T14:55:15.000000Z'
                   links:
                     first: '/?page=1'
                     last: '/?page=1'
@@ -7243,19 +7875,19 @@ paths:
                 type: object
                 example:
                   data:
-                    id: 019db65e-0624-7173-9460-926744b9ad62
+                    id: 019e1caf-6098-71a2-a3c3-a109fa3d9b12
                     email: gbailey@example.net
                     role: member
                     account:
-                      id: 019db65e-057f-70b1-a2a9-28d212c5faeb
+                      id: 019e1caf-5fe3-7069-be25-768249993d72
                       name: "Rempel, Gulgowski and O'Kon"
-                      created_at: '2026-04-22T18:05:08.000000Z'
-                      updated_at: '2026-04-22T18:05:08.000000Z'
+                      created_at: '2026-05-12T14:55:15.000000Z'
+                      updated_at: '2026-05-12T14:55:15.000000Z'
                     invited_by:
                       name: 'Justina Gaylord'
                     accepted_at: null
-                    expires_at: '2026-04-29T18:05:08.000000Z'
-                    created_at: '2026-04-22T18:05:08.000000Z'
+                    expires_at: '2026-05-19T14:55:15.000000Z'
+                    created_at: '2026-05-12T14:55:16.000000Z'
                 properties:
                   data:
                     $ref: '#/components/schemas/Invitation'
@@ -7575,7 +8207,7 @@ paths:
         in: path
         name: vm_id
         description: 'The ID of the vm.'
-        example: 019dadf8-f1ad-7210-a390-9ea2efe6e4ed
+        example: 019dbbc6-79ce-712b-9146-eb4cabfdd5cd
         required: true
         schema:
           type: string
@@ -7628,7 +8260,7 @@ paths:
         in: path
         name: vm_id
         description: 'The ID of the vm.'
-        example: 019dadf8-f1ad-7210-a390-9ea2efe6e4ed
+        example: 019dbbc6-79ce-712b-9146-eb4cabfdd5cd
         required: true
         schema:
           type: string
@@ -7636,6 +8268,130 @@ paths:
         in: path
         name: log
         description: 'The `source` identifier of the log (e.g. `setup-0`, `service-web`).'
+        example: setup-0
+        required: true
+        schema:
+          type: string
+  '/v1/accounts/{account_id}/environments/{environment_id}/logs':
+    get:
+      summary: 'List logs for an environment'
+      operationId: listLogsForAnEnvironment
+      description: "Per-manifest-step logs for an environment. While `base_snapshot.status` is `generating`, this proxies live to the in-flight snapshot-generation VM so callers can watch setup progress in real time. Once generation lands (success or failure), it falls through to the persisted logs of the environment's current `base_snapshot`. Returns 404 when the environment has neither an in-flight gen VM nor a base snapshot to read from."
+      parameters:
+        -
+          in: query
+          name: per_page
+          description: 'Results per page (max 100).'
+          example: 25
+          required: false
+          schema:
+            type: integer
+            description: 'Results per page (max 100).'
+            example: 25
+      responses:
+        404:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: 'Logs unavailable for this environment.'
+                      code: not_found
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: 'Logs unavailable for this environment.'
+                        code: not_found
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: 'Logs unavailable for this environment.'
+                        code:
+                          type: string
+                          example: not_found
+      tags:
+        - Logs
+    parameters:
+      -
+        in: path
+        name: account_id
+        description: 'The ID of the account.'
+        example: 019dadf8-f051-7127-8382-de3ad4fbe86c
+        required: true
+        schema:
+          type: string
+      -
+        in: path
+        name: environment_id
+        description: 'The ID of the environment.'
+        example: 019e084d-225e-713f-ba36-2677be6befe9
+        required: true
+        schema:
+          type: string
+  '/v1/accounts/{account_id}/environments/{environment_id}/logs/{log}':
+    get:
+      summary: 'Show one environment log'
+      operationId: showOneEnvironmentLog
+      description: 'Single log entry for an environment. Same shape as the list endpoint. Resolves live → persisted with the same fallback rule as the list endpoint.'
+      parameters: []
+      responses:
+        404:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: 'Log not found.'
+                      code: not_found
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: 'Log not found.'
+                        code: not_found
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: 'Log not found.'
+                        code:
+                          type: string
+                          example: not_found
+      tags:
+        - Logs
+    parameters:
+      -
+        in: path
+        name: account_id
+        description: 'The ID of the account.'
+        example: 019dadf8-f051-7127-8382-de3ad4fbe86c
+        required: true
+        schema:
+          type: string
+      -
+        in: path
+        name: environment_id
+        description: 'The ID of the environment.'
+        example: 019e084d-225e-713f-ba36-2677be6befe9
+        required: true
+        schema:
+          type: string
+      -
+        in: path
+        name: log
+        description: 'The `source` identifier of the log.'
         example: setup-0
         required: true
         schema:
@@ -7699,7 +8455,7 @@ paths:
         in: path
         name: environment_id
         description: 'The ID of the environment.'
-        example: 019db032-92b8-719e-964e-02ef04880acc
+        example: 019e084d-225e-713f-ba36-2677be6befe9
         required: true
         schema:
           type: string
@@ -7733,7 +8489,7 @@ paths:
         in: path
         name: environment_id
         description: 'The ID of the environment.'
-        example: 019db032-92b8-719e-964e-02ef04880acc
+        example: 019e084d-225e-713f-ba36-2677be6befe9
         required: true
         schema:
           type: string
@@ -7750,6 +8506,1026 @@ paths:
         name: log
         description: 'The `source` identifier of the log.'
         example: setup-0
+        required: true
+        schema:
+          type: string
+  '/v1/accounts/{account_id}/tasks/{task_id}/sessions/{session_id}/logs':
+    get:
+      summary: 'List logs for a session'
+      operationId: listLogsForASession
+      description: "Per-manifest-step logs for the VM backing a session. Thin convenience wrapper over the VM-scoped endpoint that resolves the session's `virtual_machine_id` and applies the same live-then-persisted resolution. Returns 404 with `vm_not_running` when the session has no VM (never started, or already torn down)."
+      parameters:
+        -
+          in: query
+          name: per_page
+          description: 'Results per page (max 100).'
+          example: 25
+          required: false
+          schema:
+            type: integer
+            description: 'Results per page (max 100).'
+            example: 25
+      responses:
+        404:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: 'Logs unavailable for this session.'
+                      code: not_found
+                      reason: vm_not_running
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: 'Logs unavailable for this session.'
+                        code: not_found
+                        reason: vm_not_running
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: 'Logs unavailable for this session.'
+                        code:
+                          type: string
+                          example: not_found
+                        reason:
+                          type: string
+                          example: vm_not_running
+      tags:
+        - Logs
+    parameters:
+      -
+        in: path
+        name: account_id
+        description: 'The ID of the account.'
+        example: 019dadf8-f051-7127-8382-de3ad4fbe86c
+        required: true
+        schema:
+          type: string
+      -
+        in: path
+        name: task_id
+        description: 'The ID of the task.'
+        example: 019dadf8-f1a4-7176-851e-21a75445b77f
+        required: true
+        schema:
+          type: string
+      -
+        in: path
+        name: session_id
+        description: 'The ID of the session.'
+        example: 019dd403-36e8-73ad-a38b-535304acb347
+        required: true
+        schema:
+          type: string
+  '/v1/accounts/{account_id}/tasks/{task_id}/sessions/{session_id}/logs/{log}':
+    get:
+      summary: 'Show one session log'
+      operationId: showOneSessionLog
+      description: 'Single log entry for the VM backing a session. Same shape as the list endpoint.'
+      parameters: []
+      responses:
+        404:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: 'Logs unavailable for this session.'
+                      code: not_found
+                      reason: vm_not_running
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: 'Logs unavailable for this session.'
+                        code: not_found
+                        reason: vm_not_running
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: 'Logs unavailable for this session.'
+                        code:
+                          type: string
+                          example: not_found
+                        reason:
+                          type: string
+                          example: vm_not_running
+      tags:
+        - Logs
+    parameters:
+      -
+        in: path
+        name: account_id
+        description: 'The ID of the account.'
+        example: 019dadf8-f051-7127-8382-de3ad4fbe86c
+        required: true
+        schema:
+          type: string
+      -
+        in: path
+        name: task_id
+        description: 'The ID of the task.'
+        example: 019dadf8-f1a4-7176-851e-21a75445b77f
+        required: true
+        schema:
+          type: string
+      -
+        in: path
+        name: session_id
+        description: 'The ID of the session.'
+        example: 019dd403-36e8-73ad-a38b-535304acb347
+        required: true
+        schema:
+          type: string
+      -
+        in: path
+        name: log
+        description: 'The `source` identifier of the log.'
+        example: setup-0
+        required: true
+        schema:
+          type: string
+  '/v1/accounts/{account_id}/environments/{environment_id}/secrets':
+    get:
+      summary: 'List secrets for an environment'
+      operationId: listSecretsForAnEnvironment
+      description: 'Returns every secret on the given environment, oldest first. Metadata only: values are never returned. Paginated.'
+      parameters:
+        -
+          in: query
+          name: per_page
+          description: 'Results per page (max 100).'
+          example: 25
+          required: false
+          schema:
+            type: integer
+            description: 'Results per page (max 100).'
+            example: 25
+      responses:
+        200:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  data:
+                    -
+                      id: 019e1caf-37ac-735b-80d0-24f52e374a1d
+                      environment_id: 019e1caf-37aa-7279-9c91-62d68e411a9e
+                      name: TEST_UWOBXNPU
+                      last_accessed_at: null
+                      created_at: '2026-05-12T14:55:05.000000Z'
+                      updated_at: '2026-05-12T14:55:05.000000Z'
+                    -
+                      id: 019e1caf-3869-72ae-8844-f8062940573d
+                      environment_id: 019e1caf-3868-717e-913a-d9ece666f636
+                      name: TEST_YW30ERHT
+                      last_accessed_at: null
+                      created_at: '2026-05-12T14:55:05.000000Z'
+                      updated_at: '2026-05-12T14:55:05.000000Z'
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Secret'
+        401:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: Unauthenticated.
+                      code: unauthenticated
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: Unauthenticated.
+                        code: unauthenticated
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: Unauthenticated.
+                        code:
+                          type: string
+                          example: unauthenticated
+        403:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: 'You do not belong to this account.'
+                      code: forbidden
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: 'You do not belong to this account.'
+                        code: forbidden
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: 'You do not belong to this account.'
+                        code:
+                          type: string
+                          example: forbidden
+        404:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: 'Resource not found.'
+                      code: not_found
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: 'Resource not found.'
+                        code: not_found
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: 'Resource not found.'
+                        code:
+                          type: string
+                          example: not_found
+      tags:
+        - Secrets
+    post:
+      summary: 'Create a secret'
+      operationId: createASecret
+      description: 'Encrypts and stores a new secret on the environment. Reference the value from any string-valued field of an environment manifest as `${secrets.NAME}`; e.g. inside a service''s env block: `env: { STRIPE_KEY: "${secrets.STRIPE_KEY}" }`. The response contains metadata only; the submitted value is unrecoverable through any read endpoint after this call returns.'
+      parameters:
+        -
+          in: header
+          name: Idempotency-Key
+          description: ''
+          example: optional-unique-request-id
+          schema:
+            type: string
+      responses:
+        201:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  data:
+                    id: 019e1caf-394a-71b6-92ee-256e0b8cf2d5
+                    environment_id: 019e1caf-3949-7352-9b3e-241931d17152
+                    name: TEST_4BWQD74A
+                    last_accessed_at: null
+                    created_at: '2026-05-12T14:55:06.000000Z'
+                    updated_at: '2026-05-12T14:55:06.000000Z'
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Secret'
+        401:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: Unauthenticated.
+                      code: unauthenticated
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: Unauthenticated.
+                        code: unauthenticated
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: Unauthenticated.
+                        code:
+                          type: string
+                          example: unauthenticated
+        403:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: 'You do not belong to this account.'
+                      code: forbidden
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: 'You do not belong to this account.'
+                        code: forbidden
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: 'You do not belong to this account.'
+                        code:
+                          type: string
+                          example: forbidden
+        404:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: 'Resource not found.'
+                      code: not_found
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: 'Resource not found.'
+                        code: not_found
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: 'Resource not found.'
+                        code:
+                          type: string
+                          example: not_found
+        409:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: 'A secret with this name already exists in this environment.'
+                      code: secret_name_taken
+                      field: name
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: 'A secret with this name already exists in this environment.'
+                        code: secret_name_taken
+                        field: name
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: 'A secret with this name already exists in this environment.'
+                        code:
+                          type: string
+                          example: secret_name_taken
+                        field:
+                          type: string
+                          example: name
+        422:
+          description: ''
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  -
+                    description: ''
+                    type: object
+                    example:
+                      errors:
+                        -
+                          message: 'The name field is required.'
+                          code: validation_error
+                    properties:
+                      errors:
+                        type: array
+                        example:
+                          -
+                            message: 'The name field is required.'
+                            code: validation_error
+                        items:
+                          type: object
+                          properties:
+                            message:
+                              type: string
+                              example: 'The name field is required.'
+                            code:
+                              type: string
+                              example: validation_error
+                  -
+                    description: ''
+                    type: object
+                    example:
+                      errors:
+                        -
+                          message: 'This environment has reached its secret quota of 100.'
+                          code: quota_exceeded
+                    properties:
+                      errors:
+                        type: array
+                        example:
+                          -
+                            message: 'This environment has reached its secret quota of 100.'
+                            code: quota_exceeded
+                        items:
+                          type: object
+                          properties:
+                            message:
+                              type: string
+                              example: 'This environment has reached its secret quota of 100.'
+                            code:
+                              type: string
+                              example: quota_exceeded
+        429:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: 'Too many requests.'
+                      code: rate_limited
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: 'Too many requests.'
+                        code: rate_limited
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: 'Too many requests.'
+                        code:
+                          type: string
+                          example: rate_limited
+      tags:
+        - Secrets
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  description: 'Reference key the value can be substituted under inside an environment manifest. Must start with an uppercase letter and contain only uppercase letters, digits, and underscores. Maximum 255 characters. The names `PATH`, `HOME`, `USER`, `SHELL`, and `LD_PRELOAD` are reserved and rejected because substituting them would either clobber a process-level environment variable the runtime depends on or weaponise the dynamic linker. Must match the regex /^[A-Z][A-Z0-9_]*$/. Must not be greater than 255 characters.'
+                  example: STRIPE_API_KEY
+                value:
+                  type: string
+                  description: 'The secret value to encrypt and store. Multi-line values are supported (PEM keys, JSON service accounts, and so on). Maximum 64 KiB. Once stored, values are never returned by any endpoint; rotation is the only way to recover from a lost value.'
+                  example: No-example
+              required:
+                - name
+                - value
+    parameters:
+      -
+        in: path
+        name: account_id
+        description: 'The ID of the account.'
+        example: 019dadf8-f051-7127-8382-de3ad4fbe86c
+        required: true
+        schema:
+          type: string
+      -
+        in: path
+        name: environment_id
+        description: 'The ID of the environment.'
+        example: 019e084d-225e-713f-ba36-2677be6befe9
+        required: true
+        schema:
+          type: string
+  '/v1/accounts/{account_id}/environments/{environment_id}/secrets/{secret_id}':
+    get:
+      summary: 'Show a secret'
+      operationId: showASecret
+      description: 'Returns metadata for a single secret. Values are never returned by this endpoint.'
+      parameters: []
+      responses:
+        200:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  data:
+                    id: 019e1caf-3a06-7154-97da-0d3246e0f1e1
+                    environment_id: 019e1caf-3a05-72a8-a9ec-f0563c81356c
+                    name: TEST_2KEZLYUG
+                    last_accessed_at: null
+                    created_at: '2026-05-12T14:55:06.000000Z'
+                    updated_at: '2026-05-12T14:55:06.000000Z'
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Secret'
+        401:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: Unauthenticated.
+                      code: unauthenticated
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: Unauthenticated.
+                        code: unauthenticated
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: Unauthenticated.
+                        code:
+                          type: string
+                          example: unauthenticated
+        403:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: 'You do not belong to this account.'
+                      code: forbidden
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: 'You do not belong to this account.'
+                        code: forbidden
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: 'You do not belong to this account.'
+                        code:
+                          type: string
+                          example: forbidden
+        404:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: 'Resource not found.'
+                      code: not_found
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: 'Resource not found.'
+                        code: not_found
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: 'Resource not found.'
+                        code:
+                          type: string
+                          example: not_found
+      tags:
+        - Secrets
+    patch:
+      summary: 'Rotate a secret'
+      operationId: rotateASecret
+      description: 'Replaces the encrypted value of an existing secret. The id, name, and audit history are preserved. The previous ciphertext is overwritten and unrecoverable. The response contains metadata only.'
+      parameters:
+        -
+          in: header
+          name: Idempotency-Key
+          description: ''
+          example: optional-unique-request-id
+          schema:
+            type: string
+      responses:
+        200:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  data:
+                    id: 019e1caf-3ab3-708e-831f-680c7f63161f
+                    environment_id: 019e1caf-3ab2-73cc-90c2-5f5cd6bf879a
+                    name: TEST_LAOPWYEQ
+                    last_accessed_at: null
+                    created_at: '2026-05-12T14:55:06.000000Z'
+                    updated_at: '2026-05-12T14:55:06.000000Z'
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Secret'
+        401:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: Unauthenticated.
+                      code: unauthenticated
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: Unauthenticated.
+                        code: unauthenticated
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: Unauthenticated.
+                        code:
+                          type: string
+                          example: unauthenticated
+        403:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: 'You do not belong to this account.'
+                      code: forbidden
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: 'You do not belong to this account.'
+                        code: forbidden
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: 'You do not belong to this account.'
+                        code:
+                          type: string
+                          example: forbidden
+        404:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: 'Resource not found.'
+                      code: not_found
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: 'Resource not found.'
+                        code: not_found
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: 'Resource not found.'
+                        code:
+                          type: string
+                          example: not_found
+        422:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: 'The value field is required.'
+                      code: validation_error
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: 'The value field is required.'
+                        code: validation_error
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: 'The value field is required.'
+                        code:
+                          type: string
+                          example: validation_error
+        429:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: 'Too many requests.'
+                      code: rate_limited
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: 'Too many requests.'
+                        code: rate_limited
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: 'Too many requests.'
+                        code:
+                          type: string
+                          example: rate_limited
+      tags:
+        - Secrets
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                value:
+                  type: string
+                  description: 'The replacement secret value. Encrypted with a freshly generated data-encryption key on receipt; the previous ciphertext is overwritten and unrecoverable. Maximum 64 KiB.'
+                  example: No-example
+              required:
+                - value
+    delete:
+      summary: 'Delete a secret'
+      operationId: deleteASecret
+      description: "Permanently removes a secret. The delete is rejected when the environment's stored manifest still references the secret as `${secrets.NAME}`, because allowing the delete would silently break the next boot. To delete a referenced secret, first PATCH the environment to remove the references, then retry the delete."
+      parameters: []
+      responses:
+        204:
+          description: 'Secret deleted'
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: ''
+        401:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: Unauthenticated.
+                      code: unauthenticated
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: Unauthenticated.
+                        code: unauthenticated
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: Unauthenticated.
+                        code:
+                          type: string
+                          example: unauthenticated
+        403:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: 'You do not belong to this account.'
+                      code: forbidden
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: 'You do not belong to this account.'
+                        code: forbidden
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: 'You do not belong to this account.'
+                        code:
+                          type: string
+                          example: forbidden
+        404:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: 'Resource not found.'
+                      code: not_found
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: 'Resource not found.'
+                        code: not_found
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: 'Resource not found.'
+                        code:
+                          type: string
+                          example: not_found
+        409:
+          description: 'The environment manifest still references this secret as `${secrets.NAME}`; `field_paths` lists every offending field.'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: 'Secret "STRIPE_KEY" is still referenced by the environment''s manifest. Remove the references and PATCH the manifest before deleting the secret.'
+                      code: secret_in_use
+                      missing_secrets:
+                        - STRIPE_KEY
+                      field_paths:
+                        - 'services[0].run: ${secrets.STRIPE_KEY}'
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: 'Secret "STRIPE_KEY" is still referenced by the environment''s manifest. Remove the references and PATCH the manifest before deleting the secret.'
+                        code: secret_in_use
+                        missing_secrets:
+                          - STRIPE_KEY
+                        field_paths:
+                          - 'services[0].run: ${secrets.STRIPE_KEY}'
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: 'Secret "STRIPE_KEY" is still referenced by the environment''s manifest. Remove the references and PATCH the manifest before deleting the secret.'
+                        code:
+                          type: string
+                          example: secret_in_use
+                        missing_secrets:
+                          type: array
+                          example:
+                            - STRIPE_KEY
+                          items:
+                            type: string
+                        field_paths:
+                          type: array
+                          example:
+                            - 'services[0].run: ${secrets.STRIPE_KEY}'
+                          items:
+                            type: string
+        429:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: 'Too many requests.'
+                      code: rate_limited
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: 'Too many requests.'
+                        code: rate_limited
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: 'Too many requests.'
+                        code:
+                          type: string
+                          example: rate_limited
+      tags:
+        - Secrets
+    parameters:
+      -
+        in: path
+        name: account_id
+        description: 'The ID of the account.'
+        example: 019dadf8-f051-7127-8382-de3ad4fbe86c
+        required: true
+        schema:
+          type: string
+      -
+        in: path
+        name: environment_id
+        description: 'The ID of the environment.'
+        example: 019e084d-225e-713f-ba36-2677be6befe9
+        required: true
+        schema:
+          type: string
+      -
+        in: path
+        name: secret_id
+        description: 'The ID of the secret.'
+        example: 019ddf36-96d2-712b-b873-e555e1829113
         required: true
         schema:
           type: string
@@ -7775,7 +9551,7 @@ paths:
                 type: object
                 example:
                   data:
-                    environment_id: 019db65d-d286-715f-b169-d2525bcca713
+                    environment_id: 019e1caf-3638-713b-b589-4b5805fc5147
                     snapshot_id: null
                     status: null
                 properties:
@@ -7784,7 +9560,7 @@ paths:
                     properties:
                       environment_id:
                         type: string
-                        example: 019db65d-d286-715f-b169-d2525bcca713
+                        example: 019e1caf-3638-713b-b589-4b5805fc5147
                       snapshot_id:
                         type: string
                         example: null
@@ -7878,6 +9654,53 @@ paths:
                         code:
                           type: string
                           example: not_found
+        422:
+          description: 'The environment manifest references one or more secrets that have not been configured. Generation is not started.'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: 'Manifest references secrets that are not configured on this environment.'
+                      code: missing_secrets
+                      missing_secrets:
+                        - DB_PASSWORD
+                      field_paths:
+                        - 'env.DATABASE_URL: ${secrets.DB_PASSWORD}'
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: 'Manifest references secrets that are not configured on this environment.'
+                        code: missing_secrets
+                        missing_secrets:
+                          - DB_PASSWORD
+                        field_paths:
+                          - 'env.DATABASE_URL: ${secrets.DB_PASSWORD}'
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: 'Manifest references secrets that are not configured on this environment.'
+                        code:
+                          type: string
+                          example: missing_secrets
+                        missing_secrets:
+                          type: array
+                          example:
+                            - DB_PASSWORD
+                          items:
+                            type: string
+                        field_paths:
+                          type: array
+                          example:
+                            - 'env.DATABASE_URL: ${secrets.DB_PASSWORD}'
+                          items:
+                            type: string
       tags:
         - Snapshots
     get:
@@ -8069,7 +9892,7 @@ paths:
         in: path
         name: environment_id
         description: 'The ID of the environment.'
-        example: 019db032-92b8-719e-964e-02ef04880acc
+        example: 019e084d-225e-713f-ba36-2677be6befe9
         required: true
         schema:
           type: string
@@ -8399,7 +10222,177 @@ paths:
         in: path
         name: environment_id
         description: 'The ID of the environment.'
-        example: 019db032-92b8-719e-964e-02ef04880acc
+        example: 019e084d-225e-713f-ba36-2677be6befe9
+        required: true
+        schema:
+          type: string
+      -
+        in: path
+        name: snapshot
+        description: 'The snapshot.'
+        example: architecto
+        required: true
+        schema:
+          type: string
+  '/v1/accounts/{account_id}/environments/{environment_id}/snapshots/{snapshot}/promote':
+    post:
+      summary: 'Promote a snapshot to base'
+      operationId: promoteASnapshotToBase
+      description: "Re-points the environment's `base_snapshot_id` at an existing `ready` snapshot. Use this to roll back after a failed regeneration: list snapshots, pick a known-good one, and promote it. Pointer-swap only: the snapshot's S3 contents are untouched, no VM is booted, and the next session boot uses the new base snapshot exactly as it would a fresh one. Rejects snapshots that are not `ready` (their disks are missing or in flight). Resets the env's snapshot-boot-failure counter on success. Returns the updated environment so callers can re-render without a follow-up GET."
+      parameters:
+        -
+          in: header
+          name: Idempotency-Key
+          description: ''
+          example: optional-unique-request-id
+          schema:
+            type: string
+      responses:
+        200:
+          description: 'Environment with the new base snapshot.'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  data:
+                    id: 019e1caf-36ef-738b-a1b8-55095e628ee7
+                    account_id: 019e1caf-3648-7250-9b02-2b631ad6f313
+                    created_by: 1234
+                    name: 'aut adipisci'
+                    description: null
+                    visibility: account_edit
+                    manifest: null
+                    base_snapshot: null
+                    created_at: '2026-05-12T14:55:05.000000Z'
+                    updated_at: '2026-05-12T14:55:05.000000Z'
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Environment'
+        401:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: Unauthenticated.
+                      code: unauthenticated
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: Unauthenticated.
+                        code: unauthenticated
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: Unauthenticated.
+                        code:
+                          type: string
+                          example: unauthenticated
+        403:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: 'You do not belong to this account or lack the credentials required to manage snapshots.'
+                      code: forbidden
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: 'You do not belong to this account or lack the credentials required to manage snapshots.'
+                        code: forbidden
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: 'You do not belong to this account or lack the credentials required to manage snapshots.'
+                        code:
+                          type: string
+                          example: forbidden
+        404:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: 'Snapshot not found.'
+                      code: not_found
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: 'Snapshot not found.'
+                        code: not_found
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: 'Snapshot not found.'
+                        code:
+                          type: string
+                          example: not_found
+        422:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: 'Snapshot is not ready and cannot be promoted.'
+                      code: snapshot_not_ready
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: 'Snapshot is not ready and cannot be promoted.'
+                        code: snapshot_not_ready
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: 'Snapshot is not ready and cannot be promoted.'
+                        code:
+                          type: string
+                          example: snapshot_not_ready
+      tags:
+        - Snapshots
+    parameters:
+      -
+        in: path
+        name: account_id
+        description: 'The ID of the account.'
+        example: 019dadf8-f051-7127-8382-de3ad4fbe86c
+        required: true
+        schema:
+          type: string
+      -
+        in: path
+        name: environment_id
+        description: 'The ID of the environment.'
+        example: 019e084d-225e-713f-ba36-2677be6befe9
         required: true
         schema:
           type: string
