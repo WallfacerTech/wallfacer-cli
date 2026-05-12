@@ -1,6 +1,13 @@
 # wallfacer
 
-Command-line interface for the [Wallfacer API](https://api.wallfacer.ai). Built with [openapi-cli-generator](https://github.com/WallfacerTech/openapi-cli-generator), all commands are auto-generated from the OpenAPI spec.
+[![Go Report Card](https://goreportcard.com/badge/github.com/WallfacerTech/wallfacer-cli)](https://goreportcard.com/report/github.com/WallfacerTech/wallfacer-cli)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![GitHub Release](https://img.shields.io/github/v/release/WallfacerTech/wallfacer-cli)](https://github.com/WallfacerTech/wallfacer-cli/releases)
+[![CI](https://github.com/WallfacerTech/wallfacer-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/WallfacerTech/wallfacer-cli/actions/workflows/ci.yml)
+
+Command-line interface for [Wallfacer](https://wallfacer.ai) — cloud dev environments for coding agents. Wallfacer runs Claude inside a real cloud dev environment with your repo, services, Docker, Xcode, and the iOS Simulator. Control the whole task from any device, CI workflow, or API.
+
+Built with [openapi-cli-generator](https://github.com/WallfacerTech/openapi-cli-generator), all commands are auto-generated from the [Wallfacer API](https://api.wallfacer.ai) OpenAPI spec.
 
 ## Installation
 
