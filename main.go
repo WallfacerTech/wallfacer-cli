@@ -16,8 +16,13 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
+var version = "dev"
+
 func configDir() string {
-	home, _ := os.UserHomeDir()
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
 	return filepath.Join(home, ".wallfacer")
 }
 
@@ -94,6 +99,7 @@ func registerAuthCommands(baseURL, token string) {
 			req, _ := http.NewRequest("GET", serverURL+"/v1/accounts", nil)
 			req.Header.Set("Accept", "application/json")
 			req.Header.Set("Authorization", "Bearer "+token)
+			req.Header.Set("X-CLI-Version", version)
 			resp, err := http.DefaultClient.Do(req)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -152,7 +158,7 @@ func main() {
 	cli.Init(&cli.Config{
 		AppName:   "wallfacer",
 		EnvPrefix: "WALLFACER",
-		Version:   "1.0.0",
+		Version:   version,
 	})
 
 	wfConfig := viper.New()
@@ -168,6 +174,7 @@ func main() {
 	token := wfConfig.GetString("token")
 	cli.Client.UseRequest(func(ctx *context.Context, h context.Handler) {
 		ctx.Request.Header.Set("Accept", "application/json")
+		ctx.Request.Header.Set("X-CLI-Version", version)
 		if token != "" {
 			ctx.Request.Header.Set("Authorization", "Bearer "+token)
 		}
@@ -185,7 +192,15 @@ func main() {
 		injectAccountID(cli.Root, accountID)
 	}
 
+	updateCh := startUpdateCheck(version)
 	cli.Root.Execute()
+	select {
+	case result := <-updateCh:
+		if result != nil {
+			printUpdateMessage(result)
+		}
+	default:
+	}
 }
 
 func injectAccountID(parent *cobra.Command, accountID string) {

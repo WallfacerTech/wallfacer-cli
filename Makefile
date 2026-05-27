@@ -5,8 +5,10 @@ all: build-generator sync-spec generate build
 sync-spec:
 	cp -f ../sophon/storage/app/private/scribe/openapi.yaml openapi.yaml
 
+VERSION ?= dev
+
 build:
-	go build -o wallfacer .
+	go build -ldflags "-X main.version=$(VERSION)" -o wallfacer .
 
 generate: build-generator
 	./openapi-cli-generator generate openapi.yaml

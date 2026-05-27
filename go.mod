@@ -1,6 +1,6 @@
 module github.com/WallfacerTech/wallfacer-cli
 
-go 1.24
+go 1.25.0
 
 require (
 	github.com/WallfacerTech/openapi-cli-generator v0.0.0
@@ -31,6 +31,7 @@ require (
 	github.com/spf13/cast v1.2.0 // indirect
 	github.com/spf13/jwalterweatherman v1.0.0 // indirect
 	github.com/spf13/pflag v1.0.3 // indirect
+	golang.org/x/mod v0.36.0 // indirect
 	golang.org/x/net v0.0.0-20200202094626-16171245cfb2 // indirect
 	golang.org/x/sys v0.0.0-20190412213103-97732733099d // indirect
 	golang.org/x/text v0.3.0 // indirect
