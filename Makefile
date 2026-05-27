@@ -4,6 +4,7 @@ all: build-generator sync-spec generate build
 
 sync-spec:
 	cp -f ../sophon/storage/app/private/scribe/openapi.yaml openapi.yaml
+	perl -0pi -e 's/^([ \t]*)properties: \[\][ \t]*$$/$${1}properties: {  }/mg' openapi.yaml
 
 VERSION ?= dev
 
