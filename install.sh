@@ -2,7 +2,7 @@
 set -e
 
 REPO="WallfacerTech/wallfacer-cli"
-INSTALL_DIR="/usr/local/bin"
+INSTALL_DIR="${HOME}/.local/bin"
 BINARY="wallfacer"
 
 OS=$(uname -s | tr '[:upper:]' '[:lower:]')
@@ -31,16 +31,12 @@ URL="https://github.com/${REPO}/releases/download/${VERSION}/wallfacer-cli_${VER
 TMPDIR=$(mktemp -d)
 trap 'rm -rf "$TMPDIR"' EXIT
 
+mkdir -p "$INSTALL_DIR"
+
 echo "Downloading wallfacer ${VERSION}..."
 curl -sL "$URL" -o "${TMPDIR}/wallfacer.tar.gz"
 tar -xzf "${TMPDIR}/wallfacer.tar.gz" -C "$TMPDIR"
 
-if [ -w "$INSTALL_DIR" ]; then
-  mv "${TMPDIR}/${BINARY}" "${INSTALL_DIR}/${BINARY}"
-else
-  echo "Installing to ${INSTALL_DIR} (requires sudo)..."
-  sudo mv "${TMPDIR}/${BINARY}" "${INSTALL_DIR}/${BINARY}"
-fi
-
+mv "${TMPDIR}/${BINARY}" "${INSTALL_DIR}/${BINARY}"
 chmod +x "${INSTALL_DIR}/${BINARY}"
 echo "Installed wallfacer ${VERSION} to ${INSTALL_DIR}/${BINARY}"
