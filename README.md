@@ -11,6 +11,24 @@ Built with [openapi-cli-generator](https://github.com/WallfacerTech/openapi-cli-
 
 ## Installation
 
+### Download latest release
+
+```bash
+# macOS (Apple Silicon)
+curl -L https://github.com/WallfacerTech/wallfacer-cli/releases/latest/download/wallfacer-cli_$(curl -s https://api.github.com/repos/WallfacerTech/wallfacer-cli/releases/latest | grep tag_name | cut -d '"' -f 4 | sed 's/^v//')_darwin_arm64.tar.gz | tar xz
+sudo mv wallfacer /usr/local/bin/
+
+# macOS (Intel)
+curl -L https://github.com/WallfacerTech/wallfacer-cli/releases/latest/download/wallfacer-cli_$(curl -s https://api.github.com/repos/WallfacerTech/wallfacer-cli/releases/latest | grep tag_name | cut -d '"' -f 4 | sed 's/^v//')_darwin_amd64.tar.gz | tar xz
+sudo mv wallfacer /usr/local/bin/
+
+# Linux (amd64)
+curl -L https://github.com/WallfacerTech/wallfacer-cli/releases/latest/download/wallfacer-cli_$(curl -s https://api.github.com/repos/WallfacerTech/wallfacer-cli/releases/latest | grep tag_name | cut -d '"' -f 4 | sed 's/^v//')_linux_amd64.tar.gz | tar xz
+sudo mv wallfacer /usr/local/bin/
+```
+
+Or download directly from the [releases page](https://github.com/WallfacerTech/wallfacer-cli/releases/latest).
+
 ### From source
 
 ```bash
