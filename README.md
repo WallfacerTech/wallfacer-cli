@@ -1,13 +1,11 @@
-# wallfacer
+# Wallfacer CLI
 
 [![Go Report Card](https://goreportcard.com/badge/github.com/WallfacerTech/wallfacer-cli)](https://goreportcard.com/report/github.com/WallfacerTech/wallfacer-cli)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![GitHub Release](https://img.shields.io/github/v/release/WallfacerTech/wallfacer-cli)](https://github.com/WallfacerTech/wallfacer-cli/releases)
 [![CI](https://github.com/WallfacerTech/wallfacer-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/WallfacerTech/wallfacer-cli/actions/workflows/ci.yml)
 
-Command-line interface for [Wallfacer](https://wallfacer.ai) — cloud dev environments for coding agents. Wallfacer runs Claude inside a real cloud dev environment with your repo, services, Docker, Xcode, and the iOS Simulator. Control the whole task from any device, CI workflow, or API.
-
-Built with [openapi-cli-generator](https://github.com/WallfacerTech/openapi-cli-generator), all commands are auto-generated from the [Wallfacer API](https://api.wallfacer.ai) OpenAPI spec.
+Command-line interface for [Wallfacer](https://wallfacer.ai) — manage cloud dev environments, tasks, and VMs from the terminal, CI, or scripts.
 
 ## Installation
 
@@ -29,7 +27,7 @@ make
 
 ## Authentication
 
-Store your API token (created via `POST /v1/tokens`):
+Store your API token (from your [Wallfacer dashboard](https://app.wallfacer.ai)):
 
 ```bash
 wallfacer auth login --token=<your-token>
@@ -53,8 +51,8 @@ wallfacer accounts get <account-id>
 # List environments for an account
 wallfacer environments list <account-id>
 
-# Create a task
-echo '{"prompt": "fix the login bug"}' | wallfacer tasks create <account-id>
+# Create a task (accepts JSON on stdin)
+echo '{"prompt": "fix the login bug", "environment_id": "<env-id>"}' | wallfacer tasks create <account-id>
 
 # Wait for snapshot and boot a VM in one step
 wallfacer up <environment-id>
@@ -67,40 +65,38 @@ wallfacer exec --vm <vm-id> --dir /workspace --timeout 60 -- make build
 wallfacer <command> --help
 ```
 
-Every command group has its own `--help`. Run `wallfacer --help` to see all available groups, or `wallfacer <group> --help` for details on a specific group (e.g. `wallfacer auth --help`).
-
-If you set `account_id` in the config file, the account-id argument is automatically injected and can be omitted.
+Run `wallfacer --help` to see all command groups, or `wallfacer <group> --help` for details on a specific group.
 
 ## Configuration
 
-Configuration is stored in `~/.wallfacer/wallfacer.yml`:
+Configuration is stored in `~/.wallfacer/wallfacer.yml` (created automatically by `wallfacer auth login`):
 
 ```yaml
 token: <your-api-token>
-account_id: <default-account-id>
+account_id: <default-account-id>  # optional — omit the account-id argument from commands
 base_url: https://api.wallfacer.ai  # optional override
 ```
 
 Environment variables with the `WALLFACER_` prefix are also supported (e.g. `WALLFACER_TOKEN`).
 
+The CLI checks for updates automatically and prints a notice to stderr when a newer release is available.
+
+## Development
+
+Commands in `openapi.go` are auto-generated from `openapi.yaml` using [openapi-cli-generator](https://github.com/WallfacerTech/openapi-cli-generator). To regenerate after updating the spec:
+
+```bash
+make generate
+```
+
+This requires the openapi-cli-generator repo to be cloned alongside this one (as `../openapi-cli-generator`). `go.mod` uses a local `replace` directive, so `go install` from a remote module path won't work — build from a local clone.
+
 ## Agent Skills
 
-The `skills/wallfacer-cli/` directory contains a Claude Code agent skill that teaches agents how to use this CLI. It includes:
+The `skills/wallfacer-cli/` directory contains a [Claude Code](https://docs.anthropic.com/en/docs/claude-code) agent skill that teaches coding agents how to use this CLI. It includes:
 
 - `SKILL.md` — Skill definition with command map and usage patterns
 - `references/config.md` — Config file layout and auth
 - `references/environments.md` — Environment and snapshot operations
 - `references/tasks.md` — Tasks, sessions, messages, and attachments
 - `references/vms.md` — VM lifecycle, exec, logs, and simulator
-
-## Development
-
-The CLI commands in `openapi.go` are generated from `openapi.yaml`. To regenerate after updating the spec:
-
-```bash
-make generate
-```
-
-This requires the [openapi-cli-generator](https://github.com/WallfacerTech/openapi-cli-generator) repo to be cloned alongside this one (as `../openapi-cli-generator`).
-
-> **Note:** `go.mod` uses a `replace` directive pointing to `../openapi-cli-generator` because the generator repo is currently private. `go install` from a remote module path will not work until the generator repo is made public. For now, build from a local clone with the sibling repo present.
