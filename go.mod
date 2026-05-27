@@ -8,8 +8,9 @@ require (
 	github.com/rs/zerolog v1.11.0
 	github.com/spf13/cobra v0.0.3
 	github.com/spf13/viper v1.2.1
+	golang.org/x/mod v0.36.0
 	gopkg.in/h2non/gentleman.v2 v2.0.3
-	gopkg.in/yaml.v2 v2.2.4
+	gopkg.in/yaml.v2 v2.4.0
 )
 
 require (
@@ -31,10 +32,9 @@ require (
 	github.com/spf13/cast v1.2.0 // indirect
 	github.com/spf13/jwalterweatherman v1.0.0 // indirect
 	github.com/spf13/pflag v1.0.3 // indirect
-	golang.org/x/mod v0.36.0 // indirect
-	golang.org/x/net v0.0.0-20200202094626-16171245cfb2 // indirect
-	golang.org/x/sys v0.0.0-20190412213103-97732733099d // indirect
-	golang.org/x/text v0.3.0 // indirect
+	golang.org/x/net v0.55.0 // indirect
+	golang.org/x/sys v0.45.0 // indirect
+	golang.org/x/text v0.37.0 // indirect
 )
 
 replace github.com/WallfacerTech/openapi-cli-generator => ../openapi-cli-generator
