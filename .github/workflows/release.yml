@@ -25,7 +25,9 @@ jobs:
           go-version: "1.24"
 
       - name: Fix local module replace path
-        run: go mod edit -replace github.com/WallfacerTech/openapi-cli-generator=./openapi-cli-generator
+        run: |
+          go mod edit -replace github.com/WallfacerTech/openapi-cli-generator=./openapi-cli-generator
+          git update-index --assume-unchanged go.mod
 
       - uses: goreleaser/goreleaser-action@v6
         with:
