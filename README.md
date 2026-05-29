@@ -15,7 +15,13 @@ Command-line interface for [Wallfacer](https://wallfacer.ai) — manage cloud de
 curl -sSL https://raw.githubusercontent.com/WallfacerTech/wallfacer-cli/main/install.sh | sh
 ```
 
-Detects your OS and architecture, downloads the latest release, and installs to `/usr/local/bin`. Or download manually from the [releases page](https://github.com/WallfacerTech/wallfacer-cli/releases/latest).
+Detects your OS and architecture, downloads the latest release, and installs to `~/.local/bin`. Make sure that directory is on your `PATH`:
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+Or download manually from the [releases page](https://github.com/WallfacerTech/wallfacer-cli/releases/latest).
 
 ### From source
 
