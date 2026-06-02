@@ -123,5 +123,5 @@ func fetchLatestVersion() (string, error) {
 }
 
 func printUpdateMessage(result *updateResult) {
-	fmt.Fprintf(os.Stderr, "\nUpdate available: %s → %s\nDownload at https://github.com/WallfacerTech/wallfacer-cli/releases/latest\n", result.CurrentVersion, result.LatestVersion)
+	fmt.Fprintf(os.Stderr, "\nUpdate available: %s → %s\nUpdate with:\n  curl -sSL https://raw.githubusercontent.com/WallfacerTech/wallfacer-cli/main/install.sh | sh\n", result.CurrentVersion, result.LatestVersion)
 }
