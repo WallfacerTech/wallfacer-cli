@@ -15,7 +15,7 @@ wallfacer auth status                        # validates token, lists accounts
 wallfacer auth logout                        # removes stored token
 ```
 
-Token source order: config file → `WALLFACER_TOKEN` env var (file wins; env only fills when absent).
+Token source order: config file → `WALLFACER_TOKEN` (or `WF_TOKEN`) env var (file wins; env only fills when absent).
 
 Account-scoped calls require `account_id` in config or as a positional arg. If the user has one account, set it after login with `wallfacer auth status` to discover the ID.
 
@@ -29,7 +29,7 @@ account_id: <uuid>
 base_url: https://api.wallfacer.ai  # optional, defaults to https://api.wallfacer.ai
 ```
 
-Config resolution is file-first with an environment-variable fallback (file wins; env only fills a field when it is absent from the file): `WALLFACER_TOKEN` → `token`, `WALLFACER_SERVER` → `base_url`, `WALLFACER_ACCOUNT_ID` → `account_id`.
+Config resolution is file-first with an environment-variable fallback (file wins; env only fills a field when it is absent from the file): `WALLFACER_TOKEN` / `WF_TOKEN` → `token`, `WALLFACER_SERVER` / `WF_SERVER` → `base_url`, `WALLFACER_ACCOUNT_ID` / `WF_ACCOUNT_ID` → `account_id`. Each var is accepted under either the `WALLFACER_` (documented) or `WF_` (harness-injected) spelling; `WALLFACER_` wins when both are set.
 
 When `account_id` is set, the account-id positional arg is auto-injected into all commands and can be omitted. See [references/config.md](references/config.md).
 

@@ -85,9 +85,12 @@ base_url: https://api.wallfacer.ai  # optional override
 
 Config resolution is file-first with an environment-variable fallback: the config file
 wins, and an environment variable only fills a field when it is absent from the file.
-The supported variables are `WALLFACER_TOKEN` (→ `token`), `WALLFACER_SERVER` (→ `base_url`),
-and `WALLFACER_ACCOUNT_ID` (→ `account_id`). The env fallback lets ephemeral environments
-(e.g. Wallfacer harness VMs) inject credentials with no config file present.
+Each variable is accepted under either the `WALLFACER_` (documented, human-facing) or `WF_`
+(harness-injected; `WF_` avoids Bunker's reserved `WALLFACER_` manifest-env prefix) spelling,
+and `WALLFACER_` wins when both are set: `WALLFACER_TOKEN` / `WF_TOKEN` (→ `token`),
+`WALLFACER_SERVER` / `WF_SERVER` (→ `base_url`), and `WALLFACER_ACCOUNT_ID` / `WF_ACCOUNT_ID`
+(→ `account_id`). The env fallback lets ephemeral environments (e.g. Wallfacer harness VMs)
+inject credentials with no config file present.
 
 The CLI checks for updates automatically and prints a notice to stderr when a newer release is available.
 
