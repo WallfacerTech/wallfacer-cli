@@ -167,11 +167,22 @@ func main() {
 	wfConfig.AddConfigPath(configDir())
 	wfConfig.ReadInConfig()
 
-	if baseURL := wfConfig.GetString("base_url"); baseURL != "" {
+	// Auth resolution: ~/.wallfacer/wallfacer.yml first, then environment.
+	// The file wins for human users on their own machines; the env fallback lets
+	// ephemeral environments (e.g. Wallfacer harness VMs) inject credentials with
+	// no file present. Env only fills a field when it is absent from the file.
+	baseURL := wfConfig.GetString("base_url")
+	if baseURL == "" {
+		baseURL = os.Getenv("WALLFACER_SERVER")
+	}
+	if baseURL != "" {
 		viper.SetDefault("server", baseURL)
 	}
 
 	token := wfConfig.GetString("token")
+	if token == "" {
+		token = os.Getenv("WALLFACER_TOKEN")
+	}
 	cli.Client.UseRequest(func(ctx *context.Context, h context.Handler) {
 		ctx.Request.Header.Set("Accept", "application/json")
 		ctx.Request.Header.Set("X-CLI-Version", version)
@@ -182,8 +193,11 @@ func main() {
 	})
 
 	accountID := wfConfig.GetString("account_id")
+	if accountID == "" {
+		accountID = os.Getenv("WALLFACER_ACCOUNT_ID")
+	}
 
-	registerAuthCommands(wfConfig.GetString("base_url"), token)
+	registerAuthCommands(baseURL, token)
 	openapiRegister(false)
 	registerExecCommand(accountID)
 	registerUpCommand(accountID)

@@ -83,7 +83,11 @@ account_id: <default-account-id>  # optional — omit the account-id argument fr
 base_url: https://api.wallfacer.ai  # optional override
 ```
 
-Environment variables with the `WALLFACER_` prefix are also supported (e.g. `WALLFACER_TOKEN`).
+Config resolution is file-first with an environment-variable fallback: the config file
+wins, and an environment variable only fills a field when it is absent from the file.
+The supported variables are `WALLFACER_TOKEN` (→ `token`), `WALLFACER_SERVER` (→ `base_url`),
+and `WALLFACER_ACCOUNT_ID` (→ `account_id`). The env fallback lets ephemeral environments
+(e.g. Wallfacer harness VMs) inject credentials with no config file present.
 
 The CLI checks for updates automatically and prints a notice to stderr when a newer release is available.
 
