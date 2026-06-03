@@ -154,6 +154,19 @@ func registerAuthCommands(baseURL, token string) {
 	cli.Root.AddCommand(authCmd)
 }
 
+// firstEnv returns the first non-empty value among the named environment variables.
+// Lets the CLI accept either the WALLFACER_ (human-facing, documented) or WF_
+// (harness-injected; WF_ avoids Bunker's reserved WALLFACER_ manifest-env prefix)
+// spelling of the same credential. WALLFACER_ wins when both are set.
+func firstEnv(keys ...string) string {
+	for _, k := range keys {
+		if v := os.Getenv(k); v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
 func main() {
 	cli.Init(&cli.Config{
 		AppName:   "wallfacer",
@@ -167,11 +180,23 @@ func main() {
 	wfConfig.AddConfigPath(configDir())
 	wfConfig.ReadInConfig()
 
-	if baseURL := wfConfig.GetString("base_url"); baseURL != "" {
+	// Auth resolution: ~/.wallfacer/wallfacer.yml first, then environment.
+	// The file wins for human users on their own machines; the env fallback
+	// (either the `WALLFACER_` or `WF_` spelling; `WALLFACER_` wins) lets
+	// ephemeral environments (e.g. Wallfacer harness VMs) inject credentials with
+	// no file present. Env only fills a field when it is absent from the file.
+	baseURL := wfConfig.GetString("base_url")
+	if baseURL == "" {
+		baseURL = firstEnv("WALLFACER_SERVER", "WF_SERVER")
+	}
+	if baseURL != "" {
 		viper.SetDefault("server", baseURL)
 	}
 
 	token := wfConfig.GetString("token")
+	if token == "" {
+		token = firstEnv("WALLFACER_TOKEN", "WF_TOKEN")
+	}
 	cli.Client.UseRequest(func(ctx *context.Context, h context.Handler) {
 		ctx.Request.Header.Set("Accept", "application/json")
 		ctx.Request.Header.Set("X-CLI-Version", version)
@@ -182,8 +207,11 @@ func main() {
 	})
 
 	accountID := wfConfig.GetString("account_id")
+	if accountID == "" {
+		accountID = firstEnv("WALLFACER_ACCOUNT_ID", "WF_ACCOUNT_ID")
+	}
 
-	registerAuthCommands(wfConfig.GetString("base_url"), token)
+	registerAuthCommands(baseURL, token)
 	openapiRegister(false)
 	registerExecCommand(accountID)
 	registerUpCommand(accountID)
