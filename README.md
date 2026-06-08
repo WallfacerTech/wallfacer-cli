@@ -92,6 +92,39 @@ and `WALLFACER_` wins when both are set: `WALLFACER_TOKEN` / `WF_TOKEN` (→ `to
 (→ `account_id`). The env fallback lets ephemeral environments (e.g. Wallfacer harness VMs)
 inject credentials with no config file present.
 
+### Profiles
+
+To switch between backends (e.g. prod vs. a local Sophon on `localhost:8080`), define
+named profiles in `wallfacer.yml`. Profiles are optional and backward compatible — with
+no profile selected, the top-level keys are used exactly as before (the implicit default).
+
+```yaml
+# Top-level keys = the implicit default (used when no profile is selected).
+token: <prod-token>
+account_id: <prod-account-id>
+
+profiles:
+  develop:
+    base_url: http://localhost:8080
+    token: <local-sophon-token>
+    account_id: <local-account-id>
+```
+
+Select a profile per-call with `--profile`, or per-session with `WALLFACER_PROFILE`
+(`WF_PROFILE` is also accepted):
+
+```bash
+wallfacer accounts list --profile develop
+WALLFACER_PROFILE=develop wallfacer environments list
+
+wallfacer profile list      # list profiles (* marks the active one)
+wallfacer profile current   # show the active profile and resolved server/account
+```
+
+For each field the active profile wins, then the `WALLFACER_`/`WF_` env var fills it if
+unset; a profile never falls back to the top-level keys. The global `--server` flag still
+overrides the URL for a single call.
+
 The CLI checks for updates automatically and prints a notice to stderr when a newer release is available.
 
 ## Development

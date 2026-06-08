@@ -33,6 +33,8 @@ Config resolution is file-first with an environment-variable fallback (file wins
 
 When `account_id` is set, the account-id positional arg is auto-injected into all commands and can be omitted. See [references/config.md](references/config.md).
 
+**Profiles** (optional, backward compatible): define named `{base_url, token, account_id}` triples under a `profiles:` key to switch backends (e.g. prod vs. a local Sophon). Select per-call with `--profile <name>` or per-session with `WALLFACER_PROFILE` / `WF_PROFILE`; inspect with `wallfacer profile list` / `wallfacer profile current`. With no profile selected, the top-level keys are used (unchanged). See [references/config.md](references/config.md#profiles).
+
 ## Shortcuts
 
 ### up

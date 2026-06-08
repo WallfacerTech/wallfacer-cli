@@ -29,6 +29,53 @@ Each env var is accepted under either the `WALLFACER_` (documented, human-facing
 
 Missing token → auth commands fail. Missing account on an account-scoped call → the account-id positional arg is required.
 
+## Profiles
+
+A profile is a named `{base_url, token, account_id}` triple for switching between
+backends (e.g. prod vs. a local Sophon running on `localhost:8080`). Profiles are
+optional and fully backward compatible — with no profile selected, the top-level
+keys behave exactly as documented above (the implicit default).
+
+```yaml
+# Top-level keys remain the implicit default (used when no profile is selected).
+token: <prod token>
+account_id: <prod account uuid>
+
+profiles:
+  develop:
+    base_url: http://localhost:8080
+    token: <local sophon token>
+    account_id: <local account uuid>
+  staging:
+    base_url: https://staging.api.wallfacer.ai
+    token: <staging token>
+```
+
+Select a profile per-call with the `--profile` flag, or per-session with the
+`WALLFACER_PROFILE` / `WF_PROFILE` env var (there is no persisted "current profile"):
+
+```bash
+wallfacer accounts list --profile develop
+WALLFACER_PROFILE=develop wallfacer environments list
+```
+
+Resolution precedence for each field: **the active profile's field (wins) → the
+`WALLFACER_`/`WF_` env var → empty** (`base_url` then defaults to prod). A profile
+never falls back to the top-level keys — those belong to the default only, so a
+prod `account_id` can't bleed into a local profile. The global `--server` flag
+still overrides the URL for a single call, beating the profile's `base_url`.
+
+Profile names are case-insensitive. Selecting a profile that isn't defined is a
+hard error. Inspect with:
+
+```bash
+wallfacer profile list       # all profiles; * marks the active one
+wallfacer profile current    # active profile + resolved server/account/token state
+```
+
+Profiles are defined by editing `~/.wallfacer/wallfacer.yml` directly (`auth login`
+still writes the top-level default keys).
+
 ## Auth commands
 
 ```bash

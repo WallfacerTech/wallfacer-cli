@@ -56,7 +56,7 @@ func writeConfig(cfg map[string]interface{}) error {
 	return os.WriteFile(configPath(), data, 0600)
 }
 
-func registerAuthCommands(baseURL, token string) {
+func registerAuthCommands(s resolved) {
 	authCmd := &cobra.Command{
 		Use:   "auth",
 		Short: "Manage authentication",
@@ -86,19 +86,26 @@ func registerAuthCommands(baseURL, token string) {
 		Use:   "status",
 		Short: "Check authentication status",
 		Run: func(cmd *cobra.Command, args []string) {
-			if token == "" {
+			serverURL := s.baseURL
+			if serverURL == "" {
+				serverURL = defaultServerURL
+			}
+
+			// Always report which profile/endpoint is being checked so the
+			// active target is never ambiguous.
+			if s.profile != "" {
+				fmt.Printf("Profile: %s\n", s.profile)
+			}
+			fmt.Printf("Server:  %s\n", serverURL)
+
+			if s.token == "" {
 				fmt.Println("Not authenticated. Run: wallfacer auth login --token=<token>")
 				os.Exit(1)
 			}
 
-			serverURL := baseURL
-			if serverURL == "" {
-				serverURL = "https://api.wallfacer.ai"
-			}
-
 			req, _ := http.NewRequest("GET", serverURL+"/v1/accounts", nil)
 			req.Header.Set("Accept", "application/json")
-			req.Header.Set("Authorization", "Bearer "+token)
+			req.Header.Set("Authorization", "Bearer "+s.token)
 			req.Header.Set("X-CLI-Version", version)
 			resp, err := http.DefaultClient.Do(req)
 			if err != nil {
@@ -185,18 +192,26 @@ func main() {
 	// (either the `WALLFACER_` or `WF_` spelling; `WALLFACER_` wins) lets
 	// ephemeral environments (e.g. Wallfacer harness VMs) inject credentials with
 	// no file present. Env only fills a field when it is absent from the file.
-	baseURL := wfConfig.GetString("base_url")
-	if baseURL == "" {
-		baseURL = firstEnv("WALLFACER_SERVER", "WF_SERVER")
-	}
-	if baseURL != "" {
-		viper.SetDefault("server", baseURL)
+	// Register the --profile global flag so cobra accepts it on every command.
+	// Its value is also pre-scanned directly from os.Args during settings
+	// resolution, because account-id injection below rewrites command
+	// definitions before cobra ever parses flags.
+	cli.AddGlobalFlag("profile", "", "Configuration profile to use (run 'wallfacer profile list')", "")
+
+	// Resolve connection settings: an active profile (--profile /
+	// WALLFACER_PROFILE), else the legacy top-level keys, each with the
+	// WALLFACER_/WF_ env vars as a per-field fallback.
+	settings, err := resolveSettings(wfConfig)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
 	}
 
-	token := wfConfig.GetString("token")
-	if token == "" {
-		token = firstEnv("WALLFACER_TOKEN", "WF_TOKEN")
+	if settings.baseURL != "" {
+		viper.SetDefault("server", settings.baseURL)
 	}
+
+	token := settings.token
 	cli.Client.UseRequest(func(ctx *context.Context, h context.Handler) {
 		ctx.Request.Header.Set("Accept", "application/json")
 		ctx.Request.Header.Set("X-CLI-Version", version)
@@ -206,12 +221,10 @@ func main() {
 		h.Next(ctx)
 	})
 
-	accountID := wfConfig.GetString("account_id")
-	if accountID == "" {
-		accountID = firstEnv("WALLFACER_ACCOUNT_ID", "WF_ACCOUNT_ID")
-	}
+	accountID := settings.accountID
 
-	registerAuthCommands(baseURL, token)
+	registerAuthCommands(settings)
+	registerProfileCommands(wfConfig, settings)
 	openapiRegister(false)
 	registerExecCommand(accountID)
 	registerUpCommand(accountID)
