@@ -49,6 +49,31 @@ func profileName() string {
 	return firstEnv("WALLFACER_PROFILE", "WF_PROFILE")
 }
 
+// accountIDOverride returns the value of the --account-id flag, pre-scanned
+// directly from os.Args for the same reason as profileName: account-id
+// injection rewrites command definitions before cobra parses flags, so the
+// override has to be known before parsing. Scanning stops at the `--`
+// end-of-flags marker so `exec --account-id X -- <cmd>` is read correctly and a
+// stray `--account-id` inside a command body is never treated as ours.
+func accountIDOverride() string {
+	args := os.Args[1:]
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		if a == "--" {
+			break
+		}
+		switch {
+		case a == "--account-id":
+			if i+1 < len(args) {
+				return args[i+1]
+			}
+		case strings.HasPrefix(a, "--account-id="):
+			return strings.TrimPrefix(a, "--account-id=")
+		}
+	}
+	return ""
+}
+
 // resolveSettings resolves base_url, token, and account_id.
 //
 // When a profile is active, its fields are the authoritative "file" values; the
@@ -83,11 +108,18 @@ func resolveSettings(wfConfig *viper.Viper) (resolved, error) {
 		return firstEnv(envKeys...)
 	}
 
+	// The --account-id flag is the most specific selector: it overrides the
+	// persisted per-profile default and the env vars for a single command.
+	accountID := accountIDOverride()
+	if accountID == "" {
+		accountID = pick("account_id", "WALLFACER_ACCOUNT_ID", "WF_ACCOUNT_ID")
+	}
+
 	return resolved{
 		profile:   name,
 		baseURL:   pick("base_url", "WALLFACER_SERVER", "WF_SERVER"),
 		token:     pick("token", "WALLFACER_TOKEN", "WF_TOKEN"),
-		accountID: pick("account_id", "WALLFACER_ACCOUNT_ID", "WF_ACCOUNT_ID"),
+		accountID: accountID,
 	}, nil
 }
 

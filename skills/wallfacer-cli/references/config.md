@@ -25,9 +25,25 @@ Each env var is accepted under either the `WALLFACER_` (documented, human-facing
 |---|---|---|---|
 | `token` | `token` | `WALLFACER_TOKEN` / `WF_TOKEN` | — |
 | `base_url` | `base_url` | `WALLFACER_SERVER` / `WF_SERVER` | `https://api.wallfacer.ai` |
-| `account_id` | `account_id` | `WALLFACER_ACCOUNT_ID` / `WF_ACCOUNT_ID` | — (must be set or passed as positional arg) |
+| `account_id` | `account_id` | `WALLFACER_ACCOUNT_ID` / `WF_ACCOUNT_ID` | — (must be set, overridden, or passed as positional arg) |
 
 Missing token → auth commands fail. Missing account on an account-scoped call → the account-id positional arg is required.
+
+## Choosing an account (multi-account)
+
+One token can reach multiple accounts (`auth status` lists them). The account a command targets is resolved, highest precedence first:
+
+1. **`--account-id <uuid>`** — a global flag accepted on every command; overrides everything for that one call.
+2. **Persisted default** — `account_id` from the active profile (or the top-level key when no profile is active).
+3. **`WALLFACER_ACCOUNT_ID` / `WF_ACCOUNT_ID`** env fallback.
+
+```bash
+wallfacer environments list --account-id <uuid>   # one-off, any account
+wallfacer accounts use <uuid>                      # persist a new default (see below)
+wallfacer accounts current                         # show the account commands target now
+```
+
+`accounts use <uuid>` writes the default into the active profile (top-level when none). `auth login` sets it automatically to your first account, so commands work immediately after login.
 
 ## Profiles
 
@@ -73,14 +89,16 @@ wallfacer profile list       # all profiles; * marks the active one
 wallfacer profile current    # active profile + resolved server/account/token state
 ```
 
-Profiles are defined by editing `~/.wallfacer/wallfacer.yml` directly (`auth login`
-still writes the top-level default keys).
+Profiles are defined by editing `~/.wallfacer/wallfacer.yml` directly. `auth login`
+and `accounts use` write into the active profile when one is selected (`--profile` /
+`WALLFACER_PROFILE`), otherwise the top-level default keys — so each profile keeps its
+own account selection.
 
 ## Auth commands
 
 ```bash
-wallfacer auth login --token=<token>   # saves token to config
-wallfacer auth status                   # validates token, lists accessible accounts
+wallfacer auth login --token=<token>   # saves token, sets default account to your first account
+wallfacer auth status                   # validates token, lists accounts (* marks the active one)
 wallfacer auth logout                   # removes token from config
 ```
 
@@ -88,4 +106,4 @@ Prefer `wallfacer auth login` over editing the config file directly.
 
 ## Account ID auto-injection
 
-When `account_id` is set in config, all commands that take `account-id` as their first positional arg have it auto-injected. The arg is removed from the command's usage string, so `wallfacer vms list account-id` becomes just `wallfacer vms list`.
+When an account is resolved (via `--account-id`, config, or env), all commands that take `account-id` as their first positional arg have it auto-injected. The arg is removed from the command's usage string, so `wallfacer vms list account-id` becomes just `wallfacer vms list`. When no account is resolved at all, the positional arg remains and must be supplied explicitly.

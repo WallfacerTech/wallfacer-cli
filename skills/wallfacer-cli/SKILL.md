@@ -10,14 +10,14 @@ Auto-generated CLI wrapping the Wallfacer API. YAML config under `~/.wallfacer/`
 ## Auth
 
 ```bash
-wallfacer auth login --token=<your-token>
-wallfacer auth status                        # validates token, lists accounts
+wallfacer auth login --token=<your-token>    # also sets default account to your first account
+wallfacer auth status                        # validates token, lists accounts (* marks active)
 wallfacer auth logout                        # removes stored token
 ```
 
 Token source order: config file → `WALLFACER_TOKEN` (or `WF_TOKEN`) env var (file wins; env only fills when absent).
 
-Account-scoped calls require `account_id` in config or as a positional arg. If the user has one account, set it after login with `wallfacer auth status` to discover the ID.
+One token can reach multiple accounts. The targeted account resolves as: `--account-id <id>` flag (any command) → persisted default (`account_id`, per-profile) → `WALLFACER_ACCOUNT_ID`/`WF_ACCOUNT_ID`. Switch the default with `wallfacer accounts use <id>`; check it with `wallfacer accounts current`.
 
 ## Configuration
 
@@ -31,7 +31,7 @@ base_url: https://api.wallfacer.ai  # optional, defaults to https://api.wallface
 
 Config resolution is file-first with an environment-variable fallback (file wins; env only fills a field when it is absent from the file): `WALLFACER_TOKEN` / `WF_TOKEN` → `token`, `WALLFACER_SERVER` / `WF_SERVER` → `base_url`, `WALLFACER_ACCOUNT_ID` / `WF_ACCOUNT_ID` → `account_id`. Each var is accepted under either the `WALLFACER_` (documented) or `WF_` (harness-injected) spelling; `WALLFACER_` wins when both are set.
 
-When `account_id` is set, the account-id positional arg is auto-injected into all commands and can be omitted. See [references/config.md](references/config.md).
+When an account is resolved (flag, config, or env), the account-id positional arg is auto-injected into all commands and can be omitted; pass `--account-id <id>` to target a different account for a single call. When none is resolved, supply the account id as the leading positional arg. See [references/config.md](references/config.md).
 
 **Profiles** (optional, backward compatible): define named `{base_url, token, account_id}` triples under a `profiles:` key to switch backends (e.g. prod vs. a local Sophon). Select per-call with `--profile <name>` or per-session with `WALLFACER_PROFILE` / `WF_PROFILE`; inspect with `wallfacer profile list` / `wallfacer profile current`. With no profile selected, the top-level keys are used (unchanged). See [references/config.md](references/config.md#profiles).
 
@@ -65,7 +65,7 @@ All commands are flat top-level groups (not nested). Write operations take JSON 
 
 | Group | Read | Write |
 |---|---|---|
-| accounts | `list`, `get` | — |
+| accounts | `list`, `get`, `current` | `use <account-id>` (sets default), `create` |
 | environments | `list`, `get <env-id>` | `create`, `update <env-id>`, `delete <env-id>` |
 | snapshots | `list <env-id>`, `get <env-id> <snap-id>`, `logs <env-id> <snap-id>`, `log <env-id> <snap-id> <source>` | `create <env-id>`, `delete <env-id> <snap-id>` |
 | vms | `list`, `get <vm-id>`, `logs <vm-id>`, `log <vm-id> <source>` | `create`, `delete <vm-id>`, `commands <vm-id>` |
@@ -77,7 +77,7 @@ All commands are flat top-level groups (not nested). Write operations take JSON 
 | invitations | `list`, `get <token>` | `create`, `update <token>` |
 | simulator | `simulator <vm-id>`, `simulator-screenshot <vm-id>`, `simulator-logs <vm-id>`, `simulator-builds <vm-id>` | — |
 
-All positional args shown above assume `account_id` is set in config. If not, prepend the account UUID as the first positional arg to every command.
+All positional args shown above assume an account is resolved (config default, env, or `--account-id`). To target a different account for one call, add `--account-id <id>`. If no account is resolved at all, prepend the account UUID as the first positional arg to every command.
 
 References: [config](references/config.md) · [environments](references/environments.md) · [vms](references/vms.md) · [tasks](references/tasks.md).
 

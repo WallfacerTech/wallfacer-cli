@@ -48,17 +48,21 @@ wallfacer auth status
 ## Usage
 
 ```bash
-# List accounts
+# List accounts you can reach with your token
 wallfacer accounts list
 
-# Get a specific account
-wallfacer accounts get <account-id>
+# Choose which account commands target (persists as the default)
+wallfacer accounts use <account-id>
+wallfacer accounts current            # show the active account
 
-# List environments for an account
-wallfacer environments list <account-id>
+# List environments for the active account...
+wallfacer environments list
+
+# ...or target any account for a single command, on any command
+wallfacer environments list --account-id <account-id>
 
 # Create a task (accepts JSON on stdin)
-echo '{"prompt": "fix the login bug", "environment_id": "<env-id>"}' | wallfacer tasks create <account-id>
+echo '{"prompt": "fix the login bug", "environment_id": "<env-id>"}' | wallfacer tasks create
 
 # Wait for snapshot and boot a VM in one step
 wallfacer up <environment-id>
@@ -91,6 +95,25 @@ and `WALLFACER_` wins when both are set: `WALLFACER_TOKEN` / `WF_TOKEN` (→ `to
 `WALLFACER_SERVER` / `WF_SERVER` (→ `base_url`), and `WALLFACER_ACCOUNT_ID` / `WF_ACCOUNT_ID`
 (→ `account_id`). The env fallback lets ephemeral environments (e.g. Wallfacer harness VMs)
 inject credentials with no config file present.
+
+### Choosing an account
+
+A single token usually reaches several accounts (`wallfacer auth status` lists them, marking
+the active one with `*`). The account a command targets is resolved, highest precedence first:
+
+1. **`--account-id <id>`** — a global flag accepted on every command; targets any account for that one call.
+2. **Persisted default** — `account_id` from the active profile, or the top-level key when no profile is active.
+3. **`WALLFACER_ACCOUNT_ID` / `WF_ACCOUNT_ID`** — the env fallback above.
+
+```bash
+wallfacer accounts use <account-id>      # persist a new default (per-profile)
+wallfacer accounts current               # show the account commands target now
+wallfacer vms list --account-id <id>     # one-off override, no switching
+```
+
+`wallfacer auth login` sets your first account as the default automatically, so commands work
+immediately after login. When no account is resolved at all, account-scoped commands fall back
+to taking the account id as a positional argument.
 
 ### Profiles
 

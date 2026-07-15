@@ -72,12 +72,38 @@ func registerAuthCommands(s resolved) {
 				os.Exit(1)
 			}
 			cfg := readConfig()
-			cfg["token"] = t
+			setProfileField(cfg, s.profile, "token", t)
+
+			// Default to the first account so commands work immediately after
+			// login. Stored under the active profile (per-profile selection);
+			// override per-command with --account-id or switch with
+			// `wallfacer accounts use`.
+			accounts, accErr := fetchAccounts(s.baseURL, t)
+			if accErr == nil && len(accounts) > 0 {
+				setProfileField(cfg, s.profile, "account_id", accounts[0].ID)
+			}
+
 			if err := writeConfig(cfg); err != nil {
 				fmt.Fprintf(os.Stderr, "Error writing config: %v\n", err)
 				os.Exit(1)
 			}
 			fmt.Println("Token saved to " + configPath())
+
+			switch {
+			case accErr != nil:
+				fmt.Fprintf(os.Stderr, "Note: couldn't fetch accounts to set a default (%v).\nSet one with: wallfacer accounts use <account-id>\n", accErr)
+			case len(accounts) == 0:
+				fmt.Println("No accounts found for this token.")
+			default:
+				fmt.Printf("Default account: %s  %s\n", accounts[0].ID, accounts[0].Name)
+				if len(accounts) > 1 {
+					fmt.Println("Other accounts:")
+					for _, a := range accounts[1:] {
+						fmt.Printf("  %s  %s\n", a.ID, a.Name)
+					}
+					fmt.Println("Switch with: wallfacer accounts use <account-id>")
+				}
+			}
 		},
 	}
 	loginCmd.Flags().String("token", "", "API bearer token")
@@ -138,7 +164,16 @@ func registerAuthCommands(s resolved) {
 
 			fmt.Println("Authenticated. Accounts:")
 			for _, a := range result.Data {
-				fmt.Printf("  %s  %s\n", a.ID, a.Name)
+				marker := "  "
+				if a.ID == s.accountID {
+					marker = "* "
+				}
+				fmt.Printf("%s%s  %s\n", marker, a.ID, a.Name)
+			}
+			if s.accountID == "" {
+				fmt.Println("\nNo default account set. Use `wallfacer accounts use <account-id>` or --account-id.")
+			} else {
+				fmt.Printf("\nActive account (*): %s\n", s.accountID)
 			}
 		},
 	}
@@ -198,6 +233,11 @@ func main() {
 	// definitions before cobra ever parses flags.
 	cli.AddGlobalFlag("profile", "", "Configuration profile to use (run 'wallfacer profile list')", "")
 
+	// Per-command account override. Highest-precedence account selector; like
+	// --profile it is also pre-scanned from os.Args during settings resolution
+	// because account-id injection runs before cobra parses flags.
+	cli.AddGlobalFlag("account-id", "", "Account to target for this command (overrides the configured default)", "")
+
 	// Resolve connection settings: an active profile (--profile /
 	// WALLFACER_PROFILE), else the legacy top-level keys, each with the
 	// WALLFACER_/WF_ env vars as a per-field fallback.
@@ -232,6 +272,11 @@ func main() {
 	if accountID != "" {
 		injectAccountID(cli.Root, accountID)
 	}
+
+	// Registered after injectAccountID: its Use string "use <account-id>"
+	// contains the "account-id" substring the injector matches on, so adding it
+	// earlier would get the command rewritten and the positional stripped.
+	registerAccountSelectionCommands(settings)
 
 	updateCh := startUpdateCheck(version)
 	cli.Root.Execute()
