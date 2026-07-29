@@ -27,6 +27,52 @@ func openapiServers() []map[string]string {
 	}
 }
 
+// OpenapiListAccounts List accounts
+func OpenapiListAccounts(params *viper.Viper) (*gentleman.Response, map[string]interface{}, error) {
+	handlerPath := "listaccounts"
+	if openapiSubcommand {
+		handlerPath = "openapi " + handlerPath
+	}
+
+	server := viper.GetString("server")
+	if server == "" {
+		server = openapiServers()[viper.GetInt("server-index")]["url"]
+	}
+
+	url := server + "/v1/accounts"
+
+	req := cli.Client.Get().URL(url)
+
+	paramPerPage := params.GetInt64("per-page")
+	if paramPerPage != 0 {
+		req = req.AddQuery("per_page", fmt.Sprintf("%v", paramPerPage))
+	}
+
+	cli.HandleBefore(handlerPath, params, req)
+
+	resp, err := req.Do()
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "Request failed")
+	}
+
+	var decoded map[string]interface{}
+
+	if resp.StatusCode < 400 {
+		if err := cli.UnmarshalResponse(resp, &decoded); err != nil {
+			return nil, nil, errors.Wrap(err, "Unmarshalling response failed")
+		}
+	} else {
+		return nil, nil, errors.Errorf("HTTP %d: %s", resp.StatusCode, resp.String())
+	}
+
+	after := cli.HandleAfter(handlerPath, params, resp, decoded)
+	if after != nil {
+		decoded = after.(map[string]interface{})
+	}
+
+	return resp, decoded, nil
+}
+
 // OpenapiCreateAnAccount Create an account
 func OpenapiCreateAnAccount(params *viper.Viper, body string) (*gentleman.Response, map[string]interface{}, error) {
 	handlerPath := "createanaccount"
@@ -72,9 +118,9 @@ func OpenapiCreateAnAccount(params *viper.Viper, body string) (*gentleman.Respon
 	return resp, decoded, nil
 }
 
-// OpenapiListAccounts List accounts
-func OpenapiListAccounts(params *viper.Viper) (*gentleman.Response, map[string]interface{}, error) {
-	handlerPath := "listaccounts"
+// OpenapiDeleteAnAccount Delete an account
+func OpenapiDeleteAnAccount(paramAccountId string, params *viper.Viper) (*gentleman.Response, interface{}, error) {
+	handlerPath := "deleteanaccount"
 	if openapiSubcommand {
 		handlerPath = "openapi " + handlerPath
 	}
@@ -84,14 +130,10 @@ func OpenapiListAccounts(params *viper.Viper) (*gentleman.Response, map[string]i
 		server = openapiServers()[viper.GetInt("server-index")]["url"]
 	}
 
-	url := server + "/v1/accounts"
+	url := server + "/v1/accounts/{account_id}"
+	url = strings.Replace(url, "{account_id}", paramAccountId, 1)
 
-	req := cli.Client.Get().URL(url)
-
-	paramPerPage := params.GetInt64("per-page")
-	if paramPerPage != 0 {
-		req = req.AddQuery("per_page", fmt.Sprintf("%v", paramPerPage))
-	}
+	req := cli.Client.Delete().URL(url)
 
 	cli.HandleBefore(handlerPath, params, req)
 
@@ -100,7 +142,7 @@ func OpenapiListAccounts(params *viper.Viper) (*gentleman.Response, map[string]i
 		return nil, nil, errors.Wrap(err, "Request failed")
 	}
 
-	var decoded map[string]interface{}
+	var decoded interface{}
 
 	if resp.StatusCode < 400 {
 		if err := cli.UnmarshalResponse(resp, &decoded); err != nil {
@@ -112,7 +154,7 @@ func OpenapiListAccounts(params *viper.Viper) (*gentleman.Response, map[string]i
 
 	after := cli.HandleAfter(handlerPath, params, resp, decoded)
 	if after != nil {
-		decoded = after.(map[string]interface{})
+		decoded = after
 	}
 
 	return resp, decoded, nil
@@ -201,48 +243,6 @@ func OpenapiUpdateAnAccount(paramAccountId string, params *viper.Viper, body str
 	after := cli.HandleAfter(handlerPath, params, resp, decoded)
 	if after != nil {
 		decoded = after.(map[string]interface{})
-	}
-
-	return resp, decoded, nil
-}
-
-// OpenapiDeleteAnAccount Delete an account
-func OpenapiDeleteAnAccount(paramAccountId string, params *viper.Viper) (*gentleman.Response, interface{}, error) {
-	handlerPath := "deleteanaccount"
-	if openapiSubcommand {
-		handlerPath = "openapi " + handlerPath
-	}
-
-	server := viper.GetString("server")
-	if server == "" {
-		server = openapiServers()[viper.GetInt("server-index")]["url"]
-	}
-
-	url := server + "/v1/accounts/{account_id}"
-	url = strings.Replace(url, "{account_id}", paramAccountId, 1)
-
-	req := cli.Client.Delete().URL(url)
-
-	cli.HandleBefore(handlerPath, params, req)
-
-	resp, err := req.Do()
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "Request failed")
-	}
-
-	var decoded interface{}
-
-	if resp.StatusCode < 400 {
-		if err := cli.UnmarshalResponse(resp, &decoded); err != nil {
-			return nil, nil, errors.Wrap(err, "Unmarshalling response failed")
-		}
-	} else {
-		return nil, nil, errors.Errorf("HTTP %d: %s", resp.StatusCode, resp.String())
-	}
-
-	after := cli.HandleAfter(handlerPath, params, resp, decoded)
-	if after != nil {
-		decoded = after
 	}
 
 	return resp, decoded, nil
@@ -350,6 +350,49 @@ func OpenapiOnboardAnAgent(paramAccountId string, params *viper.Viper, body stri
 	return resp, decoded, nil
 }
 
+// OpenapiDisableAnAgent Disable an agent
+func OpenapiDisableAnAgent(paramAccountId string, paramAgentUserId string, params *viper.Viper) (*gentleman.Response, interface{}, error) {
+	handlerPath := "disableanagent"
+	if openapiSubcommand {
+		handlerPath = "openapi " + handlerPath
+	}
+
+	server := viper.GetString("server")
+	if server == "" {
+		server = openapiServers()[viper.GetInt("server-index")]["url"]
+	}
+
+	url := server + "/v1/accounts/{account_id}/agents/{agent_user_id}"
+	url = strings.Replace(url, "{account_id}", paramAccountId, 1)
+	url = strings.Replace(url, "{agent_user_id}", paramAgentUserId, 1)
+
+	req := cli.Client.Delete().URL(url)
+
+	cli.HandleBefore(handlerPath, params, req)
+
+	resp, err := req.Do()
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "Request failed")
+	}
+
+	var decoded interface{}
+
+	if resp.StatusCode < 400 {
+		if err := cli.UnmarshalResponse(resp, &decoded); err != nil {
+			return nil, nil, errors.Wrap(err, "Unmarshalling response failed")
+		}
+	} else {
+		return nil, nil, errors.Errorf("HTTP %d: %s", resp.StatusCode, resp.String())
+	}
+
+	after := cli.HandleAfter(handlerPath, params, resp, decoded)
+	if after != nil {
+		decoded = after
+	}
+
+	return resp, decoded, nil
+}
+
 // OpenapiGetAnAgent Get an agent
 func OpenapiGetAnAgent(paramAccountId string, paramAgentUserId string, params *viper.Viper) (*gentleman.Response, map[string]interface{}, error) {
 	handlerPath := "getanagent"
@@ -435,49 +478,6 @@ func OpenapiUpdateAnAgent(paramAccountId string, paramAgentUserId string, params
 	after := cli.HandleAfter(handlerPath, params, resp, decoded)
 	if after != nil {
 		decoded = after.(map[string]interface{})
-	}
-
-	return resp, decoded, nil
-}
-
-// OpenapiDisableAnAgent Disable an agent
-func OpenapiDisableAnAgent(paramAccountId string, paramAgentUserId string, params *viper.Viper) (*gentleman.Response, interface{}, error) {
-	handlerPath := "disableanagent"
-	if openapiSubcommand {
-		handlerPath = "openapi " + handlerPath
-	}
-
-	server := viper.GetString("server")
-	if server == "" {
-		server = openapiServers()[viper.GetInt("server-index")]["url"]
-	}
-
-	url := server + "/v1/accounts/{account_id}/agents/{agent_user_id}"
-	url = strings.Replace(url, "{account_id}", paramAccountId, 1)
-	url = strings.Replace(url, "{agent_user_id}", paramAgentUserId, 1)
-
-	req := cli.Client.Delete().URL(url)
-
-	cli.HandleBefore(handlerPath, params, req)
-
-	resp, err := req.Do()
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "Request failed")
-	}
-
-	var decoded interface{}
-
-	if resp.StatusCode < 400 {
-		if err := cli.UnmarshalResponse(resp, &decoded); err != nil {
-			return nil, nil, errors.Wrap(err, "Unmarshalling response failed")
-		}
-	} else {
-		return nil, nil, errors.Errorf("HTTP %d: %s", resp.StatusCode, resp.String())
-	}
-
-	after := cli.HandleAfter(handlerPath, params, resp, decoded)
-	if after != nil {
-		decoded = after
 	}
 
 	return resp, decoded, nil
@@ -1040,9 +1040,9 @@ func OpenapiListPolicyAuditEvents(paramAccountId string, params *viper.Viper) (*
 	return resp, decoded, nil
 }
 
-// OpenapiCreateACollector Create a collector
-func OpenapiCreateACollector(paramAccountId string, params *viper.Viper, body string) (*gentleman.Response, map[string]interface{}, error) {
-	handlerPath := "createacollector"
+// OpenapiRemoveTheAccountAvatar Remove the account avatar
+func OpenapiRemoveTheAccountAvatar(paramAccountId string, params *viper.Viper) (*gentleman.Response, interface{}, error) {
+	handlerPath := "removetheaccountavatar"
 	if openapiSubcommand {
 		handlerPath = "openapi " + handlerPath
 	}
@@ -1052,13 +1052,55 @@ func OpenapiCreateACollector(paramAccountId string, params *viper.Viper, body st
 		server = openapiServers()[viper.GetInt("server-index")]["url"]
 	}
 
-	url := server + "/v1/accounts/{account_id}/collectors"
+	url := server + "/v1/accounts/{account_id}/avatar"
+	url = strings.Replace(url, "{account_id}", paramAccountId, 1)
+
+	req := cli.Client.Delete().URL(url)
+
+	cli.HandleBefore(handlerPath, params, req)
+
+	resp, err := req.Do()
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "Request failed")
+	}
+
+	var decoded interface{}
+
+	if resp.StatusCode < 400 {
+		if err := cli.UnmarshalResponse(resp, &decoded); err != nil {
+			return nil, nil, errors.Wrap(err, "Unmarshalling response failed")
+		}
+	} else {
+		return nil, nil, errors.Errorf("HTTP %d: %s", resp.StatusCode, resp.String())
+	}
+
+	after := cli.HandleAfter(handlerPath, params, resp, decoded)
+	if after != nil {
+		decoded = after
+	}
+
+	return resp, decoded, nil
+}
+
+// OpenapiSetTheAccountAvatar Set the account avatar
+func OpenapiSetTheAccountAvatar(paramAccountId string, params *viper.Viper, body string) (*gentleman.Response, map[string]interface{}, error) {
+	handlerPath := "settheaccountavatar"
+	if openapiSubcommand {
+		handlerPath = "openapi " + handlerPath
+	}
+
+	server := viper.GetString("server")
+	if server == "" {
+		server = openapiServers()[viper.GetInt("server-index")]["url"]
+	}
+
+	url := server + "/v1/accounts/{account_id}/avatar"
 	url = strings.Replace(url, "{account_id}", paramAccountId, 1)
 
 	req := cli.Client.Post().URL(url)
 
 	if body != "" {
-		req = req.AddHeader("Content-Type", "application/json").BodyString(body)
+		req = req.AddHeader("Content-Type", "multipart/form-data").BodyString(body)
 	}
 
 	cli.HandleBefore(handlerPath, params, req)
@@ -1102,6 +1144,52 @@ func OpenapiListCollectors(paramAccountId string, params *viper.Viper) (*gentlem
 	url = strings.Replace(url, "{account_id}", paramAccountId, 1)
 
 	req := cli.Client.Get().URL(url)
+
+	cli.HandleBefore(handlerPath, params, req)
+
+	resp, err := req.Do()
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "Request failed")
+	}
+
+	var decoded map[string]interface{}
+
+	if resp.StatusCode < 400 {
+		if err := cli.UnmarshalResponse(resp, &decoded); err != nil {
+			return nil, nil, errors.Wrap(err, "Unmarshalling response failed")
+		}
+	} else {
+		return nil, nil, errors.Errorf("HTTP %d: %s", resp.StatusCode, resp.String())
+	}
+
+	after := cli.HandleAfter(handlerPath, params, resp, decoded)
+	if after != nil {
+		decoded = after.(map[string]interface{})
+	}
+
+	return resp, decoded, nil
+}
+
+// OpenapiCreateACollector Create a collector
+func OpenapiCreateACollector(paramAccountId string, params *viper.Viper, body string) (*gentleman.Response, map[string]interface{}, error) {
+	handlerPath := "createacollector"
+	if openapiSubcommand {
+		handlerPath = "openapi " + handlerPath
+	}
+
+	server := viper.GetString("server")
+	if server == "" {
+		server = openapiServers()[viper.GetInt("server-index")]["url"]
+	}
+
+	url := server + "/v1/accounts/{account_id}/collectors"
+	url = strings.Replace(url, "{account_id}", paramAccountId, 1)
+
+	req := cli.Client.Post().URL(url)
+
+	if body != "" {
+		req = req.AddHeader("Content-Type", "application/json").BodyString(body)
+	}
 
 	cli.HandleBefore(handlerPath, params, req)
 
@@ -1218,57 +1306,6 @@ func OpenapiRotateACollectorSecret(paramAccountId string, paramCollector string,
 	return resp, decoded, nil
 }
 
-// OpenapiCreateAnEnvironment Create an environment
-func OpenapiCreateAnEnvironment(paramAccountId string, params *viper.Viper, body string) (*gentleman.Response, map[string]interface{}, error) {
-	handlerPath := "createanenvironment"
-	if openapiSubcommand {
-		handlerPath = "openapi " + handlerPath
-	}
-
-	server := viper.GetString("server")
-	if server == "" {
-		server = openapiServers()[viper.GetInt("server-index")]["url"]
-	}
-
-	url := server + "/v1/accounts/{account_id}/environments"
-	url = strings.Replace(url, "{account_id}", paramAccountId, 1)
-
-	req := cli.Client.Post().URL(url)
-
-	paramIdempotencyKey := params.GetString("idempotency-key")
-	if paramIdempotencyKey != "" {
-		req = req.AddHeader("Idempotency-Key", fmt.Sprintf("%v", paramIdempotencyKey))
-	}
-
-	if body != "" {
-		req = req.AddHeader("Content-Type", "application/json").BodyString(body)
-	}
-
-	cli.HandleBefore(handlerPath, params, req)
-
-	resp, err := req.Do()
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "Request failed")
-	}
-
-	var decoded map[string]interface{}
-
-	if resp.StatusCode < 400 {
-		if err := cli.UnmarshalResponse(resp, &decoded); err != nil {
-			return nil, nil, errors.Wrap(err, "Unmarshalling response failed")
-		}
-	} else {
-		return nil, nil, errors.Errorf("HTTP %d: %s", resp.StatusCode, resp.String())
-	}
-
-	after := cli.HandleAfter(handlerPath, params, resp, decoded)
-	if after != nil {
-		decoded = after.(map[string]interface{})
-	}
-
-	return resp, decoded, nil
-}
-
 // OpenapiListEnvironments List environments
 func OpenapiListEnvironments(paramAccountId string, params *viper.Viper) (*gentleman.Response, map[string]interface{}, error) {
 	handlerPath := "listenvironments"
@@ -1316,9 +1353,9 @@ func OpenapiListEnvironments(paramAccountId string, params *viper.Viper) (*gentl
 	return resp, decoded, nil
 }
 
-// OpenapiUpdateAnEnvironment Update an environment
-func OpenapiUpdateAnEnvironment(paramAccountId string, paramEnvironmentId string, params *viper.Viper, body string) (*gentleman.Response, map[string]interface{}, error) {
-	handlerPath := "updateanenvironment"
+// OpenapiCreateAnEnvironment Create an environment
+func OpenapiCreateAnEnvironment(paramAccountId string, params *viper.Viper, body string) (*gentleman.Response, map[string]interface{}, error) {
+	handlerPath := "createanenvironment"
 	if openapiSubcommand {
 		handlerPath = "openapi " + handlerPath
 	}
@@ -1328,11 +1365,15 @@ func OpenapiUpdateAnEnvironment(paramAccountId string, paramEnvironmentId string
 		server = openapiServers()[viper.GetInt("server-index")]["url"]
 	}
 
-	url := server + "/v1/accounts/{account_id}/environments/{environment_id}"
+	url := server + "/v1/accounts/{account_id}/environments"
 	url = strings.Replace(url, "{account_id}", paramAccountId, 1)
-	url = strings.Replace(url, "{environment_id}", paramEnvironmentId, 1)
 
-	req := cli.Client.Patch().URL(url)
+	req := cli.Client.Post().URL(url)
+
+	paramIdempotencyKey := params.GetString("idempotency-key")
+	if paramIdempotencyKey != "" {
+		req = req.AddHeader("Idempotency-Key", fmt.Sprintf("%v", paramIdempotencyKey))
+	}
 
 	if body != "" {
 		req = req.AddHeader("Content-Type", "application/json").BodyString(body)
@@ -1423,6 +1464,53 @@ func OpenapiGetAnEnvironment(paramAccountId string, paramEnvironmentId string, p
 	url = strings.Replace(url, "{environment_id}", paramEnvironmentId, 1)
 
 	req := cli.Client.Get().URL(url)
+
+	cli.HandleBefore(handlerPath, params, req)
+
+	resp, err := req.Do()
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "Request failed")
+	}
+
+	var decoded map[string]interface{}
+
+	if resp.StatusCode < 400 {
+		if err := cli.UnmarshalResponse(resp, &decoded); err != nil {
+			return nil, nil, errors.Wrap(err, "Unmarshalling response failed")
+		}
+	} else {
+		return nil, nil, errors.Errorf("HTTP %d: %s", resp.StatusCode, resp.String())
+	}
+
+	after := cli.HandleAfter(handlerPath, params, resp, decoded)
+	if after != nil {
+		decoded = after.(map[string]interface{})
+	}
+
+	return resp, decoded, nil
+}
+
+// OpenapiUpdateAnEnvironment Update an environment
+func OpenapiUpdateAnEnvironment(paramAccountId string, paramEnvironmentId string, params *viper.Viper, body string) (*gentleman.Response, map[string]interface{}, error) {
+	handlerPath := "updateanenvironment"
+	if openapiSubcommand {
+		handlerPath = "openapi " + handlerPath
+	}
+
+	server := viper.GetString("server")
+	if server == "" {
+		server = openapiServers()[viper.GetInt("server-index")]["url"]
+	}
+
+	url := server + "/v1/accounts/{account_id}/environments/{environment_id}"
+	url = strings.Replace(url, "{account_id}", paramAccountId, 1)
+	url = strings.Replace(url, "{environment_id}", paramEnvironmentId, 1)
+
+	req := cli.Client.Patch().URL(url)
+
+	if body != "" {
+		req = req.AddHeader("Content-Type", "application/json").BodyString(body)
+	}
 
 	cli.HandleBefore(handlerPath, params, req)
 
@@ -1589,9 +1677,9 @@ func OpenapiShowOneEnvironmentLog(paramAccountId string, paramEnvironmentId stri
 	return resp, decoded, nil
 }
 
-// OpenapiCreateASecret Create a secret
-func OpenapiCreateASecret(paramAccountId string, paramEnvironmentId string, params *viper.Viper, body string) (*gentleman.Response, map[string]interface{}, error) {
-	handlerPath := "createasecret"
+// OpenapiListSecretsForAnEnvironment List secrets for an environment
+func OpenapiListSecretsForAnEnvironment(paramAccountId string, paramEnvironmentId string, params *viper.Viper) (*gentleman.Response, map[string]interface{}, error) {
+	handlerPath := "listsecretsforanenvironment"
 	if openapiSubcommand {
 		handlerPath = "openapi " + handlerPath
 	}
@@ -1605,15 +1693,11 @@ func OpenapiCreateASecret(paramAccountId string, paramEnvironmentId string, para
 	url = strings.Replace(url, "{account_id}", paramAccountId, 1)
 	url = strings.Replace(url, "{environment_id}", paramEnvironmentId, 1)
 
-	req := cli.Client.Post().URL(url)
+	req := cli.Client.Get().URL(url)
 
-	paramIdempotencyKey := params.GetString("idempotency-key")
-	if paramIdempotencyKey != "" {
-		req = req.AddHeader("Idempotency-Key", fmt.Sprintf("%v", paramIdempotencyKey))
-	}
-
-	if body != "" {
-		req = req.AddHeader("Content-Type", "application/json").BodyString(body)
+	paramPerPage := params.GetInt64("per-page")
+	if paramPerPage != 0 {
+		req = req.AddQuery("per_page", fmt.Sprintf("%v", paramPerPage))
 	}
 
 	cli.HandleBefore(handlerPath, params, req)
@@ -1641,9 +1725,9 @@ func OpenapiCreateASecret(paramAccountId string, paramEnvironmentId string, para
 	return resp, decoded, nil
 }
 
-// OpenapiListSecretsForAnEnvironment List secrets for an environment
-func OpenapiListSecretsForAnEnvironment(paramAccountId string, paramEnvironmentId string, params *viper.Viper) (*gentleman.Response, map[string]interface{}, error) {
-	handlerPath := "listsecretsforanenvironment"
+// OpenapiCreateASecret Create a secret
+func OpenapiCreateASecret(paramAccountId string, paramEnvironmentId string, params *viper.Viper, body string) (*gentleman.Response, map[string]interface{}, error) {
+	handlerPath := "createasecret"
 	if openapiSubcommand {
 		handlerPath = "openapi " + handlerPath
 	}
@@ -1657,11 +1741,15 @@ func OpenapiListSecretsForAnEnvironment(paramAccountId string, paramEnvironmentI
 	url = strings.Replace(url, "{account_id}", paramAccountId, 1)
 	url = strings.Replace(url, "{environment_id}", paramEnvironmentId, 1)
 
-	req := cli.Client.Get().URL(url)
+	req := cli.Client.Post().URL(url)
 
-	paramPerPage := params.GetInt64("per-page")
-	if paramPerPage != 0 {
-		req = req.AddQuery("per_page", fmt.Sprintf("%v", paramPerPage))
+	paramIdempotencyKey := params.GetString("idempotency-key")
+	if paramIdempotencyKey != "" {
+		req = req.AddHeader("Idempotency-Key", fmt.Sprintf("%v", paramIdempotencyKey))
+	}
+
+	if body != "" {
+		req = req.AddHeader("Content-Type", "application/json").BodyString(body)
 	}
 
 	cli.HandleBefore(handlerPath, params, req)
@@ -2570,9 +2658,9 @@ func OpenapiCreateAnInvitation(paramAccountId string, params *viper.Viper, body 
 	return resp, decoded, nil
 }
 
-// OpenapiListEventKeys List event keys
-func OpenapiListEventKeys(paramAccountId string, params *viper.Viper) (*gentleman.Response, map[string]interface{}, error) {
-	handlerPath := "listeventkeys"
+// OpenapiCreateAnEventKey Create an event key
+func OpenapiCreateAnEventKey(paramAccountId string, params *viper.Viper, body string) (*gentleman.Response, map[string]interface{}, error) {
+	handlerPath := "createaneventkey"
 	if openapiSubcommand {
 		handlerPath = "openapi " + handlerPath
 	}
@@ -2585,7 +2673,11 @@ func OpenapiListEventKeys(paramAccountId string, params *viper.Viper) (*gentlema
 	url := server + "/v1/accounts/{account_id}/keys"
 	url = strings.Replace(url, "{account_id}", paramAccountId, 1)
 
-	req := cli.Client.Get().URL(url)
+	req := cli.Client.Post().URL(url)
+
+	if body != "" {
+		req = req.AddHeader("Content-Type", "application/json").BodyString(body)
+	}
 
 	cli.HandleBefore(handlerPath, params, req)
 
@@ -2612,9 +2704,9 @@ func OpenapiListEventKeys(paramAccountId string, params *viper.Viper) (*gentlema
 	return resp, decoded, nil
 }
 
-// OpenapiCreateAnEventKey Create an event key
-func OpenapiCreateAnEventKey(paramAccountId string, params *viper.Viper, body string) (*gentleman.Response, map[string]interface{}, error) {
-	handlerPath := "createaneventkey"
+// OpenapiListEventKeys List event keys
+func OpenapiListEventKeys(paramAccountId string, params *viper.Viper) (*gentleman.Response, map[string]interface{}, error) {
+	handlerPath := "listeventkeys"
 	if openapiSubcommand {
 		handlerPath = "openapi " + handlerPath
 	}
@@ -2627,11 +2719,7 @@ func OpenapiCreateAnEventKey(paramAccountId string, params *viper.Viper, body st
 	url := server + "/v1/accounts/{account_id}/keys"
 	url = strings.Replace(url, "{account_id}", paramAccountId, 1)
 
-	req := cli.Client.Post().URL(url)
-
-	if body != "" {
-		req = req.AddHeader("Content-Type", "application/json").BodyString(body)
-	}
+	req := cli.Client.Get().URL(url)
 
 	cli.HandleBefore(handlerPath, params, req)
 
@@ -3130,6 +3218,53 @@ func OpenapiCreateAPipeline(paramAccountId string, params *viper.Viper, body str
 	return resp, decoded, nil
 }
 
+// OpenapiUpdatePipelineMetadata Update pipeline metadata
+func OpenapiUpdatePipelineMetadata(paramAccountId string, paramPipelineId string, params *viper.Viper, body string) (*gentleman.Response, interface{}, error) {
+	handlerPath := "updatepipelinemetadata"
+	if openapiSubcommand {
+		handlerPath = "openapi " + handlerPath
+	}
+
+	server := viper.GetString("server")
+	if server == "" {
+		server = openapiServers()[viper.GetInt("server-index")]["url"]
+	}
+
+	url := server + "/v1/accounts/{account_id}/pipelines/{pipeline_id}"
+	url = strings.Replace(url, "{account_id}", paramAccountId, 1)
+	url = strings.Replace(url, "{pipeline_id}", paramPipelineId, 1)
+
+	req := cli.Client.Patch().URL(url)
+
+	if body != "" {
+		req = req.AddHeader("Content-Type", "application/json").BodyString(body)
+	}
+
+	cli.HandleBefore(handlerPath, params, req)
+
+	resp, err := req.Do()
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "Request failed")
+	}
+
+	var decoded interface{}
+
+	if resp.StatusCode < 400 {
+		if err := cli.UnmarshalResponse(resp, &decoded); err != nil {
+			return nil, nil, errors.Wrap(err, "Unmarshalling response failed")
+		}
+	} else {
+		return nil, nil, errors.Errorf("HTTP %d: %s", resp.StatusCode, resp.String())
+	}
+
+	after := cli.HandleAfter(handlerPath, params, resp, decoded)
+	if after != nil {
+		decoded = after
+	}
+
+	return resp, decoded, nil
+}
+
 // OpenapiDeleteAPipeline Delete a pipeline
 func OpenapiDeleteAPipeline(paramAccountId string, paramPipelineId string, params *viper.Viper) (*gentleman.Response, interface{}, error) {
 	handlerPath := "deleteapipeline"
@@ -3216,9 +3351,9 @@ func OpenapiGetAPipeline(paramAccountId string, paramPipelineId string, params *
 	return resp, decoded, nil
 }
 
-// OpenapiUpdatePipelineMetadata Update pipeline metadata
-func OpenapiUpdatePipelineMetadata(paramAccountId string, paramPipelineId string, params *viper.Viper, body string) (*gentleman.Response, interface{}, error) {
-	handlerPath := "updatepipelinemetadata"
+// OpenapiDiscardTheDraft Discard the draft
+func OpenapiDiscardTheDraft(paramAccountId string, paramPipelineId string, params *viper.Viper) (*gentleman.Response, interface{}, error) {
+	handlerPath := "discardthedraft"
 	if openapiSubcommand {
 		handlerPath = "openapi " + handlerPath
 	}
@@ -3228,15 +3363,11 @@ func OpenapiUpdatePipelineMetadata(paramAccountId string, paramPipelineId string
 		server = openapiServers()[viper.GetInt("server-index")]["url"]
 	}
 
-	url := server + "/v1/accounts/{account_id}/pipelines/{pipeline_id}"
+	url := server + "/v1/accounts/{account_id}/pipelines/{pipeline_id}/draft"
 	url = strings.Replace(url, "{account_id}", paramAccountId, 1)
 	url = strings.Replace(url, "{pipeline_id}", paramPipelineId, 1)
 
-	req := cli.Client.Patch().URL(url)
-
-	if body != "" {
-		req = req.AddHeader("Content-Type", "application/json").BodyString(body)
-	}
+	req := cli.Client.Delete().URL(url)
 
 	cli.HandleBefore(handlerPath, params, req)
 
@@ -3315,49 +3446,6 @@ func OpenapiSaveADraft(paramAccountId string, paramPipelineId string, params *vi
 	return resp, decoded, nil
 }
 
-// OpenapiDiscardTheDraft Discard the draft
-func OpenapiDiscardTheDraft(paramAccountId string, paramPipelineId string, params *viper.Viper) (*gentleman.Response, interface{}, error) {
-	handlerPath := "discardthedraft"
-	if openapiSubcommand {
-		handlerPath = "openapi " + handlerPath
-	}
-
-	server := viper.GetString("server")
-	if server == "" {
-		server = openapiServers()[viper.GetInt("server-index")]["url"]
-	}
-
-	url := server + "/v1/accounts/{account_id}/pipelines/{pipeline_id}/draft"
-	url = strings.Replace(url, "{account_id}", paramAccountId, 1)
-	url = strings.Replace(url, "{pipeline_id}", paramPipelineId, 1)
-
-	req := cli.Client.Delete().URL(url)
-
-	cli.HandleBefore(handlerPath, params, req)
-
-	resp, err := req.Do()
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "Request failed")
-	}
-
-	var decoded interface{}
-
-	if resp.StatusCode < 400 {
-		if err := cli.UnmarshalResponse(resp, &decoded); err != nil {
-			return nil, nil, errors.Wrap(err, "Unmarshalling response failed")
-		}
-	} else {
-		return nil, nil, errors.Errorf("HTTP %d: %s", resp.StatusCode, resp.String())
-	}
-
-	after := cli.HandleAfter(handlerPath, params, resp, decoded)
-	if after != nil {
-		decoded = after
-	}
-
-	return resp, decoded, nil
-}
-
 // OpenapiCompileATriggerFromPlainEnglish Compile a trigger from plain English
 func OpenapiCompileATriggerFromPlainEnglish(paramAccountId string, paramPipelineId string, params *viper.Viper, body string) (*gentleman.Response, map[string]interface{}, error) {
 	handlerPath := "compileatriggerfromplainenglish"
@@ -3371,6 +3459,53 @@ func OpenapiCompileATriggerFromPlainEnglish(paramAccountId string, paramPipeline
 	}
 
 	url := server + "/v1/accounts/{account_id}/pipelines/{pipeline_id}/triggers"
+	url = strings.Replace(url, "{account_id}", paramAccountId, 1)
+	url = strings.Replace(url, "{pipeline_id}", paramPipelineId, 1)
+
+	req := cli.Client.Post().URL(url)
+
+	if body != "" {
+		req = req.AddHeader("Content-Type", "application/json").BodyString(body)
+	}
+
+	cli.HandleBefore(handlerPath, params, req)
+
+	resp, err := req.Do()
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "Request failed")
+	}
+
+	var decoded map[string]interface{}
+
+	if resp.StatusCode < 400 {
+		if err := cli.UnmarshalResponse(resp, &decoded); err != nil {
+			return nil, nil, errors.Wrap(err, "Unmarshalling response failed")
+		}
+	} else {
+		return nil, nil, errors.Errorf("HTTP %d: %s", resp.StatusCode, resp.String())
+	}
+
+	after := cli.HandleAfter(handlerPath, params, resp, decoded)
+	if after != nil {
+		decoded = after.(map[string]interface{})
+	}
+
+	return resp, decoded, nil
+}
+
+// OpenapiPublishANewPipelineVersion Publish a new pipeline version
+func OpenapiPublishANewPipelineVersion(paramAccountId string, paramPipelineId string, params *viper.Viper, body string) (*gentleman.Response, map[string]interface{}, error) {
+	handlerPath := "publishanewpipelineversion"
+	if openapiSubcommand {
+		handlerPath = "openapi " + handlerPath
+	}
+
+	server := viper.GetString("server")
+	if server == "" {
+		server = openapiServers()[viper.GetInt("server-index")]["url"]
+	}
+
+	url := server + "/v1/accounts/{account_id}/pipelines/{pipeline_id}/versions"
 	url = strings.Replace(url, "{account_id}", paramAccountId, 1)
 	url = strings.Replace(url, "{pipeline_id}", paramPipelineId, 1)
 
@@ -3422,53 +3557,6 @@ func OpenapiListPipelineVersions(paramAccountId string, paramPipelineId string, 
 	url = strings.Replace(url, "{pipeline_id}", paramPipelineId, 1)
 
 	req := cli.Client.Get().URL(url)
-
-	cli.HandleBefore(handlerPath, params, req)
-
-	resp, err := req.Do()
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "Request failed")
-	}
-
-	var decoded map[string]interface{}
-
-	if resp.StatusCode < 400 {
-		if err := cli.UnmarshalResponse(resp, &decoded); err != nil {
-			return nil, nil, errors.Wrap(err, "Unmarshalling response failed")
-		}
-	} else {
-		return nil, nil, errors.Errorf("HTTP %d: %s", resp.StatusCode, resp.String())
-	}
-
-	after := cli.HandleAfter(handlerPath, params, resp, decoded)
-	if after != nil {
-		decoded = after.(map[string]interface{})
-	}
-
-	return resp, decoded, nil
-}
-
-// OpenapiPublishANewPipelineVersion Publish a new pipeline version
-func OpenapiPublishANewPipelineVersion(paramAccountId string, paramPipelineId string, params *viper.Viper, body string) (*gentleman.Response, map[string]interface{}, error) {
-	handlerPath := "publishanewpipelineversion"
-	if openapiSubcommand {
-		handlerPath = "openapi " + handlerPath
-	}
-
-	server := viper.GetString("server")
-	if server == "" {
-		server = openapiServers()[viper.GetInt("server-index")]["url"]
-	}
-
-	url := server + "/v1/accounts/{account_id}/pipelines/{pipeline_id}/versions"
-	url = strings.Replace(url, "{account_id}", paramAccountId, 1)
-	url = strings.Replace(url, "{pipeline_id}", paramPipelineId, 1)
-
-	req := cli.Client.Post().URL(url)
-
-	if body != "" {
-		req = req.AddHeader("Content-Type", "application/json").BodyString(body)
-	}
 
 	cli.HandleBefore(handlerPath, params, req)
 
@@ -3779,49 +3867,6 @@ func OpenapiCreateATask(paramAccountId string, params *viper.Viper, body string)
 	return resp, decoded, nil
 }
 
-// OpenapiDeleteATask Delete a task
-func OpenapiDeleteATask(paramAccountId string, paramTaskId string, params *viper.Viper) (*gentleman.Response, interface{}, error) {
-	handlerPath := "deleteatask"
-	if openapiSubcommand {
-		handlerPath = "openapi " + handlerPath
-	}
-
-	server := viper.GetString("server")
-	if server == "" {
-		server = openapiServers()[viper.GetInt("server-index")]["url"]
-	}
-
-	url := server + "/v1/accounts/{account_id}/tasks/{task_id}"
-	url = strings.Replace(url, "{account_id}", paramAccountId, 1)
-	url = strings.Replace(url, "{task_id}", paramTaskId, 1)
-
-	req := cli.Client.Delete().URL(url)
-
-	cli.HandleBefore(handlerPath, params, req)
-
-	resp, err := req.Do()
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "Request failed")
-	}
-
-	var decoded interface{}
-
-	if resp.StatusCode < 400 {
-		if err := cli.UnmarshalResponse(resp, &decoded); err != nil {
-			return nil, nil, errors.Wrap(err, "Unmarshalling response failed")
-		}
-	} else {
-		return nil, nil, errors.Errorf("HTTP %d: %s", resp.StatusCode, resp.String())
-	}
-
-	after := cli.HandleAfter(handlerPath, params, resp, decoded)
-	if after != nil {
-		decoded = after
-	}
-
-	return resp, decoded, nil
-}
-
 // OpenapiGetATask Get a task
 func OpenapiGetATask(paramAccountId string, paramTaskId string, params *viper.Viper) (*gentleman.Response, map[string]interface{}, error) {
 	handlerPath := "getatask"
@@ -3907,6 +3952,49 @@ func OpenapiUpdateATask(paramAccountId string, paramTaskId string, params *viper
 	after := cli.HandleAfter(handlerPath, params, resp, decoded)
 	if after != nil {
 		decoded = after.(map[string]interface{})
+	}
+
+	return resp, decoded, nil
+}
+
+// OpenapiDeleteATask Delete a task
+func OpenapiDeleteATask(paramAccountId string, paramTaskId string, params *viper.Viper) (*gentleman.Response, interface{}, error) {
+	handlerPath := "deleteatask"
+	if openapiSubcommand {
+		handlerPath = "openapi " + handlerPath
+	}
+
+	server := viper.GetString("server")
+	if server == "" {
+		server = openapiServers()[viper.GetInt("server-index")]["url"]
+	}
+
+	url := server + "/v1/accounts/{account_id}/tasks/{task_id}"
+	url = strings.Replace(url, "{account_id}", paramAccountId, 1)
+	url = strings.Replace(url, "{task_id}", paramTaskId, 1)
+
+	req := cli.Client.Delete().URL(url)
+
+	cli.HandleBefore(handlerPath, params, req)
+
+	resp, err := req.Do()
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "Request failed")
+	}
+
+	var decoded interface{}
+
+	if resp.StatusCode < 400 {
+		if err := cli.UnmarshalResponse(resp, &decoded); err != nil {
+			return nil, nil, errors.Wrap(err, "Unmarshalling response failed")
+		}
+	} else {
+		return nil, nil, errors.Errorf("HTTP %d: %s", resp.StatusCode, resp.String())
+	}
+
+	after := cli.HandleAfter(handlerPath, params, resp, decoded)
+	if after != nil {
+		decoded = after
 	}
 
 	return resp, decoded, nil
@@ -4566,9 +4654,9 @@ func OpenapiCreateASession(paramAccountId string, paramTaskId string, params *vi
 	return resp, decoded, nil
 }
 
-// OpenapiGetASession Get a session
-func OpenapiGetASession(paramAccountId string, paramTaskId string, paramSessionId string, params *viper.Viper) (*gentleman.Response, map[string]interface{}, error) {
-	handlerPath := "getasession"
+// OpenapiUpdateASession Update a session
+func OpenapiUpdateASession(paramAccountId string, paramTaskId string, paramSessionId string, params *viper.Viper, body string) (*gentleman.Response, map[string]interface{}, error) {
+	handlerPath := "updateasession"
 	if openapiSubcommand {
 		handlerPath = "openapi " + handlerPath
 	}
@@ -4583,7 +4671,11 @@ func OpenapiGetASession(paramAccountId string, paramTaskId string, paramSessionI
 	url = strings.Replace(url, "{task_id}", paramTaskId, 1)
 	url = strings.Replace(url, "{session_id}", paramSessionId, 1)
 
-	req := cli.Client.Get().URL(url)
+	req := cli.Client.Patch().URL(url)
+
+	if body != "" {
+		req = req.AddHeader("Content-Type", "application/json").BodyString(body)
+	}
 
 	cli.HandleBefore(handlerPath, params, req)
 
@@ -4610,9 +4702,9 @@ func OpenapiGetASession(paramAccountId string, paramTaskId string, paramSessionI
 	return resp, decoded, nil
 }
 
-// OpenapiUpdateASession Update a session
-func OpenapiUpdateASession(paramAccountId string, paramTaskId string, paramSessionId string, params *viper.Viper, body string) (*gentleman.Response, map[string]interface{}, error) {
-	handlerPath := "updateasession"
+// OpenapiGetASession Get a session
+func OpenapiGetASession(paramAccountId string, paramTaskId string, paramSessionId string, params *viper.Viper) (*gentleman.Response, map[string]interface{}, error) {
+	handlerPath := "getasession"
 	if openapiSubcommand {
 		handlerPath = "openapi " + handlerPath
 	}
@@ -4627,11 +4719,7 @@ func OpenapiUpdateASession(paramAccountId string, paramTaskId string, paramSessi
 	url = strings.Replace(url, "{task_id}", paramTaskId, 1)
 	url = strings.Replace(url, "{session_id}", paramSessionId, 1)
 
-	req := cli.Client.Patch().URL(url)
-
-	if body != "" {
-		req = req.AddHeader("Content-Type", "application/json").BodyString(body)
-	}
+	req := cli.Client.Get().URL(url)
 
 	cli.HandleBefore(handlerPath, params, req)
 
@@ -4854,51 +4942,6 @@ func OpenapiSendAMessage(paramAccountId string, paramTaskId string, paramSession
 	return resp, decoded, nil
 }
 
-// OpenapiDeleteAMessage Delete a message
-func OpenapiDeleteAMessage(paramAccountId string, paramTaskId string, paramSessionId string, paramMessageId string, params *viper.Viper) (*gentleman.Response, interface{}, error) {
-	handlerPath := "deleteamessage"
-	if openapiSubcommand {
-		handlerPath = "openapi " + handlerPath
-	}
-
-	server := viper.GetString("server")
-	if server == "" {
-		server = openapiServers()[viper.GetInt("server-index")]["url"]
-	}
-
-	url := server + "/v1/accounts/{account_id}/tasks/{task_id}/sessions/{session_id}/messages/{message_id}"
-	url = strings.Replace(url, "{account_id}", paramAccountId, 1)
-	url = strings.Replace(url, "{task_id}", paramTaskId, 1)
-	url = strings.Replace(url, "{session_id}", paramSessionId, 1)
-	url = strings.Replace(url, "{message_id}", paramMessageId, 1)
-
-	req := cli.Client.Delete().URL(url)
-
-	cli.HandleBefore(handlerPath, params, req)
-
-	resp, err := req.Do()
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "Request failed")
-	}
-
-	var decoded interface{}
-
-	if resp.StatusCode < 400 {
-		if err := cli.UnmarshalResponse(resp, &decoded); err != nil {
-			return nil, nil, errors.Wrap(err, "Unmarshalling response failed")
-		}
-	} else {
-		return nil, nil, errors.Errorf("HTTP %d: %s", resp.StatusCode, resp.String())
-	}
-
-	after := cli.HandleAfter(handlerPath, params, resp, decoded)
-	if after != nil {
-		decoded = after
-	}
-
-	return resp, decoded, nil
-}
-
 // OpenapiGetAMessage Get a message
 func OpenapiGetAMessage(paramAccountId string, paramTaskId string, paramSessionId string, paramMessageId string, params *viper.Viper) (*gentleman.Response, map[string]interface{}, error) {
 	handlerPath := "getamessage"
@@ -4939,6 +4982,51 @@ func OpenapiGetAMessage(paramAccountId string, paramTaskId string, paramSessionI
 	after := cli.HandleAfter(handlerPath, params, resp, decoded)
 	if after != nil {
 		decoded = after.(map[string]interface{})
+	}
+
+	return resp, decoded, nil
+}
+
+// OpenapiDeleteAMessage Delete a message
+func OpenapiDeleteAMessage(paramAccountId string, paramTaskId string, paramSessionId string, paramMessageId string, params *viper.Viper) (*gentleman.Response, interface{}, error) {
+	handlerPath := "deleteamessage"
+	if openapiSubcommand {
+		handlerPath = "openapi " + handlerPath
+	}
+
+	server := viper.GetString("server")
+	if server == "" {
+		server = openapiServers()[viper.GetInt("server-index")]["url"]
+	}
+
+	url := server + "/v1/accounts/{account_id}/tasks/{task_id}/sessions/{session_id}/messages/{message_id}"
+	url = strings.Replace(url, "{account_id}", paramAccountId, 1)
+	url = strings.Replace(url, "{task_id}", paramTaskId, 1)
+	url = strings.Replace(url, "{session_id}", paramSessionId, 1)
+	url = strings.Replace(url, "{message_id}", paramMessageId, 1)
+
+	req := cli.Client.Delete().URL(url)
+
+	cli.HandleBefore(handlerPath, params, req)
+
+	resp, err := req.Do()
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "Request failed")
+	}
+
+	var decoded interface{}
+
+	if resp.StatusCode < 400 {
+		if err := cli.UnmarshalResponse(resp, &decoded); err != nil {
+			return nil, nil, errors.Wrap(err, "Unmarshalling response failed")
+		}
+	} else {
+		return nil, nil, errors.Errorf("HTTP %d: %s", resp.StatusCode, resp.String())
+	}
+
+	after := cli.HandleAfter(handlerPath, params, resp, decoded)
+	if after != nil {
+		decoded = after
 	}
 
 	return resp, decoded, nil
@@ -5177,9 +5265,9 @@ func OpenapiUpdateAUsersRole(paramAccountId string, paramUserId string, paramUse
 	return resp, decoded, nil
 }
 
-// OpenapiCreateAVM Create a VM
-func OpenapiCreateAVM(paramAccountId string, params *viper.Viper, body string) (*gentleman.Response, map[string]interface{}, error) {
-	handlerPath := "createavm"
+// OpenapiListVMs List VMs
+func OpenapiListVMs(paramAccountId string, params *viper.Viper) (*gentleman.Response, map[string]interface{}, error) {
+	handlerPath := "listvms"
 	if openapiSubcommand {
 		handlerPath = "openapi " + handlerPath
 	}
@@ -5192,15 +5280,11 @@ func OpenapiCreateAVM(paramAccountId string, params *viper.Viper, body string) (
 	url := server + "/v1/accounts/{account_id}/vms"
 	url = strings.Replace(url, "{account_id}", paramAccountId, 1)
 
-	req := cli.Client.Post().URL(url)
+	req := cli.Client.Get().URL(url)
 
-	paramIdempotencyKey := params.GetString("idempotency-key")
-	if paramIdempotencyKey != "" {
-		req = req.AddHeader("Idempotency-Key", fmt.Sprintf("%v", paramIdempotencyKey))
-	}
-
-	if body != "" {
-		req = req.AddHeader("Content-Type", "application/json").BodyString(body)
+	paramPerPage := params.GetInt64("per-page")
+	if paramPerPage != 0 {
+		req = req.AddQuery("per_page", fmt.Sprintf("%v", paramPerPage))
 	}
 
 	cli.HandleBefore(handlerPath, params, req)
@@ -5228,9 +5312,9 @@ func OpenapiCreateAVM(paramAccountId string, params *viper.Viper, body string) (
 	return resp, decoded, nil
 }
 
-// OpenapiListVMs List VMs
-func OpenapiListVMs(paramAccountId string, params *viper.Viper) (*gentleman.Response, map[string]interface{}, error) {
-	handlerPath := "listvms"
+// OpenapiCreateAVM Create a VM
+func OpenapiCreateAVM(paramAccountId string, params *viper.Viper, body string) (*gentleman.Response, map[string]interface{}, error) {
+	handlerPath := "createavm"
 	if openapiSubcommand {
 		handlerPath = "openapi " + handlerPath
 	}
@@ -5243,11 +5327,15 @@ func OpenapiListVMs(paramAccountId string, params *viper.Viper) (*gentleman.Resp
 	url := server + "/v1/accounts/{account_id}/vms"
 	url = strings.Replace(url, "{account_id}", paramAccountId, 1)
 
-	req := cli.Client.Get().URL(url)
+	req := cli.Client.Post().URL(url)
 
-	paramPerPage := params.GetInt64("per-page")
-	if paramPerPage != 0 {
-		req = req.AddQuery("per_page", fmt.Sprintf("%v", paramPerPage))
+	paramIdempotencyKey := params.GetString("idempotency-key")
+	if paramIdempotencyKey != "" {
+		req = req.AddHeader("Idempotency-Key", fmt.Sprintf("%v", paramIdempotencyKey))
+	}
+
+	if body != "" {
+		req = req.AddHeader("Content-Type", "application/json").BodyString(body)
 	}
 
 	cli.HandleBefore(handlerPath, params, req)
@@ -5723,9 +5811,9 @@ func OpenapiReceiveAWebhook(paramCollector string, paramSecret string, params *v
 	return resp, decoded, nil
 }
 
-// OpenapiShowAnInvitation Show an invitation
-func OpenapiShowAnInvitation(paramToken string, params *viper.Viper) (*gentleman.Response, map[string]interface{}, error) {
-	handlerPath := "showaninvitation"
+// OpenapiAcceptAnInvitation Accept an invitation
+func OpenapiAcceptAnInvitation(paramToken string, params *viper.Viper, body string) (*gentleman.Response, map[string]interface{}, error) {
+	handlerPath := "acceptaninvitation"
 	if openapiSubcommand {
 		handlerPath = "openapi " + handlerPath
 	}
@@ -5738,7 +5826,11 @@ func OpenapiShowAnInvitation(paramToken string, params *viper.Viper) (*gentleman
 	url := server + "/v1/invitations/{token}"
 	url = strings.Replace(url, "{token}", paramToken, 1)
 
-	req := cli.Client.Get().URL(url)
+	req := cli.Client.Patch().URL(url)
+
+	if body != "" {
+		req = req.AddHeader("Content-Type", "application/json").BodyString(body)
+	}
 
 	cli.HandleBefore(handlerPath, params, req)
 
@@ -5765,9 +5857,9 @@ func OpenapiShowAnInvitation(paramToken string, params *viper.Viper) (*gentleman
 	return resp, decoded, nil
 }
 
-// OpenapiAcceptAnInvitation Accept an invitation
-func OpenapiAcceptAnInvitation(paramToken string, params *viper.Viper, body string) (*gentleman.Response, map[string]interface{}, error) {
-	handlerPath := "acceptaninvitation"
+// OpenapiShowAnInvitation Show an invitation
+func OpenapiShowAnInvitation(paramToken string, params *viper.Viper) (*gentleman.Response, map[string]interface{}, error) {
+	handlerPath := "showaninvitation"
 	if openapiSubcommand {
 		handlerPath = "openapi " + handlerPath
 	}
@@ -5780,11 +5872,7 @@ func OpenapiAcceptAnInvitation(paramToken string, params *viper.Viper, body stri
 	url := server + "/v1/invitations/{token}"
 	url = strings.Replace(url, "{token}", paramToken, 1)
 
-	req := cli.Client.Patch().URL(url)
-
-	if body != "" {
-		req = req.AddHeader("Content-Type", "application/json").BodyString(body)
-	}
+	req := cli.Client.Get().URL(url)
 
 	cli.HandleBefore(handlerPath, params, req)
 
@@ -6018,6 +6106,42 @@ func openapiRegister(subcommand bool) {
 			var examples string
 
 			cmd := &cobra.Command{
+				Use:     "list",
+				Short:   "List accounts",
+				Long:    cli.Markdown("Returns all accounts the authenticated user belongs to."),
+				Example: examples,
+				Args:    cobra.MinimumNArgs(0),
+				Run: func(cmd *cobra.Command, args []string) {
+
+					_, decoded, err := OpenapiListAccounts(params)
+					if err != nil {
+						log.Fatal().Err(err).Msg("Error calling operation")
+					}
+
+					if err := cli.Formatter.Format(decoded); err != nil {
+						log.Fatal().Err(err).Msg("Formatting failed")
+					}
+
+				},
+			}
+			groupCmd.AddCommand(cmd)
+
+			cmd.Flags().Int64("per-page", 0, "Results per page (max 100).")
+
+			cli.SetCustomFlags(cmd)
+
+			if cmd.Flags().HasFlags() {
+				params.BindPFlags(cmd.Flags())
+			}
+
+		}()
+
+		func() {
+			params := viper.New()
+
+			var examples string
+
+			cmd := &cobra.Command{
 				Use:     "create",
 				Short:   "Create an account",
 				Long:    cli.Markdown("Creates a new account. The authenticated user is automatically attached as the `owner` of the new account.\n\nUse this when a single user needs to manage multiple accounts (for example, to separate billing or environments per organization).\n## Request Schema (application/json)\n\nproperties:\n  name:\n    description: A human-readable name for the account. Must not be greater than 255\n      characters.\n    example: Acme Inc.\n    type: string\nrequired:\n- name\ntype: object\n"),
@@ -6056,14 +6180,14 @@ func openapiRegister(subcommand bool) {
 			var examples string
 
 			cmd := &cobra.Command{
-				Use:     "list",
-				Short:   "List accounts",
-				Long:    cli.Markdown("Returns all accounts the authenticated user belongs to."),
+				Use:     "delete account-id",
+				Short:   "Delete an account",
+				Long:    cli.Markdown("Permanently deletes an account and tears down all of its resources: environments, snapshots, running VMs, tasks, sessions, secrets, pipelines, and events. Requires the `owner` role.\n\nDestructive and irreversible: live infrastructure (VMs, S3 snapshots) is destroyed immediately. The account record is retained in a deactivated state for a 30-day grace window during which support can restore the metadata shell (not the destroyed infrastructure), then permanently purged.\n\nConfirmation is required: send a `confirm` field whose value exactly matches the account's name. Returns `202 Accepted` because teardown runs asynchronously. The call is idempotent: repeating it on an already-deleted account returns `202` without requiring the confirmation again.\n## Request Schema (application/json)\n\nproperties:\n  confirm:\n    description: A safety confirmation for this irreversible action. Must exactly\n      match the account's `name`.\n    example: Acme Inc\n    type: string\nrequired:\n- confirm\ntype: object\n"),
 				Example: examples,
-				Args:    cobra.MinimumNArgs(0),
+				Args:    cobra.MinimumNArgs(1),
 				Run: func(cmd *cobra.Command, args []string) {
 
-					_, decoded, err := OpenapiListAccounts(params)
+					_, decoded, err := OpenapiDeleteAnAccount(args[0], params)
 					if err != nil {
 						log.Fatal().Err(err).Msg("Error calling operation")
 					}
@@ -6075,8 +6199,6 @@ func openapiRegister(subcommand bool) {
 				},
 			}
 			groupCmd.AddCommand(cmd)
-
-			cmd.Flags().Int64("per-page", 0, "Results per page (max 100).")
 
 			cli.SetCustomFlags(cmd)
 
@@ -6138,40 +6260,6 @@ func openapiRegister(subcommand bool) {
 					}
 
 					_, decoded, err := OpenapiUpdateAnAccount(args[0], params, body)
-					if err != nil {
-						log.Fatal().Err(err).Msg("Error calling operation")
-					}
-
-					if err := cli.Formatter.Format(decoded); err != nil {
-						log.Fatal().Err(err).Msg("Formatting failed")
-					}
-
-				},
-			}
-			groupCmd.AddCommand(cmd)
-
-			cli.SetCustomFlags(cmd)
-
-			if cmd.Flags().HasFlags() {
-				params.BindPFlags(cmd.Flags())
-			}
-
-		}()
-
-		func() {
-			params := viper.New()
-
-			var examples string
-
-			cmd := &cobra.Command{
-				Use:     "delete account-id",
-				Short:   "Delete an account",
-				Long:    cli.Markdown("Permanently deletes an account and tears down all of its resources: environments, snapshots, running VMs, tasks, sessions, secrets, pipelines, and events. Requires the `owner` role.\n\nDestructive and irreversible: live infrastructure (VMs, S3 snapshots) is destroyed immediately. The account record is retained in a deactivated state for a 30-day grace window during which support can restore the metadata shell (not the destroyed infrastructure), then permanently purged.\n\nConfirmation is required: send a `confirm` field whose value exactly matches the account's name. Returns `202 Accepted` because teardown runs asynchronously. The call is idempotent: repeating it on an already-deleted account returns `202` without requiring the confirmation again.\n## Request Schema (application/json)\n\nproperties:\n  confirm:\n    description: A safety confirmation for this irreversible action. Must exactly\n      match the account's `name`.\n    example: Acme Inc\n    type: string\nrequired:\n- confirm\ntype: object\n"),
-				Example: examples,
-				Args:    cobra.MinimumNArgs(1),
-				Run: func(cmd *cobra.Command, args []string) {
-
-					_, decoded, err := OpenapiDeleteAnAccount(args[0], params)
 					if err != nil {
 						log.Fatal().Err(err).Msg("Error calling operation")
 					}
@@ -6448,6 +6536,78 @@ func openapiRegister(subcommand bool) {
 			var examples string
 
 			cmd := &cobra.Command{
+				Use:     "avatar account-id",
+				Short:   "Remove the account avatar",
+				Long:    cli.Markdown("Removes the account's avatar. Requires the `admin` or `owner` role on the account.\n\nAfter this the account's `avatar_url` is `null` and clients render their own placeholder. Removing an avatar that is not set succeeds the same way."),
+				Example: examples,
+				Args:    cobra.MinimumNArgs(1),
+				Run: func(cmd *cobra.Command, args []string) {
+
+					_, decoded, err := OpenapiRemoveTheAccountAvatar(args[0], params)
+					if err != nil {
+						log.Fatal().Err(err).Msg("Error calling operation")
+					}
+
+					if err := cli.Formatter.Format(decoded); err != nil {
+						log.Fatal().Err(err).Msg("Formatting failed")
+					}
+
+				},
+			}
+			groupCmd.AddCommand(cmd)
+
+			cli.SetCustomFlags(cmd)
+
+			if cmd.Flags().HasFlags() {
+				params.BindPFlags(cmd.Flags())
+			}
+
+		}()
+
+		func() {
+			params := viper.New()
+
+			var examples string
+
+			cmd := &cobra.Command{
+				Use:     "avatar account-id",
+				Short:   "Set the account avatar",
+				Long:    cli.Markdown("Uploads an image to use as the account's avatar and returns the updated account. Requires the `admin` or `owner` role on the account.\n\nSend the image as multipart form data under the `avatar` field. An account has at most one avatar, so uploading again replaces the current one.\n\nThe `avatar_url` on the response is temporary and expires a few hours after it is issued. Re-read the account to get a fresh one rather than storing it.\n## Request Schema (multipart/form-data)\n\nproperties:\n  avatar:\n    description: Must be an image. Must not be greater than 2048 kilobytes.\n    format: binary\n    type: string\nrequired:\n- avatar\ntype: object\n"),
+				Example: examples,
+				Args:    cobra.MinimumNArgs(1),
+				Run: func(cmd *cobra.Command, args []string) {
+					body, err := cli.GetBody("multipart/form-data", args[1:])
+					if err != nil {
+						log.Fatal().Err(err).Msg("Unable to get body")
+					}
+
+					_, decoded, err := OpenapiSetTheAccountAvatar(args[0], params, body)
+					if err != nil {
+						log.Fatal().Err(err).Msg("Error calling operation")
+					}
+
+					if err := cli.Formatter.Format(decoded); err != nil {
+						log.Fatal().Err(err).Msg("Formatting failed")
+					}
+
+				},
+			}
+			groupCmd.AddCommand(cmd)
+
+			cli.SetCustomFlags(cmd)
+
+			if cmd.Flags().HasFlags() {
+				params.BindPFlags(cmd.Flags())
+			}
+
+		}()
+
+		func() {
+			params := viper.New()
+
+			var examples string
+
+			cmd := &cobra.Command{
 				Use:     "handbook account-id",
 				Short:   "Get the handbook tree",
 				Long:    cli.Markdown("Returns the account's entire handbook as one nested tree of pages and playbooks. Each node carries a `type` of `page` or `playbook`. Page nodes hold `{id, title, description, position, has_body, updated_at, children}`; their markdown body is omitted (fetch it from the page endpoint). Playbook nodes are always leaves and hold `{id, title, description, position, disabled_at, has_draft, active_version, task_count}`. Within a parent, pages and playbooks share one ordering: `position` ascending, ties broken by creation time. Archived playbooks are excluded."),
@@ -6484,7 +6644,7 @@ func openapiRegister(subcommand bool) {
 			cmd := &cobra.Command{
 				Use:     "handbook account-id",
 				Short:   "Reorder the handbook",
-				Long:    cli.Markdown("Reorders one parent's children in a single atomic write. Send the page whose children you are ordering (`parent_page_id`, or null for the top level) and the complete ordered list of its children as `{type, id}` pairs; positions are assigned from the array order. The list must contain exactly that parent's current children. To move an item under a different parent, update the page or playbook itself first. Returns the updated handbook tree.\n## Request Schema (application/json)\n\nproperties:\n  children:\n    description: 'The complete ordered list of that parent''s children, each as `{type,\n      id}` with `type` of `page` or `playbook`. Must contain exactly the parent''s\n      current children: no additions, omissions, or items from other parents (move\n      items between parents first, via the page or playbook update endpoints). Positions\n      are assigned from the array order in one atomic write. Must have at least 1\n      items. Must not have more than 500 items.'\n    example: null\n    items:\n      properties:\n        id:\n          description: Must be a valid UUID.\n          example: 6ff8f7f6-1eb3-3525-be4a-3932c805afed\n          type: string\n        type:\n          description: \"\"\n          enum:\n          - page\n          - playbook\n          example: playbook\n          type: string\n      required:\n      - type\n      - id\n      type: object\n    type: array\n  parent_page_id:\n    description: The page whose children are being reordered. Pass null to reorder\n      the top level of the handbook. Must be a valid UUID.\n    example: null\n    nullable: true\n    type: string\nrequired:\n- children\ntype: object\n"),
+				Long:    cli.Markdown("Reorders one parent's children in a single atomic write. Send the page whose children you are ordering (`parent_page_id`, or null for the top level) and the complete ordered list of its children as `{type, id}` pairs; positions are assigned from the array order. The list must contain exactly that parent's current children. To move an item under a different parent, update the page or playbook itself first. Returns the updated handbook tree.\n## Request Schema (application/json)\n\nproperties:\n  children:\n    description: 'The complete ordered list of that parent''s children, each as `{type,\n      id}` with `type` of `page` or `playbook`. Must contain exactly the parent''s\n      current children: no additions, omissions, or items from other parents (move\n      items between parents first, via the page or playbook update endpoints). Positions\n      are assigned from the array order in one atomic write. Must have at least 1\n      items. Must not have more than 500 items.'\n    example: null\n    items:\n      properties:\n        id:\n          description: Must be a valid UUID.\n          example: 6ff8f7f6-1eb3-3525-be4a-3932c805afed\n          type: string\n        type:\n          description: \"\"\n          enum:\n          - page\n          - playbook\n          example: page\n          type: string\n      required:\n      - type\n      - id\n      type: object\n    type: array\n  parent_page_id:\n    description: The page whose children are being reordered. Pass null to reorder\n      the top level of the handbook. Must be a valid UUID.\n    example: null\n    nullable: true\n    type: string\nrequired:\n- children\ntype: object\n"),
 				Example: examples,
 				Args:    cobra.MinimumNArgs(1),
 				Run: func(cmd *cobra.Command, args []string) {
@@ -6646,6 +6806,40 @@ func openapiRegister(subcommand bool) {
 			var examples string
 
 			cmd := &cobra.Command{
+				Use:     "delete account-id agent-user-id",
+				Short:   "Disable an agent",
+				Long:    cli.Markdown("Disables an agent. Offboarding is a disable, never a delete: the agent keeps its id and history and is never reallocated, but it can no longer be chosen for new work. Idempotent: disabling an already-disabled agent still returns 204. Admin-only."),
+				Example: examples,
+				Args:    cobra.MinimumNArgs(2),
+				Run: func(cmd *cobra.Command, args []string) {
+
+					_, decoded, err := OpenapiDisableAnAgent(args[0], args[1], params)
+					if err != nil {
+						log.Fatal().Err(err).Msg("Error calling operation")
+					}
+
+					if err := cli.Formatter.Format(decoded); err != nil {
+						log.Fatal().Err(err).Msg("Formatting failed")
+					}
+
+				},
+			}
+			groupCmd.AddCommand(cmd)
+
+			cli.SetCustomFlags(cmd)
+
+			if cmd.Flags().HasFlags() {
+				params.BindPFlags(cmd.Flags())
+			}
+
+		}()
+
+		func() {
+			params := viper.New()
+
+			var examples string
+
+			cmd := &cobra.Command{
 				Use:     "get account-id agent-user-id",
 				Short:   "Get an agent",
 				Long:    cli.Markdown("Returns a single agent, including a disabled one."),
@@ -6692,40 +6886,6 @@ func openapiRegister(subcommand bool) {
 					}
 
 					_, decoded, err := OpenapiUpdateAnAgent(args[0], args[1], params, body)
-					if err != nil {
-						log.Fatal().Err(err).Msg("Error calling operation")
-					}
-
-					if err := cli.Formatter.Format(decoded); err != nil {
-						log.Fatal().Err(err).Msg("Formatting failed")
-					}
-
-				},
-			}
-			groupCmd.AddCommand(cmd)
-
-			cli.SetCustomFlags(cmd)
-
-			if cmd.Flags().HasFlags() {
-				params.BindPFlags(cmd.Flags())
-			}
-
-		}()
-
-		func() {
-			params := viper.New()
-
-			var examples string
-
-			cmd := &cobra.Command{
-				Use:     "delete account-id agent-user-id",
-				Short:   "Disable an agent",
-				Long:    cli.Markdown("Disables an agent. Offboarding is a disable, never a delete: the agent keeps its id and history and is never reallocated, but it can no longer be chosen for new work. Idempotent: disabling an already-disabled agent still returns 204. Admin-only."),
-				Example: examples,
-				Args:    cobra.MinimumNArgs(2),
-				Run: func(cmd *cobra.Command, args []string) {
-
-					_, decoded, err := OpenapiDisableAnAgent(args[0], args[1], params)
 					if err != nil {
 						log.Fatal().Err(err).Msg("Error calling operation")
 					}
@@ -6935,18 +7095,14 @@ func openapiRegister(subcommand bool) {
 			var examples string
 
 			cmd := &cobra.Command{
-				Use:     "create account-id",
-				Short:   "Create a collector",
-				Long:    cli.Markdown("Create a new collector. The response includes the full `url` to paste into the\nexternal system's webhook settings. The URL carries the collector's secret, so\ntreat it as a credential: anyone who can reach it can post events to your account.\nYou can read the URL again at any time by listing collectors; rotate the secret if\nit ever leaks.\n## Request Schema (application/json)\n\nproperties:\n  name:\n    description: A human-readable label, shown in the collector list so you can tell\n      your inbound webhooks apart. Must not be greater than 255 characters.\n    example: Sentry (prod)\n    type: string\n  signature_header:\n    description: The request header that carries the signature to verify against `signing_secret`.\n      Defaults to `X-Hub-Signature-256` when omitted. Must not be greater than 255\n      characters.\n    example: null\n    nullable: true\n    type: string\n  signing_secret:\n    description: 'Optional. When set, deliveries must carry a valid signature: the\n      platform rejects any delivery whose signature header does not match an HMAC-SHA256\n      of the raw request body computed with this secret. Leave unset to accept deliveries\n      without verification. Must not be greater than 500 characters.'\n    example: null\n    nullable: true\n    type: string\n  source:\n    description: The label stamped as the `source` on every event this collector ingests.\n      Choose the name of the system that will deliver to it, for example `sentry`\n      or `linear`. Your automation matches on this. Must not be greater than 255 characters.\n    example: sentry\n    type: string\n  type_key:\n    description: Required when `type_strategy` is `header` or `path`. The header name\n      (for `header`) or dotted JSON path into the body (for `path`) to read the event\n      type from. This field is required when <code>type_strategy</code> is <code>header</code>\n      or <code>path</code>. Must not be greater than 255 characters.\n    example: null\n    nullable: true\n    type: string\n  type_strategy:\n    description: |-\n      How the event `type` is derived from each delivery:\n\n      - `fixed`: always `{source}.webhook` (default, no configuration).\n      - `header`: the value of the request header named by `type_key`.\n      - `path`: the value at the dotted JSON path `type_key` in the body.\n\n      With `header` or `path`, deliveries that lack the configured value fall back to `{source}.webhook`.\n    enum:\n    - fixed\n    - header\n    - path\n    example: null\n    type: string\nrequired:\n- name\n- source\ntype: object\n"),
+				Use:     "list account-id",
+				Short:   "List collectors",
+				Long:    cli.Markdown("Returns the account's inbound webhook collectors, most recent first. Each includes its full `url` so it can be copied again at any time."),
 				Example: examples,
 				Args:    cobra.MinimumNArgs(1),
 				Run: func(cmd *cobra.Command, args []string) {
-					body, err := cli.GetBody("application/json", args[1:])
-					if err != nil {
-						log.Fatal().Err(err).Msg("Unable to get body")
-					}
 
-					_, decoded, err := OpenapiCreateACollector(args[0], params, body)
+					_, decoded, err := OpenapiListCollectors(args[0], params)
 					if err != nil {
 						log.Fatal().Err(err).Msg("Error calling operation")
 					}
@@ -6973,14 +7129,18 @@ func openapiRegister(subcommand bool) {
 			var examples string
 
 			cmd := &cobra.Command{
-				Use:     "list account-id",
-				Short:   "List collectors",
-				Long:    cli.Markdown("Returns the account's inbound webhook collectors, most recent first. Each includes its full `url` so it can be copied again at any time."),
+				Use:     "create account-id",
+				Short:   "Create a collector",
+				Long:    cli.Markdown("Create a new collector. The response includes the full `url` to paste into the\nexternal system's webhook settings. The URL carries the collector's secret, so\ntreat it as a credential: anyone who can reach it can post events to your account.\nYou can read the URL again at any time by listing collectors; rotate the secret if\nit ever leaks.\n## Request Schema (application/json)\n\nproperties:\n  name:\n    description: A human-readable label, shown in the collector list so you can tell\n      your inbound webhooks apart. Must not be greater than 255 characters.\n    example: Sentry (prod)\n    type: string\n  signature_header:\n    description: The request header that carries the signature to verify against `signing_secret`.\n      Defaults to `X-Hub-Signature-256` when omitted. Must not be greater than 255\n      characters.\n    example: null\n    nullable: true\n    type: string\n  signing_secret:\n    description: 'Optional. When set, deliveries must carry a valid signature: the\n      platform rejects any delivery whose signature header does not match an HMAC-SHA256\n      of the raw request body computed with this secret. Leave unset to accept deliveries\n      without verification. Must not be greater than 500 characters.'\n    example: null\n    nullable: true\n    type: string\n  source:\n    description: The label stamped as the `source` on every event this collector ingests.\n      Choose the name of the system that will deliver to it, for example `sentry`\n      or `linear`. Your automation matches on this. Must not be greater than 255 characters.\n    example: sentry\n    type: string\n  type_key:\n    description: Required when `type_strategy` is `header` or `path`. The header name\n      (for `header`) or dotted JSON path into the body (for `path`) to read the event\n      type from. This field is required when <code>type_strategy</code> is <code>header</code>\n      or <code>path</code>. Must not be greater than 255 characters.\n    example: null\n    nullable: true\n    type: string\n  type_strategy:\n    description: |-\n      How the event `type` is derived from each delivery:\n\n      - `fixed`: always `{source}.webhook` (default, no configuration).\n      - `header`: the value of the request header named by `type_key`.\n      - `path`: the value at the dotted JSON path `type_key` in the body.\n\n      With `header` or `path`, deliveries that lack the configured value fall back to `{source}.webhook`.\n    enum:\n    - fixed\n    - header\n    - path\n    example: null\n    type: string\nrequired:\n- name\n- source\ntype: object\n"),
 				Example: examples,
 				Args:    cobra.MinimumNArgs(1),
 				Run: func(cmd *cobra.Command, args []string) {
+					body, err := cli.GetBody("application/json", args[1:])
+					if err != nil {
+						log.Fatal().Err(err).Msg("Unable to get body")
+					}
 
-					_, decoded, err := OpenapiListCollectors(args[0], params)
+					_, decoded, err := OpenapiCreateACollector(args[0], params, body)
 					if err != nil {
 						log.Fatal().Err(err).Msg("Error calling operation")
 					}
@@ -7088,46 +7248,6 @@ func openapiRegister(subcommand bool) {
 			var examples string
 
 			cmd := &cobra.Command{
-				Use:     "create account-id",
-				Short:   "Create an environment",
-				Long:    cli.Markdown("Creates a new environment. If a manifest is provided, a snapshot is generated automatically for faster VM boot times. Manifests that reference `${secrets.NAME}` are rejected at this stage because no secrets are configured yet on a brand-new environment; create the environment without secret references, POST the secrets, then PATCH the manifest in.\n## Request Schema (application/json)\n\nproperties:\n  description:\n    description: Optional description of what this environment is for. Must not be\n      greater than 5000 characters.\n    example: Node.js API with PostgreSQL and Redis\n    nullable: true\n    type: string\n  manifest:\n    allOf:\n    - $ref: '#/components/schemas/AesManifest'\n    description: AES manifest defining the VM platform, sources, setup, services,\n      and health checks.\n  mcp_servers:\n    description: 'MCP servers available to the coding agent during sessions on this\n      environment, as an object mapping each server''s name to a definition. Two kinds:\n      a **remote** server is `{url, headers}` (an https endpoint the agent connects\n      to; header values may reference environment secrets as `${secrets.NAME}`), and\n      a **sandbox** server is `{command, args, env}` (a stdio MCP server the platform\n      runs inside the session VM next to your code and tools; env values may reference\n      environment secrets). The kind is inferred from the shape, or set explicitly\n      with `kind`. The server name becomes the tool namespace the agent sees, so pick\n      something recognizable like `sentry` or `linear`. Not part of the manifest:\n      changing it never regenerates the environment''s snapshot and takes effect on\n      the next session turn.'\n    example: null\n    nullable: true\n    properties: {}\n    type: object\n  name:\n    description: A human-readable name for the environment. Must not be greater than\n      255 characters.\n    example: Production API\n    type: string\n  visibility:\n    description: |-\n      Who in the account can see and use the new environment. Defaults to `private`. One of:\n\n      - `private`: only you can see, use, or change it.\n      - `account_read`: any account member can see it and use it; only you can edit or delete.\n      - `account_edit`: any account member can see, use, edit, and delete it.\n    enum:\n    - private\n    - account_read\n    - account_edit\n    example: private\n    type: string\nrequired:\n- name\ntype: object\n"),
-				Example: examples,
-				Args:    cobra.MinimumNArgs(1),
-				Run: func(cmd *cobra.Command, args []string) {
-					body, err := cli.GetBody("application/json", args[1:])
-					if err != nil {
-						log.Fatal().Err(err).Msg("Unable to get body")
-					}
-
-					_, decoded, err := OpenapiCreateAnEnvironment(args[0], params, body)
-					if err != nil {
-						log.Fatal().Err(err).Msg("Error calling operation")
-					}
-
-					if err := cli.Formatter.Format(decoded); err != nil {
-						log.Fatal().Err(err).Msg("Formatting failed")
-					}
-
-				},
-			}
-			groupCmd.AddCommand(cmd)
-
-			cmd.Flags().String("idempotency-key", "", "")
-
-			cli.SetCustomFlags(cmd)
-
-			if cmd.Flags().HasFlags() {
-				params.BindPFlags(cmd.Flags())
-			}
-
-		}()
-
-		func() {
-			params := viper.New()
-
-			var examples string
-
-			cmd := &cobra.Command{
 				Use:     "list account-id",
 				Short:   "List environments",
 				Long:    cli.Markdown("Returns all environments for the account."),
@@ -7164,18 +7284,18 @@ func openapiRegister(subcommand bool) {
 			var examples string
 
 			cmd := &cobra.Command{
-				Use:     "update account-id environment-id",
-				Short:   "Update an environment",
-				Long:    cli.Markdown("Updates an environment. If the manifest changes, the snapshot is regenerated automatically.\n## Request Schema (application/json)\n\nproperties:\n  description:\n    description: Optional description of what this environment is for. Must not be\n      greater than 5000 characters.\n    example: Node.js API with PostgreSQL and Redis\n    nullable: true\n    type: string\n  manifest:\n    allOf:\n    - $ref: '#/components/schemas/AesManifest'\n    description: AES manifest defining the VM platform, sources, setup, services,\n      and health checks.\n  mcp_servers:\n    description: 'MCP servers available to the coding agent during sessions on this\n      environment, as an object mapping each server''s name to a definition. Two kinds:\n      a **remote** server is `{url, headers}` (an https endpoint the agent connects\n      to; header values may reference environment secrets as `${secrets.NAME}`), and\n      a **sandbox** server is `{command, args, env}` (a stdio MCP server the platform\n      runs inside the session VM next to your code and tools; env values may reference\n      environment secrets). The kind is inferred from the shape, or set explicitly\n      with `kind`. Replaces the whole map when present; pass `null` to remove all\n      servers. Not part of the manifest: changing it never regenerates the environment''s\n      snapshot and takes effect on the next session turn.'\n    example: null\n    nullable: true\n    properties: {}\n    type: object\n  name:\n    description: A human-readable name for the environment. Must not be greater than\n      255 characters.\n    example: Production API\n    type: string\n  visibility:\n    description: |-\n      Who in the account can see and use this environment. Only the creator can change this. One of:\n\n      - `private`: only you can see, use, or change it.\n      - `account_read`: any account member can see it and use it; only you can edit or delete.\n      - `account_edit`: any account member can see, use, edit, and delete it.\n    enum:\n    - private\n    - account_read\n    - account_edit\n    example: account_read\n    type: string\ntype: object\n"),
+				Use:     "create account-id",
+				Short:   "Create an environment",
+				Long:    cli.Markdown("Creates a new environment. If a manifest is provided, a snapshot is generated automatically for faster VM boot times. Manifests that reference `${secrets.NAME}` are rejected at this stage because no secrets are configured yet on a brand-new environment; create the environment without secret references, POST the secrets, then PATCH the manifest in.\n## Request Schema (application/json)\n\nproperties:\n  description:\n    description: Optional description of what this environment is for. Must not be\n      greater than 5000 characters.\n    example: Node.js API with PostgreSQL and Redis\n    nullable: true\n    type: string\n  manifest:\n    allOf:\n    - $ref: '#/components/schemas/AesManifest'\n    description: AES manifest defining the VM platform, sources, setup, services,\n      and health checks.\n  mcp_servers:\n    description: 'MCP servers available to the coding agent during sessions on this\n      environment, as an object mapping each server''s name to a definition. Two kinds:\n      a **remote** server is `{url, headers}` (an https endpoint the agent connects\n      to; header values may reference environment secrets as `${secrets.NAME}`), and\n      a **sandbox** server is `{command, args, env}` (a stdio MCP server the platform\n      runs inside the session VM next to your code and tools; env values may reference\n      environment secrets). The kind is inferred from the shape, or set explicitly\n      with `kind`. The server name becomes the tool namespace the agent sees, so pick\n      something recognizable like `sentry` or `linear`. Not part of the manifest:\n      changing it never regenerates the environment''s snapshot and takes effect on\n      the next session turn.'\n    example: null\n    nullable: true\n    properties: {}\n    type: object\n  name:\n    description: A human-readable name for the environment. Must not be greater than\n      255 characters.\n    example: Production API\n    type: string\n  visibility:\n    description: |-\n      Who in the account can see and use the new environment. Defaults to `private`. One of:\n\n      - `private`: only you can see, use, or change it.\n      - `account_read`: any account member can see it and use it; only you can edit or delete.\n      - `account_edit`: any account member can see, use, edit, and delete it.\n    enum:\n    - private\n    - account_read\n    - account_edit\n    example: private\n    type: string\nrequired:\n- name\ntype: object\n"),
 				Example: examples,
-				Args:    cobra.MinimumNArgs(2),
+				Args:    cobra.MinimumNArgs(1),
 				Run: func(cmd *cobra.Command, args []string) {
-					body, err := cli.GetBody("application/json", args[2:])
+					body, err := cli.GetBody("application/json", args[1:])
 					if err != nil {
 						log.Fatal().Err(err).Msg("Unable to get body")
 					}
 
-					_, decoded, err := OpenapiUpdateAnEnvironment(args[0], args[1], params, body)
+					_, decoded, err := OpenapiCreateAnEnvironment(args[0], params, body)
 					if err != nil {
 						log.Fatal().Err(err).Msg("Error calling operation")
 					}
@@ -7187,6 +7307,8 @@ func openapiRegister(subcommand bool) {
 				},
 			}
 			groupCmd.AddCommand(cmd)
+
+			cmd.Flags().String("idempotency-key", "", "")
 
 			cli.SetCustomFlags(cmd)
 
@@ -7244,6 +7366,44 @@ func openapiRegister(subcommand bool) {
 				Run: func(cmd *cobra.Command, args []string) {
 
 					_, decoded, err := OpenapiGetAnEnvironment(args[0], args[1], params)
+					if err != nil {
+						log.Fatal().Err(err).Msg("Error calling operation")
+					}
+
+					if err := cli.Formatter.Format(decoded); err != nil {
+						log.Fatal().Err(err).Msg("Formatting failed")
+					}
+
+				},
+			}
+			groupCmd.AddCommand(cmd)
+
+			cli.SetCustomFlags(cmd)
+
+			if cmd.Flags().HasFlags() {
+				params.BindPFlags(cmd.Flags())
+			}
+
+		}()
+
+		func() {
+			params := viper.New()
+
+			var examples string
+
+			cmd := &cobra.Command{
+				Use:     "update account-id environment-id",
+				Short:   "Update an environment",
+				Long:    cli.Markdown("Updates an environment. If the manifest changes, the snapshot is regenerated automatically.\n## Request Schema (application/json)\n\nproperties:\n  description:\n    description: Optional description of what this environment is for. Must not be\n      greater than 5000 characters.\n    example: Node.js API with PostgreSQL and Redis\n    nullable: true\n    type: string\n  manifest:\n    allOf:\n    - $ref: '#/components/schemas/AesManifest'\n    description: AES manifest defining the VM platform, sources, setup, services,\n      and health checks.\n  mcp_servers:\n    description: 'MCP servers available to the coding agent during sessions on this\n      environment, as an object mapping each server''s name to a definition. Two kinds:\n      a **remote** server is `{url, headers}` (an https endpoint the agent connects\n      to; header values may reference environment secrets as `${secrets.NAME}`), and\n      a **sandbox** server is `{command, args, env}` (a stdio MCP server the platform\n      runs inside the session VM next to your code and tools; env values may reference\n      environment secrets). The kind is inferred from the shape, or set explicitly\n      with `kind`. Replaces the whole map when present; pass `null` to remove all\n      servers. Not part of the manifest: changing it never regenerates the environment''s\n      snapshot and takes effect on the next session turn.'\n    example: null\n    nullable: true\n    properties: {}\n    type: object\n  name:\n    description: A human-readable name for the environment. Must not be greater than\n      255 characters.\n    example: Production API\n    type: string\n  visibility:\n    description: |-\n      Who in the account can see and use this environment. Only the creator can change this. One of:\n\n      - `private`: only you can see, use, or change it.\n      - `account_read`: any account member can see it and use it; only you can edit or delete.\n      - `account_edit`: any account member can see, use, edit, and delete it.\n    enum:\n    - private\n    - account_read\n    - account_edit\n    example: account_read\n    type: string\ntype: object\n"),
+				Example: examples,
+				Args:    cobra.MinimumNArgs(2),
+				Run: func(cmd *cobra.Command, args []string) {
+					body, err := cli.GetBody("application/json", args[2:])
+					if err != nil {
+						log.Fatal().Err(err).Msg("Unable to get body")
+					}
+
+					_, decoded, err := OpenapiUpdateAnEnvironment(args[0], args[1], params, body)
 					if err != nil {
 						log.Fatal().Err(err).Msg("Error calling operation")
 					}
@@ -7589,6 +7749,42 @@ func openapiRegister(subcommand bool) {
 			var examples string
 
 			cmd := &cobra.Command{
+				Use:     "list account-id environment-id",
+				Short:   "List secrets for an environment",
+				Long:    cli.Markdown("Returns every secret on the given environment, oldest first. Metadata only: values are never returned. Paginated."),
+				Example: examples,
+				Args:    cobra.MinimumNArgs(2),
+				Run: func(cmd *cobra.Command, args []string) {
+
+					_, decoded, err := OpenapiListSecretsForAnEnvironment(args[0], args[1], params)
+					if err != nil {
+						log.Fatal().Err(err).Msg("Error calling operation")
+					}
+
+					if err := cli.Formatter.Format(decoded); err != nil {
+						log.Fatal().Err(err).Msg("Formatting failed")
+					}
+
+				},
+			}
+			groupCmd.AddCommand(cmd)
+
+			cmd.Flags().Int64("per-page", 0, "Results per page (max 100).")
+
+			cli.SetCustomFlags(cmd)
+
+			if cmd.Flags().HasFlags() {
+				params.BindPFlags(cmd.Flags())
+			}
+
+		}()
+
+		func() {
+			params := viper.New()
+
+			var examples string
+
+			cmd := &cobra.Command{
 				Use:     "create account-id environment-id",
 				Short:   "Create a secret",
 				Long:    cli.Markdown("Encrypts and stores a new secret on the environment. Reference the value from any string-valued field of an environment manifest as `${secrets.NAME}`; e.g. inside a service's env block: `env: { STRIPE_KEY: \"${secrets.STRIPE_KEY}\" }`. The response contains metadata only; the submitted value is unrecoverable through any read endpoint after this call returns.\n## Request Schema (application/json)\n\nproperties:\n  name:\n    description: Reference key the value can be substituted under inside an environment\n      manifest. Must start with an uppercase letter and contain only uppercase letters,\n      digits, and underscores. Maximum 255 characters. The names `PATH`, `HOME`, `USER`,\n      `SHELL`, and `LD_PRELOAD` are reserved and rejected because substituting them\n      would either clobber a process-level environment variable the runtime depends\n      on or weaponise the dynamic linker. Must match the regex /^[A-Z][A-Z0-9_]*$/.\n      Must not be greater than 255 characters.\n    example: STRIPE_API_KEY\n    type: string\n  value:\n    description: The secret value to encrypt and store. Multi-line values are supported\n      (PEM keys, JSON service accounts, and so on). Maximum 64 KiB. Once stored, values\n      are never returned by any endpoint; rotation is the only way to recover from\n      a lost value.\n    example: No-example\n    type: string\nrequired:\n- name\n- value\ntype: object\n"),
@@ -7614,42 +7810,6 @@ func openapiRegister(subcommand bool) {
 			groupCmd.AddCommand(cmd)
 
 			cmd.Flags().String("idempotency-key", "", "")
-
-			cli.SetCustomFlags(cmd)
-
-			if cmd.Flags().HasFlags() {
-				params.BindPFlags(cmd.Flags())
-			}
-
-		}()
-
-		func() {
-			params := viper.New()
-
-			var examples string
-
-			cmd := &cobra.Command{
-				Use:     "list account-id environment-id",
-				Short:   "List secrets for an environment",
-				Long:    cli.Markdown("Returns every secret on the given environment, oldest first. Metadata only: values are never returned. Paginated."),
-				Example: examples,
-				Args:    cobra.MinimumNArgs(2),
-				Run: func(cmd *cobra.Command, args []string) {
-
-					_, decoded, err := OpenapiListSecretsForAnEnvironment(args[0], args[1], params)
-					if err != nil {
-						log.Fatal().Err(err).Msg("Error calling operation")
-					}
-
-					if err := cli.Formatter.Format(decoded); err != nil {
-						log.Fatal().Err(err).Msg("Formatting failed")
-					}
-
-				},
-			}
-			groupCmd.AddCommand(cmd)
-
-			cmd.Flags().Int64("per-page", 0, "Results per page (max 100).")
 
 			cli.SetCustomFlags(cmd)
 
@@ -8119,14 +8279,18 @@ func openapiRegister(subcommand bool) {
 			var examples string
 
 			cmd := &cobra.Command{
-				Use:     "get token",
-				Short:   "Show an invitation",
-				Long:    cli.Markdown("Returns the metadata for an invitation so the client can show \"you've been invited to Acme by Jane\".\nThis endpoint is public (no authentication required); the invitation token is the secret.\n\nReturns 404 if no invitation matches the token, or 410 if the invitation has been accepted or has expired."),
+				Use:     "update token",
+				Short:   "Accept an invitation",
+				Long:    cli.Markdown("Transitions the invitation to the `accepted` state and attaches the authenticated user to the\naccount with the invited role. The authenticated user's email must match the invitation email\nexactly. If the user was previously removed from the account, accepting restores their\nmembership under the role from the invitation.\n\nBody: `{\"status\": \"accepted\"}`.\n## Request Schema (application/json)\n\nproperties:\n  status:\n    description: The desired invitation status. Currently only `accepted` is supported.\n    enum:\n    - accepted\n    example: accepted\n    type: string\nrequired:\n- status\ntype: object\n"),
 				Example: examples,
 				Args:    cobra.MinimumNArgs(1),
 				Run: func(cmd *cobra.Command, args []string) {
+					body, err := cli.GetBody("application/json", args[1:])
+					if err != nil {
+						log.Fatal().Err(err).Msg("Unable to get body")
+					}
 
-					_, decoded, err := OpenapiShowAnInvitation(args[0], params)
+					_, decoded, err := OpenapiAcceptAnInvitation(args[0], params, body)
 					if err != nil {
 						log.Fatal().Err(err).Msg("Error calling operation")
 					}
@@ -8153,18 +8317,14 @@ func openapiRegister(subcommand bool) {
 			var examples string
 
 			cmd := &cobra.Command{
-				Use:     "update token",
-				Short:   "Accept an invitation",
-				Long:    cli.Markdown("Transitions the invitation to the `accepted` state and attaches the authenticated user to the\naccount with the invited role. The authenticated user's email must match the invitation email\nexactly. If the user was previously removed from the account, accepting restores their\nmembership under the role from the invitation.\n\nBody: `{\"status\": \"accepted\"}`.\n## Request Schema (application/json)\n\nproperties:\n  status:\n    description: The desired invitation status. Currently only `accepted` is supported.\n    enum:\n    - accepted\n    example: accepted\n    type: string\nrequired:\n- status\ntype: object\n"),
+				Use:     "get token",
+				Short:   "Show an invitation",
+				Long:    cli.Markdown("Returns the metadata for an invitation so the client can show \"you've been invited to Acme by Jane\".\nThis endpoint is public (no authentication required); the invitation token is the secret.\n\nReturns 404 if no invitation matches the token, or 410 if the invitation has been accepted or has expired."),
 				Example: examples,
 				Args:    cobra.MinimumNArgs(1),
 				Run: func(cmd *cobra.Command, args []string) {
-					body, err := cli.GetBody("application/json", args[1:])
-					if err != nil {
-						log.Fatal().Err(err).Msg("Unable to get body")
-					}
 
-					_, decoded, err := OpenapiAcceptAnInvitation(args[0], params, body)
+					_, decoded, err := OpenapiShowAnInvitation(args[0], params)
 					if err != nil {
 						log.Fatal().Err(err).Msg("Error calling operation")
 					}
@@ -8200,14 +8360,18 @@ func openapiRegister(subcommand bool) {
 			var examples string
 
 			cmd := &cobra.Command{
-				Use:     "list account-id",
-				Short:   "List event keys",
-				Long:    cli.Markdown("Returns the account's event keys, most recent first. The key value itself is never returned; only metadata."),
+				Use:     "create account-id",
+				Short:   "Create an event key",
+				Long:    cli.Markdown("Create a new event key. The plaintext key is returned **only in this response**;\nstore it securely, because it cannot be retrieved again. Send it as a bearer token\nwhen ingesting events: `Authorization: Bearer {key}`.\n## Request Schema (application/json)\n\nproperties:\n  name:\n    description: A human-readable label for the key.\n    example: GitHub webhooks\n    type: string\nrequired:\n- name\ntype: object\n"),
 				Example: examples,
 				Args:    cobra.MinimumNArgs(1),
 				Run: func(cmd *cobra.Command, args []string) {
+					body, err := cli.GetBody("application/json", args[1:])
+					if err != nil {
+						log.Fatal().Err(err).Msg("Unable to get body")
+					}
 
-					_, decoded, err := OpenapiListEventKeys(args[0], params)
+					_, decoded, err := OpenapiCreateAnEventKey(args[0], params, body)
 					if err != nil {
 						log.Fatal().Err(err).Msg("Error calling operation")
 					}
@@ -8234,18 +8398,14 @@ func openapiRegister(subcommand bool) {
 			var examples string
 
 			cmd := &cobra.Command{
-				Use:     "create account-id",
-				Short:   "Create an event key",
-				Long:    cli.Markdown("Create a new event key. The plaintext key is returned **only in this response**;\nstore it securely, because it cannot be retrieved again. Send it as a bearer token\nwhen ingesting events: `Authorization: Bearer {key}`.\n## Request Schema (application/json)\n\nproperties:\n  name:\n    description: A human-readable label for the key.\n    example: GitHub webhooks\n    type: string\nrequired:\n- name\ntype: object\n"),
+				Use:     "list account-id",
+				Short:   "List event keys",
+				Long:    cli.Markdown("Returns the account's event keys, most recent first. The key value itself is never returned; only metadata."),
 				Example: examples,
 				Args:    cobra.MinimumNArgs(1),
 				Run: func(cmd *cobra.Command, args []string) {
-					body, err := cli.GetBody("application/json", args[1:])
-					if err != nil {
-						log.Fatal().Err(err).Msg("Unable to get body")
-					}
 
-					_, decoded, err := OpenapiCreateAnEventKey(args[0], params, body)
+					_, decoded, err := OpenapiListEventKeys(args[0], params)
 					if err != nil {
 						log.Fatal().Err(err).Msg("Error calling operation")
 					}
@@ -8663,6 +8823,44 @@ func openapiRegister(subcommand bool) {
 			var examples string
 
 			cmd := &cobra.Command{
+				Use:     "update account-id pipeline-id",
+				Short:   "Update pipeline metadata",
+				Long:    cli.Markdown("Updates the pipeline's display name, description, or routing on/off state. These settings take effect immediately. The pipeline's steps and triggers themselves change through publishing a new version, not through this endpoint. Passing `archived: false` restores an archived pipeline: it comes back disabled (triggers stay cleared until enabled), renamed with a numeric suffix if another pipeline claimed its name in the meantime.\n## Request Schema (application/json)\n\nproperties:\n  archived:\n    description: Pass false to restore an archived pipeline. It comes back disabled\n      (its triggers stay cleared until you enable it), and if another pipeline claimed\n      its name in the meantime the restored one is renamed with a numeric suffix.\n      Archiving goes through DELETE.\n    example: null\n    type: boolean\n  description:\n    description: New description. Pass null to clear. Must not be greater than 2000\n      characters.\n    example: null\n    nullable: true\n    type: string\n  disabled:\n    description: Pause or resume routing. `true` clears the pipeline's triggers from\n      the routing index so it spawns no new tasks but stays visible and editable;\n      `false` re-materialises them. Already-running tasks continue either way. Idempotent.\n    example: true\n    type: boolean\n  linked_page_ids:\n    description: Must be a valid UUID.\n    example:\n    - 6ff8f7f6-1eb3-3525-be4a-3932c805afed\n    items:\n      type: string\n    type: array\n  name:\n    description: New display name. Subject to the same per-account uniqueness rule\n      as create. Must not be greater than 255 characters.\n    example: Acme engineering pipeline (v2)\n    type: string\n  parent_page_id:\n    description: Move the playbook under a handbook page. Pass null to move it to\n      the top level. Must be a valid UUID.\n    example: null\n    nullable: true\n    type: string\n  position:\n    description: New sort position among siblings in the handbook tree. Must be at\n      least 0.\n    example: 0\n    type: integer\ntype: object\n"),
+				Example: examples,
+				Args:    cobra.MinimumNArgs(2),
+				Run: func(cmd *cobra.Command, args []string) {
+					body, err := cli.GetBody("application/json", args[2:])
+					if err != nil {
+						log.Fatal().Err(err).Msg("Unable to get body")
+					}
+
+					_, decoded, err := OpenapiUpdatePipelineMetadata(args[0], args[1], params, body)
+					if err != nil {
+						log.Fatal().Err(err).Msg("Error calling operation")
+					}
+
+					if err := cli.Formatter.Format(decoded); err != nil {
+						log.Fatal().Err(err).Msg("Formatting failed")
+					}
+
+				},
+			}
+			groupCmd.AddCommand(cmd)
+
+			cli.SetCustomFlags(cmd)
+
+			if cmd.Flags().HasFlags() {
+				params.BindPFlags(cmd.Flags())
+			}
+
+		}()
+
+		func() {
+			params := viper.New()
+
+			var examples string
+
+			cmd := &cobra.Command{
 				Use:     "delete account-id pipeline-id",
 				Short:   "Delete a pipeline",
 				Long:    cli.Markdown("Soft-archives the pipeline: it is hidden from the default list and its triggers are cleared, but tasks already run against it keep their history (the version rows survive). Recoverable via `include_archived=true`. Frees the name for reuse."),
@@ -8731,18 +8929,14 @@ func openapiRegister(subcommand bool) {
 			var examples string
 
 			cmd := &cobra.Command{
-				Use:     "update account-id pipeline-id",
-				Short:   "Update pipeline metadata",
-				Long:    cli.Markdown("Updates the pipeline's display name, description, or routing on/off state. These settings take effect immediately. The pipeline's steps and triggers themselves change through publishing a new version, not through this endpoint. Passing `archived: false` restores an archived pipeline: it comes back disabled (triggers stay cleared until enabled), renamed with a numeric suffix if another pipeline claimed its name in the meantime.\n## Request Schema (application/json)\n\nproperties:\n  archived:\n    description: Pass false to restore an archived pipeline. It comes back disabled\n      (its triggers stay cleared until you enable it), and if another pipeline claimed\n      its name in the meantime the restored one is renamed with a numeric suffix.\n      Archiving goes through DELETE.\n    example: null\n    type: boolean\n  description:\n    description: New description. Pass null to clear. Must not be greater than 2000\n      characters.\n    example: null\n    nullable: true\n    type: string\n  disabled:\n    description: Pause or resume routing. `true` clears the pipeline's triggers from\n      the routing index so it spawns no new tasks but stays visible and editable;\n      `false` re-materialises them. Already-running tasks continue either way. Idempotent.\n    example: true\n    type: boolean\n  linked_page_ids:\n    description: Must be a valid UUID.\n    example:\n    - 6ff8f7f6-1eb3-3525-be4a-3932c805afed\n    items:\n      type: string\n    type: array\n  name:\n    description: New display name. Subject to the same per-account uniqueness rule\n      as create. Must not be greater than 255 characters.\n    example: Acme engineering pipeline (v2)\n    type: string\n  parent_page_id:\n    description: Move the playbook under a handbook page. Pass null to move it to\n      the top level. Must be a valid UUID.\n    example: null\n    nullable: true\n    type: string\n  position:\n    description: New sort position among siblings in the handbook tree. Must be at\n      least 0.\n    example: 0\n    type: integer\ntype: object\n"),
+				Use:     "draft account-id pipeline-id",
+				Short:   "Discard the draft",
+				Long:    cli.Markdown("Clears the saved draft, reverting the editor to the active published version."),
 				Example: examples,
 				Args:    cobra.MinimumNArgs(2),
 				Run: func(cmd *cobra.Command, args []string) {
-					body, err := cli.GetBody("application/json", args[2:])
-					if err != nil {
-						log.Fatal().Err(err).Msg("Unable to get body")
-					}
 
-					_, decoded, err := OpenapiUpdatePipelineMetadata(args[0], args[1], params, body)
+					_, decoded, err := OpenapiDiscardTheDraft(args[0], args[1], params)
 					if err != nil {
 						log.Fatal().Err(err).Msg("Error calling operation")
 					}
@@ -8809,40 +9003,6 @@ func openapiRegister(subcommand bool) {
 			var examples string
 
 			cmd := &cobra.Command{
-				Use:     "draft account-id pipeline-id",
-				Short:   "Discard the draft",
-				Long:    cli.Markdown("Clears the saved draft, reverting the editor to the active published version."),
-				Example: examples,
-				Args:    cobra.MinimumNArgs(2),
-				Run: func(cmd *cobra.Command, args []string) {
-
-					_, decoded, err := OpenapiDiscardTheDraft(args[0], args[1], params)
-					if err != nil {
-						log.Fatal().Err(err).Msg("Error calling operation")
-					}
-
-					if err := cli.Formatter.Format(decoded); err != nil {
-						log.Fatal().Err(err).Msg("Formatting failed")
-					}
-
-				},
-			}
-			groupCmd.AddCommand(cmd)
-
-			cli.SetCustomFlags(cmd)
-
-			if cmd.Flags().HasFlags() {
-				params.BindPFlags(cmd.Flags())
-			}
-
-		}()
-
-		func() {
-			params := viper.New()
-
-			var examples string
-
-			cmd := &cobra.Command{
 				Use:     "triggers account-id pipeline-id",
 				Short:   "Compile a trigger from plain English",
 				Long:    cli.Markdown("Turns one plain-English description of when this pipeline should run into a deterministic trigger, deciding for you whether it is an EVENT trigger (fires in reaction to an inbound event) or a SCHEDULE trigger (fires on a time cadence). The response `kind` says which. For an event you get source/type/match filter(s) previewed against recent history plus a dedupe suggestion; for a schedule you get a cron expression + timezone and the next few fire times. Nothing is persisted. Add the returned trigger to the pipeline's draft (an event block, or a `kind:\"schedule\"` block with cron + timezone) and publish a new version to put it live.\n## Request Schema (application/json)\n\nproperties:\n  prompt:\n    description: Plain-English description of when this workflow should run (an event\n      or a schedule, the compiler decides). Must not be greater than 2000 characters.\n    example: when a customer labels an issue as a bug on the api repo\n    type: string\n  sample_event_id:\n    description: A recent event to ground the field paths against (event triggers).\n      When omitted, the most recent event matching the given source (and type) is\n      used. Must be a valid UUID.\n    example: null\n    nullable: true\n    type: string\n  source:\n    description: Origin system to ground against when no sample event id is supplied\n      (e.g. github). Must not be greater than 255 characters.\n    example: github\n    nullable: true\n    type: string\n  timezone:\n    description: IANA timezone to assume when a schedule sentence doesn't name one\n      (e.g. the author's timezone). Must be a valid time zone, such as <code>Africa/Accra</code>.\n    example: America/New_York\n    nullable: true\n    type: string\n  type:\n    description: Event type to ground against alongside source. Must not be greater\n      than 255 characters.\n    example: issue.labeled\n    nullable: true\n    type: string\nrequired:\n- prompt\ntype: object\n"),
@@ -8890,14 +9050,18 @@ func openapiRegister(subcommand bool) {
 			var examples string
 
 			cmd := &cobra.Command{
-				Use:     "list account-id pipeline-id",
-				Short:   "List pipeline versions",
-				Long:    cli.Markdown("Returns all versions of the pipeline, newest first."),
+				Use:     "create account-id pipeline-id",
+				Short:   "Publish a new pipeline version",
+				Long:    cli.Markdown("Validates the supplied definition, persists it as the next sequential version, and (when `activate=true`, the default) sets it as the pipeline's active version. Returns 201.\n## Request Schema (application/json)\n\nproperties:\n  activate:\n    description: When true (default), the new version becomes the pipeline's active\n      version on publish. Already-running tasks stay pinned to the version they were\n      created against.\n    example: true\n    type: boolean\n  definition:\n    description: Full pipeline definition. Must match the owning pipeline's scope.\n      Validated server-side; failures return 422.\n    example: null\n    properties: {}\n    type: object\n  notes:\n    description: Optional notes captured with the version. Useful for changelog and\n      rollback decisions. Must not be greater than 2000 characters.\n    example: Added auto-approve when PR is under 200 LOC and has no migration.\n    nullable: true\n    type: string\nrequired:\n- definition\ntype: object\n"),
 				Example: examples,
 				Args:    cobra.MinimumNArgs(2),
 				Run: func(cmd *cobra.Command, args []string) {
+					body, err := cli.GetBody("application/json", args[2:])
+					if err != nil {
+						log.Fatal().Err(err).Msg("Unable to get body")
+					}
 
-					_, decoded, err := OpenapiListPipelineVersions(args[0], args[1], params)
+					_, decoded, err := OpenapiPublishANewPipelineVersion(args[0], args[1], params, body)
 					if err != nil {
 						log.Fatal().Err(err).Msg("Error calling operation")
 					}
@@ -8924,18 +9088,14 @@ func openapiRegister(subcommand bool) {
 			var examples string
 
 			cmd := &cobra.Command{
-				Use:     "create account-id pipeline-id",
-				Short:   "Publish a new pipeline version",
-				Long:    cli.Markdown("Validates the supplied definition, persists it as the next sequential version, and (when `activate=true`, the default) sets it as the pipeline's active version. Returns 201.\n## Request Schema (application/json)\n\nproperties:\n  activate:\n    description: When true (default), the new version becomes the pipeline's active\n      version on publish. Already-running tasks stay pinned to the version they were\n      created against.\n    example: true\n    type: boolean\n  definition:\n    description: Full pipeline definition. Must match the owning pipeline's scope.\n      Validated server-side; failures return 422.\n    example: null\n    properties: {}\n    type: object\n  notes:\n    description: Optional notes captured with the version. Useful for changelog and\n      rollback decisions. Must not be greater than 2000 characters.\n    example: Added auto-approve when PR is under 200 LOC and has no migration.\n    nullable: true\n    type: string\nrequired:\n- definition\ntype: object\n"),
+				Use:     "list account-id pipeline-id",
+				Short:   "List pipeline versions",
+				Long:    cli.Markdown("Returns all versions of the pipeline, newest first."),
 				Example: examples,
 				Args:    cobra.MinimumNArgs(2),
 				Run: func(cmd *cobra.Command, args []string) {
-					body, err := cli.GetBody("application/json", args[2:])
-					if err != nil {
-						log.Fatal().Err(err).Msg("Unable to get body")
-					}
 
-					_, decoded, err := OpenapiPublishANewPipelineVersion(args[0], args[1], params, body)
+					_, decoded, err := OpenapiListPipelineVersions(args[0], args[1], params)
 					if err != nil {
 						log.Fatal().Err(err).Msg("Error calling operation")
 					}
@@ -9134,40 +9294,6 @@ func openapiRegister(subcommand bool) {
 			var examples string
 
 			cmd := &cobra.Command{
-				Use:     "delete account-id task-id",
-				Short:   "Delete a task",
-				Long:    cli.Markdown("Soft-deletes a task. It can be retrieved later by listing archived tasks."),
-				Example: examples,
-				Args:    cobra.MinimumNArgs(2),
-				Run: func(cmd *cobra.Command, args []string) {
-
-					_, decoded, err := OpenapiDeleteATask(args[0], args[1], params)
-					if err != nil {
-						log.Fatal().Err(err).Msg("Error calling operation")
-					}
-
-					if err := cli.Formatter.Format(decoded); err != nil {
-						log.Fatal().Err(err).Msg("Formatting failed")
-					}
-
-				},
-			}
-			groupCmd.AddCommand(cmd)
-
-			cli.SetCustomFlags(cmd)
-
-			if cmd.Flags().HasFlags() {
-				params.BindPFlags(cmd.Flags())
-			}
-
-		}()
-
-		func() {
-			params := viper.New()
-
-			var examples string
-
-			cmd := &cobra.Command{
 				Use:     "get account-id task-id",
 				Short:   "Get a task",
 				Long:    cli.Markdown("Returns a single task with its attachments."),
@@ -9214,6 +9340,40 @@ func openapiRegister(subcommand bool) {
 					}
 
 					_, decoded, err := OpenapiUpdateATask(args[0], args[1], params, body)
+					if err != nil {
+						log.Fatal().Err(err).Msg("Error calling operation")
+					}
+
+					if err := cli.Formatter.Format(decoded); err != nil {
+						log.Fatal().Err(err).Msg("Formatting failed")
+					}
+
+				},
+			}
+			groupCmd.AddCommand(cmd)
+
+			cli.SetCustomFlags(cmd)
+
+			if cmd.Flags().HasFlags() {
+				params.BindPFlags(cmd.Flags())
+			}
+
+		}()
+
+		func() {
+			params := viper.New()
+
+			var examples string
+
+			cmd := &cobra.Command{
+				Use:     "delete account-id task-id",
+				Short:   "Delete a task",
+				Long:    cli.Markdown("Soft-deletes a task. It can be retrieved later by listing archived tasks."),
+				Example: examples,
+				Args:    cobra.MinimumNArgs(2),
+				Run: func(cmd *cobra.Command, args []string) {
+
+					_, decoded, err := OpenapiDeleteATask(args[0], args[1], params)
 					if err != nil {
 						log.Fatal().Err(err).Msg("Error calling operation")
 					}
@@ -9710,14 +9870,18 @@ func openapiRegister(subcommand bool) {
 			var examples string
 
 			cmd := &cobra.Command{
-				Use:     "get account-id task-id session-id",
-				Short:   "Get a session",
-				Long:    cli.Markdown("Returns session details including the creator and VM status."),
+				Use:     "update account-id task-id session-id",
+				Short:   "Update a session",
+				Long:    cli.Markdown("Drives every user-initiated state change on a session. Pass `{\"status\": \"idle\"}` to stop the current turn but keep the session usable: the ephemeral harness VM is destroyed, the harness token is rotated, and queued messages are preserved for the next user-initiated resume. Pass `{\"status\": \"closed\"}` to end the session permanently and release its VM resources.\n## Request Schema (application/json)\n\nproperties:\n  status:\n    description: The desired session status. `idle` stops the current turn; `closed`\n      ends the session.\n    example: closed\n    type: string\nrequired:\n- status\ntype: object\n"),
 				Example: examples,
 				Args:    cobra.MinimumNArgs(3),
 				Run: func(cmd *cobra.Command, args []string) {
+					body, err := cli.GetBody("application/json", args[3:])
+					if err != nil {
+						log.Fatal().Err(err).Msg("Unable to get body")
+					}
 
-					_, decoded, err := OpenapiGetASession(args[0], args[1], args[2], params)
+					_, decoded, err := OpenapiUpdateASession(args[0], args[1], args[2], params, body)
 					if err != nil {
 						log.Fatal().Err(err).Msg("Error calling operation")
 					}
@@ -9744,18 +9908,14 @@ func openapiRegister(subcommand bool) {
 			var examples string
 
 			cmd := &cobra.Command{
-				Use:     "update account-id task-id session-id",
-				Short:   "Update a session",
-				Long:    cli.Markdown("Drives every user-initiated state change on a session. Pass `{\"status\": \"idle\"}` to stop the current turn but keep the session usable: the ephemeral harness VM is destroyed, the harness token is rotated, and queued messages are preserved for the next user-initiated resume. Pass `{\"status\": \"closed\"}` to end the session permanently and release its VM resources.\n## Request Schema (application/json)\n\nproperties:\n  status:\n    description: The desired session status. `idle` stops the current turn; `closed`\n      ends the session.\n    example: closed\n    type: string\nrequired:\n- status\ntype: object\n"),
+				Use:     "get account-id task-id session-id",
+				Short:   "Get a session",
+				Long:    cli.Markdown("Returns session details including the creator and VM status."),
 				Example: examples,
 				Args:    cobra.MinimumNArgs(3),
 				Run: func(cmd *cobra.Command, args []string) {
-					body, err := cli.GetBody("application/json", args[3:])
-					if err != nil {
-						log.Fatal().Err(err).Msg("Unable to get body")
-					}
 
-					_, decoded, err := OpenapiUpdateASession(args[0], args[1], args[2], params, body)
+					_, decoded, err := OpenapiGetASession(args[0], args[1], args[2], params)
 					if err != nil {
 						log.Fatal().Err(err).Msg("Error calling operation")
 					}
@@ -9971,14 +10131,14 @@ func openapiRegister(subcommand bool) {
 			var examples string
 
 			cmd := &cobra.Command{
-				Use:     "delete account-id task-id session-id message-id",
-				Short:   "Delete a message",
-				Long:    cli.Markdown("Deletes a queued message that has not been sent yet."),
+				Use:     "get account-id task-id session-id message-id",
+				Short:   "Get a message",
+				Long:    cli.Markdown("Returns a single message."),
 				Example: examples,
 				Args:    cobra.MinimumNArgs(4),
 				Run: func(cmd *cobra.Command, args []string) {
 
-					_, decoded, err := OpenapiDeleteAMessage(args[0], args[1], args[2], args[3], params)
+					_, decoded, err := OpenapiGetAMessage(args[0], args[1], args[2], args[3], params)
 					if err != nil {
 						log.Fatal().Err(err).Msg("Error calling operation")
 					}
@@ -10005,14 +10165,14 @@ func openapiRegister(subcommand bool) {
 			var examples string
 
 			cmd := &cobra.Command{
-				Use:     "get account-id task-id session-id message-id",
-				Short:   "Get a message",
-				Long:    cli.Markdown("Returns a single message."),
+				Use:     "delete account-id task-id session-id message-id",
+				Short:   "Delete a message",
+				Long:    cli.Markdown("Deletes a queued message that has not been sent yet."),
 				Example: examples,
 				Args:    cobra.MinimumNArgs(4),
 				Run: func(cmd *cobra.Command, args []string) {
 
-					_, decoded, err := OpenapiGetAMessage(args[0], args[1], args[2], args[3], params)
+					_, decoded, err := OpenapiDeleteAMessage(args[0], args[1], args[2], args[3], params)
 					if err != nil {
 						log.Fatal().Err(err).Msg("Error calling operation")
 					}
@@ -10238,6 +10398,42 @@ func openapiRegister(subcommand bool) {
 			var examples string
 
 			cmd := &cobra.Command{
+				Use:     "list account-id",
+				Short:   "List VMs",
+				Long:    cli.Markdown("Returns all active VMs for the account, ordered by most recent first."),
+				Example: examples,
+				Args:    cobra.MinimumNArgs(1),
+				Run: func(cmd *cobra.Command, args []string) {
+
+					_, decoded, err := OpenapiListVMs(args[0], params)
+					if err != nil {
+						log.Fatal().Err(err).Msg("Error calling operation")
+					}
+
+					if err := cli.Formatter.Format(decoded); err != nil {
+						log.Fatal().Err(err).Msg("Formatting failed")
+					}
+
+				},
+			}
+			groupCmd.AddCommand(cmd)
+
+			cmd.Flags().Int64("per-page", 0, "Results per page (max 100).")
+
+			cli.SetCustomFlags(cmd)
+
+			if cmd.Flags().HasFlags() {
+				params.BindPFlags(cmd.Flags())
+			}
+
+		}()
+
+		func() {
+			params := viper.New()
+
+			var examples string
+
+			cmd := &cobra.Command{
 				Use:     "create account-id",
 				Short:   "Create a VM",
 				Long:    cli.Markdown("Boots a VM from an environment. The environment's manifest determines the platform, setup, and services; you don't hand-author AES. VMs boot asynchronously; poll `GET /vms/{vm}` until `ready` is true. If the environment has a ready snapshot, boot is fast (about 2 seconds). Otherwise setup runs fresh.\n## Request Schema (application/json)\n\nproperties:\n  env:\n    description: Per-boot environment variable overrides, merged into the manifest's\n      `env` block before boot. Keys and values are strings; credentials (`GIT_TOKEN`,\n      `ANTHROPIC_API_KEY`) are injected automatically and do not need to be supplied\n      here.\n    example: null\n    properties: {}\n    type: object\n  environment_id:\n    description: The environment to boot from. Required. Must belong to the same account.\n    example: 019d8e44-e110-71f6-864b-8e91470dcc4a\n    type: string\n  snapshot_id:\n    description: Pin to a specific snapshot of this environment. Defaults to the environment's\n      current `base_snapshot_id`. Must belong to the referenced environment.\n    example: snap-019d8e44-a1b2\n    type: string\nrequired:\n- environment_id\ntype: object\n"),
@@ -10263,42 +10459,6 @@ func openapiRegister(subcommand bool) {
 			groupCmd.AddCommand(cmd)
 
 			cmd.Flags().String("idempotency-key", "", "")
-
-			cli.SetCustomFlags(cmd)
-
-			if cmd.Flags().HasFlags() {
-				params.BindPFlags(cmd.Flags())
-			}
-
-		}()
-
-		func() {
-			params := viper.New()
-
-			var examples string
-
-			cmd := &cobra.Command{
-				Use:     "list account-id",
-				Short:   "List VMs",
-				Long:    cli.Markdown("Returns all active VMs for the account, ordered by most recent first."),
-				Example: examples,
-				Args:    cobra.MinimumNArgs(1),
-				Run: func(cmd *cobra.Command, args []string) {
-
-					_, decoded, err := OpenapiListVMs(args[0], params)
-					if err != nil {
-						log.Fatal().Err(err).Msg("Error calling operation")
-					}
-
-					if err := cli.Formatter.Format(decoded); err != nil {
-						log.Fatal().Err(err).Msg("Formatting failed")
-					}
-
-				},
-			}
-			groupCmd.AddCommand(cmd)
-
-			cmd.Flags().Int64("per-page", 0, "Results per page (max 100).")
 
 			cli.SetCustomFlags(cmd)
 
