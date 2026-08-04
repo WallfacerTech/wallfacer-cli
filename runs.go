@@ -319,9 +319,30 @@ func writeRunOutput(run *commandRun, cursor int64, out, errOut io.Writer) int64 
 	return cursor
 }
 
+// processExitCode answers with the exit code the remote process itself
+// reported, and whether there is one to forward. The agent records a code for
+// every process it reaps, so a run it signaled (cancellation, deadline) and one
+// it never managed to start both come back as -1 rather than null. A negative
+// code is therefore the agent saying the process never exited on its own, and
+// the run's status is what says how it ended.
+func (r *commandRun) processExitCode() (int, bool) {
+	if r.ExitCode == nil || *r.ExitCode < 0 {
+		return 0, false
+	}
+
+	return *r.ExitCode, true
+}
+
 func runExitCode(run *commandRun) int {
-	if run.ExitCode != nil {
-		return *run.ExitCode
+	if code, ok := run.processExitCode(); ok {
+		// Only the low 8 bits of a status survive wait(2), so a code past
+		// that range would exit as something else entirely — 256 as 0, a
+		// success the run never had.
+		if code > 255 {
+			return 255
+		}
+
+		return code
 	}
 
 	switch run.Status {
@@ -339,8 +360,8 @@ func runExitCode(run *commandRun) int {
 func runSummary(run *commandRun) string {
 	summary := fmt.Sprintf("run %s %s", run.ID, run.Status)
 
-	if run.ExitCode != nil {
-		summary += fmt.Sprintf(" (exit %d)", *run.ExitCode)
+	if code, ok := run.processExitCode(); ok {
+		summary += fmt.Sprintf(" (exit %d)", code)
 	}
 	if run.DurationMs != nil {
 		summary += fmt.Sprintf(" in %s", (time.Duration(*run.DurationMs) * time.Millisecond).Round(time.Millisecond))
