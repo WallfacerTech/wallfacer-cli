@@ -67,11 +67,39 @@ wallfacer up <environment-id>
 wallfacer exec --vm <vm-id> -- ls -la /workspace
 wallfacer exec --vm <vm-id> --dir /workspace --timeout 60 -- make build
 
+# Run a manifest command as a tracked run, streaming its output
+wallfacer runs start <vm-id> --name test --wait
+wallfacer runs list <vm-id>
+wallfacer runs follow <vm-id> <run-id>
+wallfacer runs cancel <vm-id> <run-id>
+
 # Get help for any command
 wallfacer <command> --help
 ```
 
 Run `wallfacer --help` to see all command groups, or `wallfacer <group> --help` for details on a specific group.
+
+### Command runs
+
+`exec` holds the connection open until the command answers, which caps it at what fits in one request. A run is the tracked form: the record is written before the process starts, so it is addressable even if the response to the request that started it is lost, and the VM is not reclaimed as idle while the run is in flight.
+
+```bash
+# Start a command declared in the VM's manifest and follow it to completion
+wallfacer runs start <vm-id> --name test --wait
+
+# Start it in the background, then follow or cancel it by id
+wallfacer runs start <vm-id> --name test
+wallfacer runs list <vm-id> --active true
+wallfacer runs follow <vm-id> <run-id>
+wallfacer runs cancel <vm-id> <run-id>
+
+# Ad hoc command, with a working directory, a per-run env var, and a 2-hour ceiling
+wallfacer runs start <vm-id> --dir /workspace --env CI=true --timeout 7200 -- ./scripts/soak.sh
+```
+
+`--wait` and `follow` write the command's output to stdout and a one-line summary to stderr, then exit with the remote command's exit code. A run that ended without one exits `124` when it timed out, `130` when it was canceled, and `1` otherwise.
+
+Keep `exec` for a quick ad hoc command; reach for a run when the work outlives a request.
 
 ## Configuration
 

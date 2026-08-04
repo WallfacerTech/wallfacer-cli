@@ -315,6 +315,96 @@ components:
           type: string
           description: 'ISO 8601 timestamp of the most recent change to the attachment record.'
       description: 'Content carried alongside a task. Field names follow the MCP Resource and ResourceContents specifications.'
+    CommandRun:
+      type: object
+      properties:
+        id:
+          type: string
+          description: 'Identifier for this run. Assigned before the command is dispatched, so it addresses the run even if the response to the request that started it is lost.'
+        vm_id:
+          type: string
+          description: 'The VM this run executes on.'
+        name:
+          type: string
+          nullable: true
+          description: 'The manifest command this run executes, or null for an ad hoc command.'
+        command:
+          type: string
+          nullable: true
+          description: 'The shell command this run executes, or null for a run started by manifest command name.'
+        working_directory:
+          type: string
+          nullable: true
+          description: "Absolute path the command runs in, or null to use the in-VM agent's startup directory."
+        status:
+          type: string
+          description: "Lifecycle status:\n\n- `pending`: the run was recorded and dispatched, and the VM has not confirmed it yet. A run that stays here is a start whose confirmation was lost; it stops protecting its VM shortly after, and is closed out rather than left in flight.\n- `running`: the process is executing.\n- `completed`: the process exited 0.\n- `failed`: the process exited non-zero, or could not be started. `exit_code` is null only in the second case.\n- `canceled`: cancelled through this API.\n- `timed_out`: the run reached `deadline_at` and its process group was killed."
+          enum:
+            - pending
+            - running
+            - completed
+            - failed
+            - canceled
+            - timed_out
+        exit_code:
+          type: integer
+          nullable: true
+          description: 'Shell exit code. Null while the run is in flight, and on a run that never produced one.'
+        error:
+          type: string
+          nullable: true
+          description: 'Why the run could not be started or supervised. Null on a run that executed, whatever it exited with.'
+        timeout_seconds:
+          type: integer
+          description: 'The runtime ceiling this run was started with.'
+        deadline_at:
+          type: string
+          nullable: true
+          description: 'ISO 8601 timestamp at which the run is killed if it has not finished. Recorded before the command is dispatched, and the point at which the run stops keeping its VM from being reclaimed as idle. Null once the run is over.'
+        duration_ms:
+          type: integer
+          nullable: true
+          description: 'Wall-clock duration in milliseconds. Null until the run ends.'
+        output_bytes:
+          type: integer
+          description: 'Total bytes of output the run has produced so far. This is the high-water mark a `since` cursor counts against.'
+        cancel_requested_at:
+          type: string
+          nullable: true
+          description: 'ISO 8601 timestamp of a cancellation that was recorded but could not be carried out, because the run had no confirmed process to signal. The run keeps executing until its deadline; repeat the cancellation to retry. Null otherwise.'
+        started_at:
+          type: string
+          nullable: true
+          description: 'ISO 8601 timestamp of when the process started. Null until the VM confirms it.'
+        ended_at:
+          type: string
+          nullable: true
+          description: 'ISO 8601 timestamp of when the run reached a terminal status. Null while in flight.'
+        created_at:
+          type: string
+          description: 'ISO 8601 timestamp of when the run was recorded.'
+        updated_at:
+          type: string
+          description: 'ISO 8601 timestamp of the last change to the run.'
+        output:
+          type: object
+          nullable: true
+          additionalProperties: false
+          properties:
+            text:
+              type: string
+              description: 'Combined standard output and standard error, interleaved in the order the command wrote them.'
+            offset:
+              type: integer
+              description: 'Byte offset this slice starts at.'
+            next_offset:
+              type: integer
+              description: 'Byte offset to pass as `since` on the next read to continue where this one stopped.'
+            truncated:
+              type: boolean
+              description: 'True when output before `offset` was dropped, so the slice is not contiguous with the previous read. Happens when a caller polls slower than the command produces output.'
+          description: 'The slice of output this read returned, or null when the read produced none. Always null when listing runs, which returns records only. A run whose output is unavailable still has an authoritative status: the VM may be gone, or the run may have finished long enough ago for its output to have been dropped.'
+      description: 'One command running, or one that has run, inside a VM. The record is written before the process starts and outlives the request that started it, so a run is addressable even when the response to that request is lost.'
     Environment:
       type: object
       properties:
@@ -4425,6 +4515,948 @@ paths:
         name: vm_id
         description: 'The ID of the vm.'
         example: architecto
+        required: true
+        schema:
+          type: string
+  '/v1/accounts/{account_id}/vms/{vm_id}/runs':
+    get:
+      summary: 'List command runs'
+      operationId: listCommandRuns
+      description: "A VM's runs, newest first, covering both the in-flight ones and the history. Records only: use `GET /runs/{run}` to read a run's output.\n\nThe window is the VM's most recent runs (up to 200), paged over. A run is recorded before its process starts, so a run appears here even if the response to the request that started it was lost."
+      parameters:
+        -
+          in: query
+          name: status
+          description: 'Return only runs with this status.'
+          example: running
+          required: false
+          schema:
+            type: string
+            description: 'Return only runs with this status.'
+            example: running
+        -
+          in: query
+          name: active
+          description: 'Return only runs that are still holding the VM: in flight and inside their deadline. This is the set that stops the VM being reclaimed as idle.'
+          example: true
+          required: false
+          schema:
+            type: boolean
+            description: 'Return only runs that are still holding the VM: in flight and inside their deadline. This is the set that stops the VM being reclaimed as idle.'
+            example: true
+        -
+          in: query
+          name: per_page
+          description: 'Results per page (max 100).'
+          example: 25
+          required: false
+          schema:
+            type: integer
+            description: 'Results per page (max 100).'
+            example: 25
+      responses:
+        200:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  data:
+                    -
+                      id: 019f8c31-7a2e-71d0-9f10-0b1c2d3e4f56
+                      vm_id: 019d78bd-4bd3-7173-b53b-8894b6b952b3
+                      name: test
+                      command: null
+                      working_directory: null
+                      status: running
+                      exit_code: null
+                      error: null
+                      timeout_seconds: 1800
+                      deadline_at: '2026-08-04T18:52:44.000000Z'
+                      duration_ms: null
+                      output_bytes: 18422
+                      cancel_requested_at: null
+                      started_at: '2026-08-04T18:22:44.000000Z'
+                      ended_at: null
+                      created_at: '2026-08-04T18:22:44.000000Z'
+                      updated_at: '2026-08-04T18:31:02.000000Z'
+                      output: null
+                  meta:
+                    current_page: 1
+                    per_page: 25
+                    total: 1
+                    last_page: 1
+                  links:
+                    first: '...'
+                    last: '...'
+                    next: null
+                    prev: null
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/CommandRun'
+                  meta:
+                    $ref: '#/components/schemas/PaginationMeta4'
+                  links:
+                    $ref: '#/components/schemas/PaginationLinks'
+        401:
+          description: 'Missing or invalid API token.'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: Unauthenticated.
+                      code: unauthenticated
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: Unauthenticated.
+                        code: unauthenticated
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: Unauthenticated.
+                        code:
+                          type: string
+                          example: unauthenticated
+        403:
+          description: 'You do not belong to this account.'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: 'You do not belong to this account.'
+                      code: forbidden
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: 'You do not belong to this account.'
+                        code: forbidden
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: 'You do not belong to this account.'
+                        code:
+                          type: string
+                          example: forbidden
+        404:
+          description: 'VM not found.'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: 'Resource not found.'
+                      code: not_found
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: 'Resource not found.'
+                        code: not_found
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: 'Resource not found.'
+                        code:
+                          type: string
+                          example: not_found
+        503:
+          description: 'The run records could not be read. Retry after a short delay.'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: 'Command runs are temporarily unavailable for this VM. Retry in a few seconds.'
+                      code: command_run_unavailable
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: 'Command runs are temporarily unavailable for this VM. Retry in a few seconds.'
+                        code: command_run_unavailable
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: 'Command runs are temporarily unavailable for this VM. Retry in a few seconds.'
+                        code:
+                          type: string
+                          example: command_run_unavailable
+      tags:
+        - 'Virtual Machines'
+    post:
+      summary: 'Start a command run'
+      operationId: startACommandRun
+      description: "Starts a command inside the VM and returns the run tracking it.\n\nGive either `name`, a command declared in the manifest the VM booted from, or `command`, an ad hoc shell command.\n\nThe run is recorded before the process starts, so a lost response does not leave an untracked process: a start that could not be confirmed comes back as a `pending` run to poll or cancel, and retrying with the same `Idempotency-Key` replays the original response instead of starting a second run.\n\nAnswers `201` when the command finished inside `wait_seconds`, with its exit code and output, and `202` when it is still executing. Follow a `202` with `GET /runs/{run}`."
+      parameters:
+        -
+          in: header
+          name: Idempotency-Key
+          description: ''
+          example: optional-unique-request-id
+          schema:
+            type: string
+      responses:
+        201:
+          description: 'The run finished inside `wait_seconds`.'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  data:
+                    id: 019f8c31-7a2e-71d0-9f10-0b1c2d3e4f56
+                    vm_id: 019d78bd-4bd3-7173-b53b-8894b6b952b3
+                    name: lint
+                    command: null
+                    working_directory: null
+                    status: completed
+                    exit_code: 0
+                    error: null
+                    timeout_seconds: 1800
+                    deadline_at: null
+                    duration_ms: 3184
+                    output_bytes: 41
+                    cancel_requested_at: null
+                    started_at: '2026-08-04T18:22:44.000000Z'
+                    ended_at: '2026-08-04T18:22:47.000000Z'
+                    created_at: '2026-08-04T18:22:44.000000Z'
+                    updated_at: '2026-08-04T18:22:47.000000Z'
+                    output:
+                      text: "All files pass linting.\n"
+                      offset: 0
+                      next_offset: 41
+                      truncated: false
+                properties:
+                  data:
+                    $ref: '#/components/schemas/CommandRun'
+        202:
+          description: 'The run is still executing. Poll `GET /runs/{run}` for its output and exit code.'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  data:
+                    id: 019f8c31-7a2e-71d0-9f10-0b1c2d3e4f56
+                    vm_id: 019d78bd-4bd3-7173-b53b-8894b6b952b3
+                    name: test
+                    command: null
+                    working_directory: null
+                    status: running
+                    exit_code: null
+                    error: null
+                    timeout_seconds: 1800
+                    deadline_at: '2026-08-04T18:52:44.000000Z'
+                    duration_ms: null
+                    output_bytes: 512
+                    cancel_requested_at: null
+                    started_at: '2026-08-04T18:22:44.000000Z'
+                    ended_at: null
+                    created_at: '2026-08-04T18:22:44.000000Z'
+                    updated_at: '2026-08-04T18:22:54.000000Z'
+                    output:
+                      text: "PHPUnit 11.5.3\n"
+                      offset: 0
+                      next_offset: 512
+                      truncated: false
+                properties:
+                  data:
+                    $ref: '#/components/schemas/CommandRun'
+        401:
+          description: 'Missing or invalid API token.'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: Unauthenticated.
+                      code: unauthenticated
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: Unauthenticated.
+                        code: unauthenticated
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: Unauthenticated.
+                        code:
+                          type: string
+                          example: unauthenticated
+        403:
+          description: 'You do not belong to this account.'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: 'You do not belong to this account.'
+                      code: forbidden
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: 'You do not belong to this account.'
+                        code: forbidden
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: 'You do not belong to this account.'
+                        code:
+                          type: string
+                          example: forbidden
+        404:
+          description: 'The VM is gone, or its manifest declares no command with that name.'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: 'This VM has no command by that name available to run.'
+                      code: not_found
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: 'This VM has no command by that name available to run.'
+                        code: not_found
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: 'This VM has no command by that name available to run.'
+                        code:
+                          type: string
+                          example: not_found
+        409:
+          description: 'A named command runs one at a time per VM. Cancel or wait for the run holding the name.'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: 'A run of this command is already in flight on this VM.'
+                      code: command_run_in_flight
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: 'A run of this command is already in flight on this VM.'
+                        code: command_run_in_flight
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: 'A run of this command is already in flight on this VM.'
+                        code:
+                          type: string
+                          example: command_run_in_flight
+        422:
+          description: 'Validation failed.'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: 'Provide either a command name or a command, but not both.'
+                      code: validation_error
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: 'Provide either a command name or a command, but not both.'
+                        code: validation_error
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: 'Provide either a command name or a command, but not both.'
+                        code:
+                          type: string
+                          example: validation_error
+        429:
+          description: 'Rate limit exceeded. Check Retry-After header.'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: 'Too many requests.'
+                      code: rate_limited
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: 'Too many requests.'
+                        code: rate_limited
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: 'Too many requests.'
+                        code:
+                          type: string
+                          example: rate_limited
+        503:
+          description: 'The run could not be started, or the answer to the request that started it did not come back. Check `GET /runs` before retrying, or retry with the same `Idempotency-Key`.'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: 'Command runs are temporarily unavailable for this VM. Retry in a few seconds.'
+                      code: command_run_unavailable
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: 'Command runs are temporarily unavailable for this VM. Retry in a few seconds.'
+                        code: command_run_unavailable
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: 'Command runs are temporarily unavailable for this VM. Retry in a few seconds.'
+                        code:
+                          type: string
+                          example: command_run_unavailable
+      tags:
+        - 'Virtual Machines'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  description: 'The name of a command declared in the `commands` block of the manifest the VM booted from. Provide this or `command`, not both. Starting a named command that is already in flight on the VM is rejected with `409`, so a run is never started twice by a retry.'
+                  example: test
+                  nullable: true
+                command:
+                  type: string
+                  description: 'A shell command to run instead of a named one. Provide this or `name`, not both. Prefer a named command where one exists: it is declared once on the environment and every caller runs the same thing.'
+                  example: null
+                  nullable: true
+                working_directory:
+                  type: string
+                  description: "Absolute path to run the command in. When omitted, the command runs from the in-VM agent's startup directory, which depends on the environment's platform and source layout."
+                  example: null
+                  nullable: true
+                env:
+                  type: object
+                  description: 'Environment variables for this run only, on top of the ones the environment already provides. Keys and values are strings. Not stored: they are passed to the process and not kept on the run record.'
+                  example: null
+                  nullable: true
+                  properties: {  }
+                timeout_seconds:
+                  type: integer
+                  description: 'How long the run may execute before its process group is killed. Defaults to 1800 seconds, maximum 14400. The deadline is recorded before the command is dispatched: while it has not passed, the VM is treated as busy and is not reclaimed as idle, and once it has, the run stops protecting the VM whatever state it is in.'
+                  example: 1800
+                  nullable: true
+                wait_seconds:
+                  type: integer
+                  description: 'How long to hold this request open waiting for the run to finish. A run that finishes inside the window comes back complete, with its output, in one round trip (`201`). Anything slower comes back as a run to poll (`202`). Defaults to 0, which returns as soon as the run has been started. Values above 30 are held to 30 seconds; the run still starts.'
+                  example: 10
+                  nullable: true
+    parameters:
+      -
+        in: path
+        name: account_id
+        description: 'The ID of the account.'
+        example: architecto
+        required: true
+        schema:
+          type: string
+      -
+        in: path
+        name: vm_id
+        description: 'The ID of the vm.'
+        example: architecto
+        required: true
+        schema:
+          type: string
+  '/v1/accounts/{account_id}/vms/{vm_id}/runs/{run}':
+    get:
+      summary: 'Get a command run'
+      operationId: getACommandRun
+      description: "The run's current status plus the output it has produced since a byte cursor. This is the follow endpoint: pass the previous read's `output.next_offset` as `since` and each read returns only what is new.\n\n`wait_seconds` holds the request open until the run finishes, so following a run costs one request per `wait_seconds` rather than one per poll interval. The response arrives as soon as the run ends, whether or not the wait is used up.\n\nThe record is authoritative even when the output is not: `output` is null when the VM could not be reached or the run finished long enough ago for its output to have been dropped, and the status, exit code, and timings are still correct."
+      parameters:
+        -
+          in: query
+          name: since
+          description: "Byte offset to read output from. Use the previous read's `output.next_offset`. Defaults to 0, the start of the run."
+          example: 4096
+          required: false
+          schema:
+            type: integer
+            description: "Byte offset to read output from. Use the previous read's `output.next_offset`. Defaults to 0, the start of the run."
+            example: 4096
+        -
+          in: query
+          name: max_bytes
+          description: 'Cap on the bytes of output this read returns. Omit for the platform default.'
+          example: 65536
+          required: false
+          schema:
+            type: integer
+            description: 'Cap on the bytes of output this read returns. Omit for the platform default.'
+            example: 65536
+        -
+          in: query
+          name: wait_seconds
+          description: 'Hold the request open for up to this many seconds waiting for the run to finish. Defaults to 0, which answers immediately. Values above the platform maximum are held to it rather than rejected.'
+          example: 30
+          required: false
+          schema:
+            type: integer
+            description: 'Hold the request open for up to this many seconds waiting for the run to finish. Defaults to 0, which answers immediately. Values above the platform maximum are held to it rather than rejected.'
+            example: 30
+      responses:
+        200:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  data:
+                    id: 019f8c31-7a2e-71d0-9f10-0b1c2d3e4f56
+                    vm_id: 019d78bd-4bd3-7173-b53b-8894b6b952b3
+                    name: test
+                    command: null
+                    working_directory: null
+                    status: completed
+                    exit_code: 0
+                    error: null
+                    timeout_seconds: 1800
+                    deadline_at: null
+                    duration_ms: 405213
+                    output_bytes: 91240
+                    cancel_requested_at: null
+                    started_at: '2026-08-04T18:22:44.000000Z'
+                    ended_at: '2026-08-04T18:29:29.000000Z'
+                    created_at: '2026-08-04T18:22:44.000000Z'
+                    updated_at: '2026-08-04T18:29:29.000000Z'
+                    output:
+                      text: "Tests: 2938 passed\n"
+                      offset: 86016
+                      next_offset: 91240
+                      truncated: false
+                properties:
+                  data:
+                    $ref: '#/components/schemas/CommandRun'
+        401:
+          description: 'Missing or invalid API token.'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: Unauthenticated.
+                      code: unauthenticated
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: Unauthenticated.
+                        code: unauthenticated
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: Unauthenticated.
+                        code:
+                          type: string
+                          example: unauthenticated
+        403:
+          description: 'You do not belong to this account.'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: 'You do not belong to this account.'
+                      code: forbidden
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: 'You do not belong to this account.'
+                        code: forbidden
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: 'You do not belong to this account.'
+                        code:
+                          type: string
+                          example: forbidden
+        404:
+          description: 'No run with that id on this VM.'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: 'Command run not found.'
+                      code: not_found
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: 'Command run not found.'
+                        code: not_found
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: 'Command run not found.'
+                        code:
+                          type: string
+                          example: not_found
+        503:
+          description: 'The run could not be read. Retry after a short delay.'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: 'Command runs are temporarily unavailable for this VM. Retry in a few seconds.'
+                      code: command_run_unavailable
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: 'Command runs are temporarily unavailable for this VM. Retry in a few seconds.'
+                        code: command_run_unavailable
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: 'Command runs are temporarily unavailable for this VM. Retry in a few seconds.'
+                        code:
+                          type: string
+                          example: command_run_unavailable
+      tags:
+        - 'Virtual Machines'
+    patch:
+      summary: 'Cancel a command run'
+      operationId: cancelACommandRun
+      description: "Stops a run by setting its status to `canceled`. Idempotent: cancelling a run that has already finished returns its terminal record unchanged.\n\nAnswers `200` once the run is stopped, and `202` when the cancellation was recorded but could not be carried out because the run has no confirmed process to signal. A `202` run keeps executing until its deadline and carries `cancel_requested_at`; repeat the request to retry."
+      parameters:
+        -
+          in: header
+          name: Idempotency-Key
+          description: ''
+          example: optional-unique-request-id
+          schema:
+            type: string
+      responses:
+        200:
+          description: 'The run is stopped.'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  data:
+                    id: 019f8c31-7a2e-71d0-9f10-0b1c2d3e4f56
+                    vm_id: 019d78bd-4bd3-7173-b53b-8894b6b952b3
+                    name: test
+                    command: null
+                    working_directory: null
+                    status: canceled
+                    exit_code: null
+                    error: null
+                    timeout_seconds: 1800
+                    deadline_at: null
+                    duration_ms: 62110
+                    output_bytes: 18422
+                    cancel_requested_at: null
+                    started_at: '2026-08-04T18:22:44.000000Z'
+                    ended_at: '2026-08-04T18:23:46.000000Z'
+                    created_at: '2026-08-04T18:22:44.000000Z'
+                    updated_at: '2026-08-04T18:23:46.000000Z'
+                    output: null
+                properties:
+                  data:
+                    $ref: '#/components/schemas/CommandRun'
+        401:
+          description: 'Missing or invalid API token.'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: Unauthenticated.
+                      code: unauthenticated
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: Unauthenticated.
+                        code: unauthenticated
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: Unauthenticated.
+                        code:
+                          type: string
+                          example: unauthenticated
+        403:
+          description: 'You do not belong to this account.'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: 'You do not belong to this account.'
+                      code: forbidden
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: 'You do not belong to this account.'
+                        code: forbidden
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: 'You do not belong to this account.'
+                        code:
+                          type: string
+                          example: forbidden
+        404:
+          description: 'No run with that id on this VM.'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: 'Command run not found.'
+                      code: not_found
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: 'Command run not found.'
+                        code: not_found
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: 'Command run not found.'
+                        code:
+                          type: string
+                          example: not_found
+        422:
+          description: 'Validation failed.'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: 'The status field is required.'
+                      code: validation_error
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: 'The status field is required.'
+                        code: validation_error
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: 'The status field is required.'
+                        code:
+                          type: string
+                          example: validation_error
+        429:
+          description: 'Rate limit exceeded. Check Retry-After header.'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: 'Too many requests.'
+                      code: rate_limited
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: 'Too many requests.'
+                        code: rate_limited
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: 'Too many requests.'
+                        code:
+                          type: string
+                          example: rate_limited
+        503:
+          description: 'The cancellation could not be delivered. Retry after a short delay.'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: 'Command runs are temporarily unavailable for this VM. Retry in a few seconds.'
+                      code: command_run_unavailable
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: 'Command runs are temporarily unavailable for this VM. Retry in a few seconds.'
+                        code: command_run_unavailable
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: 'Command runs are temporarily unavailable for this VM. Retry in a few seconds.'
+                        code:
+                          type: string
+                          example: command_run_unavailable
+      tags:
+        - 'Virtual Machines'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status:
+                  type: string
+                  description: 'Set to `canceled` to stop the run.'
+                  example: canceled
+              required:
+                - status
+    parameters:
+      -
+        in: path
+        name: account_id
+        description: 'The ID of the account.'
+        example: architecto
+        required: true
+        schema:
+          type: string
+      -
+        in: path
+        name: vm_id
+        description: 'The ID of the vm.'
+        example: architecto
+        required: true
+        schema:
+          type: string
+      -
+        in: path
+        name: run
+        description: 'The run id.'
+        example: 019f8c31-7a2e-71d0-9f10-0b1c2d3e4f56
         required: true
         schema:
           type: string

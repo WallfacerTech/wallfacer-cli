@@ -52,7 +52,26 @@ Response shape:
 { "exit_code": 0, "stdout": "…", "stderr": "" }
 ```
 
-`timeout` is 1-300 seconds. Long-running commands can hit API gateway timeouts — move heavy work into manifest `setup` steps instead.
+`timeout` is 1-300 seconds. Long-running commands can hit API gateway timeouts — start a command run instead (below).
+
+## Command runs
+
+A run is the tracked form of `exec`: the record is written before the process starts, so it stays addressable even if the response to the request that started it is lost, and the VM is not reclaimed as idle while the run is in flight. Use it for anything that outlives a request (test suites, builds, soak scripts); use `exec` for a quick command.
+
+```bash
+wallfacer runs start <vm-id> --name test --wait      # start and follow to completion
+wallfacer runs start <vm-id> --name test             # start in the background, prints the run
+wallfacer runs list <vm-id> --active true            # runs still holding the VM
+wallfacer runs get <vm-id> <run-id> --since 4096     # record plus output from a byte cursor
+wallfacer runs follow <vm-id> <run-id>               # stream output to completion
+wallfacer runs cancel <vm-id> <run-id>
+```
+
+`start` takes either `--name` (a command declared in the manifest the VM booted from) or an ad hoc command after `--`, never both. Other flags: `--dir`, `--env KEY=VALUE` (repeatable), `--timeout` (seconds, default 1800, max 14400), `--wait-seconds` (how long each read waits for the run to finish, default 10), `--poll` (seconds between reads, default 1).
+
+`--wait` and `follow` write the command's output to stdout and a one-line summary to stderr, then exit with the remote command's exit code — so `wallfacer runs start <vm-id> --name test --wait` fails the shell exactly when the suite fails. A run that ended without an exit code exits `124` (timed out), `130` (canceled), or `1`.
+
+Run statuses: `pending`, `running`, `completed`, `failed`, `canceled`, `timed_out`. A named command runs one at a time per VM; starting one that is already in flight is rejected. `runs cancel` exits 1 when the cancellation was recorded but not delivered — the run keeps going until its deadline, so repeat the command to retry.
 
 ## Logs
 
