@@ -67,7 +67,7 @@ wallfacer runs follow <vm-id> <run-id>               # stream output to completi
 wallfacer runs cancel <vm-id> <run-id>
 ```
 
-`start` takes either `--name` (a command declared in the manifest the VM booted from) or an ad hoc command after `--`, never both. Other flags: `--dir`, `--env KEY=VALUE` (repeatable), `--timeout` (seconds, default 1800, max 14400), `--wait-seconds` (how long each read waits for the run to finish, default 10), `--poll` (seconds between reads, default 1).
+`start` takes either `--name` (a command declared in the manifest the VM booted from) or an ad hoc command after `--`, never both. Other flags: `--dir`, `--env KEY=VALUE` (repeatable), `--timeout` (seconds, max 14400; omit it and a `--name` run gets the timeout its manifest declares, an ad hoc command 1800), `--wait-seconds` (how long each read waits for the run to finish, default 10), `--poll` (seconds between reads, default 1).
 
 `--wait` and `follow` write the command's output to stdout and a one-line summary to stderr, then exit with the remote command's exit code — so `wallfacer runs start <vm-id> --name test --wait` fails the shell exactly when the suite fails. A run that ended without an exit code exits `124` (timed out), `130` (canceled), or `1`.
 
