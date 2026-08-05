@@ -4845,7 +4845,7 @@ paths:
                           type: string
                           example: forbidden
         404:
-          description: 'The VM is gone, or its manifest declares no command with that name.'
+          description: 'The VM is gone, its manifest declares no command with that name, or it does not support command runs.'
           content:
             application/json:
               schema:
@@ -4853,21 +4853,21 @@ paths:
                 example:
                   errors:
                     -
-                      message: 'This VM has no command by that name available to run.'
+                      message: 'This VM cannot run that command. It may have no command by that name, or it may not support command runs.'
                       code: not_found
                 properties:
                   errors:
                     type: array
                     example:
                       -
-                        message: 'This VM has no command by that name available to run.'
+                        message: 'This VM cannot run that command. It may have no command by that name, or it may not support command runs.'
                         code: not_found
                     items:
                       type: object
                       properties:
                         message:
                           type: string
-                          example: 'This VM has no command by that name available to run.'
+                          example: 'This VM cannot run that command. It may have no command by that name, or it may not support command runs.'
                         code:
                           type: string
                           example: not_found
@@ -5011,7 +5011,7 @@ paths:
                   properties: {  }
                 timeout_seconds:
                   type: integer
-                  description: 'How long the run may execute before its process group is killed. Defaults to 1800 seconds, maximum 14400. The deadline is recorded before the command is dispatched: while it has not passed, the VM is treated as busy and is not reclaimed as idle, and once it has, the run stops protecting the VM whatever state it is in.'
+                  description: 'How long the run may execute before its process group is killed. Maximum 14400. Omit it and a named command runs to the `timeout` its manifest declares, and an ad hoc command to the platform default of 1800 seconds. The deadline is recorded before the command is dispatched: while it has not passed, the VM is treated as busy and is not reclaimed as idle, and once it has, the run stops protecting the VM whatever state it is in.'
                   example: 1800
                   nullable: true
                 wait_seconds:

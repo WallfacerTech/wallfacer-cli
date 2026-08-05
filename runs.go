@@ -142,7 +142,7 @@ func registerRunCommands(accountID string) {
 	startCmd.Flags().String("name", "", "Name of a command declared in the VM's manifest")
 	startCmd.Flags().String("dir", "", "Working directory for the command")
 	startCmd.Flags().StringArray("env", nil, "Environment variable for this run only, as KEY=VALUE (repeatable)")
-	startCmd.Flags().Int("timeout", 0, "Seconds the run may execute before it is killed (default 1800, max 14400)")
+	startCmd.Flags().Int("timeout", 0, "Seconds the run may execute before it is killed (max 14400; omit for the manifest's timeout with --name, or 1800 for an ad hoc command)")
 	startCmd.Flags().Bool("wait", false, "Follow the run's output and exit with the remote command's exit code")
 	startCmd.Flags().Int("wait-seconds", defaultRunWaitSeconds, "Seconds each read waits for the run to finish; lower for smoother output, raise for fewer requests")
 	startCmd.Flags().Int("poll", 1, "Seconds between reads while following")
