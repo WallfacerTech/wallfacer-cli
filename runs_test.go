@@ -119,6 +119,8 @@ func TestWriteRunOutputWarnsOnDroppedOutput(t *testing.T) {
 
 func TestRunExitCode(t *testing.T) {
 	code := 3
+	signaled := -1
+	outOfRange := 256
 
 	cases := []struct {
 		name string
@@ -130,6 +132,16 @@ func TestRunExitCode(t *testing.T) {
 		{"canceled", &commandRun{Status: "canceled"}, exitRunCanceled},
 		{"timed out", &commandRun{Status: "timed_out"}, exitRunTimedOut},
 		{"never started", &commandRun{Status: "failed", Error: "agent unreachable"}, exitRunUnknown},
+		// The agent stamps -1 on every process it signaled, so these carry
+		// a code and still have to reach the status mapping.
+		{"canceled, signaled", &commandRun{Status: "canceled", ExitCode: &signaled}, exitRunCanceled},
+		{"timed out, signaled", &commandRun{Status: "timed_out", ExitCode: &signaled}, exitRunTimedOut},
+		{"never started, stamped -1", &commandRun{Status: "failed", ExitCode: &signaled}, exitRunUnknown},
+		{"completed, stamped -1", &commandRun{Status: "completed", ExitCode: &signaled}, 0},
+		{"unknown status, stamped -1", &commandRun{Status: "quarantined", ExitCode: &signaled}, exitRunUnknown},
+		// Nothing the API reports may exit outside a wait status: 256
+		// would otherwise truncate to 0 and read as a success.
+		{"past the wait status range", &commandRun{Status: "failed", ExitCode: &outOfRange}, 255},
 	}
 
 	for _, c := range cases {
@@ -153,6 +165,19 @@ func TestRunSummary(t *testing.T) {
 	summary = runSummary(&commandRun{ID: "019f8c31", Status: "failed", Error: "agent unreachable"})
 	if !strings.Contains(summary, "agent unreachable") {
 		t.Errorf("summary %q is missing the error", summary)
+	}
+
+	// A signaled run carries -1, which is not an exit code the command
+	// produced, so the summary reads as if there were none.
+	signaled := -1
+	summary = runSummary(&commandRun{ID: "019f8c31", Status: "canceled", ExitCode: &signaled, DurationMs: &duration})
+	if strings.Contains(summary, "exit") {
+		t.Errorf("summary %q should not report an exit code", summary)
+	}
+	for _, want := range []string{"019f8c31", "canceled", "1m2.11s"} {
+		if !strings.Contains(summary, want) {
+			t.Errorf("summary %q is missing %q", summary, want)
+		}
 	}
 }
 
