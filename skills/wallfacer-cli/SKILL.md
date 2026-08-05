@@ -1,6 +1,6 @@
 ---
 name: wallfacer-cli
-description: Drive the Wallfacer platform from the shell via the `wallfacer` CLI. Covers auth, accounts, environments, snapshots, VMs (create/destroy/exec/logs), tasks with sessions/messages/attachments, and iOS simulator. TRIGGER when the user runs `wallfacer` commands, asks to authenticate or manage accounts, lists/creates/destroys VMs, runs commands on a VM, reads task sessions or messages, or parses `wallfacer` JSON output. SKIP unrelated CLIs (`aws`, `gcloud`, `wf` from the `droplet` project).
+description: Drive the Wallfacer platform from the shell via the `wallfacer` CLI. Covers auth, accounts, environments, snapshots, VMs (create/destroy/exec/logs), tracked command runs (start/follow/cancel), tasks with sessions/messages/attachments, and iOS simulator. TRIGGER when the user runs `wallfacer` commands, asks to authenticate or manage accounts, lists/creates/destroys VMs, runs commands on a VM, follows or cancels a long-running command, reads task sessions or messages, or parses `wallfacer` JSON output. SKIP unrelated CLIs (`aws`, `gcloud`, `wf` from the `droplet` project).
 ---
 
 # wallfacer
@@ -57,6 +57,19 @@ wallfacer exec --vm <vm-id> --dir /workspace --timeout 60 -- make build
 
 Flags: `--vm` (required), `--dir` (working directory), `--timeout` (seconds, 1-300). Requires `account_id` in config.
 
+### runs start / follow / cancel
+
+Tracked command runs, for work that outlives a request. `--wait` and `follow` print the command's output and exit with its exit code:
+
+```bash
+wallfacer runs start <vm-id> --name test --wait          # manifest command, followed to completion
+wallfacer runs start <vm-id> --timeout 7200 -- ./soak.sh # ad hoc, 2-hour ceiling
+wallfacer runs follow <vm-id> <run-id>
+wallfacer runs cancel <vm-id> <run-id>
+```
+
+Give `start` either `--name` or a command after `--`, not both. See [references/vms.md](references/vms.md).
+
 ## Command groups
 
 All commands are flat top-level groups (not nested). Write operations take JSON request bodies via **stdin** (piped), not flags. Use `-o json` for JSON output.
@@ -67,6 +80,7 @@ All commands are flat top-level groups (not nested). Write operations take JSON 
 | environments | `list`, `get <env-id>` | `create`, `update <env-id>`, `delete <env-id>` |
 | snapshots | `list <env-id>`, `get <env-id> <snap-id>`, `logs <env-id> <snap-id>`, `log <env-id> <snap-id> <source>` | `create <env-id>`, `delete <env-id> <snap-id>` |
 | vms | `list`, `get <vm-id>`, `logs <vm-id>`, `log <vm-id> <source>` | `create`, `delete <vm-id>`, `commands <vm-id>` |
+| runs | `list <vm-id>`, `get <vm-id> <run-id>`, `follow <vm-id> <run-id>` | `start <vm-id>`, `create <vm-id>`, `cancel <vm-id> <run-id>`, `update <vm-id> <run-id>` |
 | tasks | `list`, `get <task-id>` | `create`, `update <task-id>`, `delete <task-id>` |
 | attachments | `list <task-id>`, `contents <task-id> <att-id>` | `create <task-id>`, `delete <task-id> <att-id>`, `refresh <task-id> <att-id>` |
 | sessions | `list <task-id>`, `get <task-id> <sess-id>` | `create <task-id>`, `update <task-id> <sess-id>`, `abort <task-id> <sess-id>` |
