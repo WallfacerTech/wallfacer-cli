@@ -41,13 +41,12 @@ const defaultRunWaitSeconds = 10
 // else in the record reaches the user through the generated commands, which
 // print it verbatim.
 type commandRun struct {
-	ID                string     `json:"id"`
-	Status            string     `json:"status"`
-	ExitCode          *int       `json:"exit_code"`
-	Error             string     `json:"error"`
-	DurationMs        *int64     `json:"duration_ms"`
-	CancelRequestedAt string     `json:"cancel_requested_at"`
-	Output            *runOutput `json:"output"`
+	ID         string     `json:"id"`
+	Status     string     `json:"status"`
+	ExitCode   *int       `json:"exit_code"`
+	Error      string     `json:"error"`
+	DurationMs *int64     `json:"duration_ms"`
+	Output     *runOutput `json:"output"`
 }
 
 type runOutput struct {
@@ -200,10 +199,8 @@ func registerRunCommands(accountID string) {
 	group.AddCommand(startCmd, followCmd, cancelCmd)
 }
 
-// runsGroup finds the generated `runs` group so the shortcuts sit alongside the
-// commands they wrap. The group only exists when the spec the CLI was generated
-// from carries the run endpoints, so it is created when it is missing rather
-// than leaving the shortcuts unreachable.
+// runsGroup finds the generated `runs` group so the shortcuts sit alongside
+// the commands they wrap.
 func runsGroup() *cobra.Command {
 	for _, cmd := range cli.Root.Commands() {
 		if cmd.Name() == "runs" {
@@ -211,12 +208,10 @@ func runsGroup() *cobra.Command {
 		}
 	}
 
-	group := &cobra.Command{
-		Use:   "runs",
-		Short: "Manage runs",
-	}
-	cli.Root.AddCommand(group)
-	return group
+	// The generated spec carries the run endpoints, so the group always
+	// exists. Creating a quiet fallback here would mask a generation bug as a
+	// half-empty command group.
+	panic("the generated `runs` command group is missing — regenerate the CLI from the OpenAPI spec")
 }
 
 // followRun reads a run from `since` onwards until it reaches a terminal
@@ -335,9 +330,9 @@ func (r *commandRun) processExitCode() (int, bool) {
 
 func runExitCode(run *commandRun) int {
 	if code, ok := run.processExitCode(); ok {
-		// Only the low 8 bits of a status survive wait(2), so a code past
-		// that range would exit as something else entirely — 256 as 0, a
-		// success the run never had.
+		// The code is a remote JSON field, not a wait(2) status, so it is
+		// not 8-bit by construction — and 256 would exit as 0, a success
+		// the run never had.
 		if code > 255 {
 			return 255
 		}
