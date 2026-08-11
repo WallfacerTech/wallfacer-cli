@@ -29,6 +29,9 @@ tags:
     name: 'Agent Identities'
     description: 'The accounts an agent holds on external systems, so you can see what it can reach and grant or revoke each one. A Google account gives the agent a real address in your agent domain, a mailbox, and the ability to be shared documents the way a colleague is. A Slack app gives it its own name, avatar, handle and direct-message conversation in your workspace. Each account is addressed by the name of the system it is on, so granting one is a single request against a fixed address.'
   -
+    name: 'Agent Journal'
+    description: "An agent's own memory: short notes it writes for itself about work it has done and people it has worked with, and reads back in every session that follows. The agent decides what goes in and nothing approves it, so the journal is how an agent gets better at your work over time rather than starting each task from nothing. Everything in it is readable here, by anyone on the account. This is a read-only view: entries are written by the agent while it works."
+  -
     name: Agents
     description: 'Agents are the identities your account runs autonomous work as. Each has a title, a job description (a handbook page), the single environment it works in, and the model that powers it. An automated step names the agent that runs it. Disabling an agent keeps its history but removes it from new work.'
   -
@@ -1190,11 +1193,11 @@ components:
             checks_used:
               type: integer
               nullable: true
-              description: 'For `waiting`: how many re-checks have run so far.'
+              description: 'For `waiting`: how many of the scheduled re-checks have run so far. Checks triggered early by a matching event are not scheduled re-checks and are not counted here.'
             max_checks:
               type: integer
               nullable: true
-              description: 'For `waiting`: the re-check budget before the wait gives up.'
+              description: 'For `waiting`: the scheduled re-check budget before the wait gives up.'
             next_retry_seconds:
               type: integer
               nullable: true
@@ -1286,7 +1289,7 @@ components:
         next_check_at:
           type: string
           nullable: true
-          description: 'For a `wait` action: when the next condition check is scheduled (null while a check is in flight). For an open `human` gate that declared `escalate_after_seconds`: when its approver pool is next re-pinged, and null once the re-pings are spent. Null for other kinds.'
+          description: 'For a `wait` action: when the next scheduled condition check runs. Null while a scheduled check is in flight, since that check consumed the slot; a check an event triggered early leaves this alone, so the scheduled one still runs on its original beat. For an open `human` gate that declared `escalate_after_seconds`: when its approver pool is next re-pinged, and null once the re-pings are spent. Null for other kinds.'
         deadline_at:
           type: string
           nullable: true
@@ -1967,21 +1970,21 @@ paths:
                 example:
                   data:
                     -
-                      id: 019ff1d3-c877-73bb-a291-e4191c8cc94b
+                      id: 019ff291-9a66-7004-935d-32e1742dbd75
                       name: 'Price Ltd'
                       activation_state: active
                       activated_at: null
                       avatar_url: null
-                      created_at: '2026-08-11T17:16:56.000000Z'
-                      updated_at: '2026-08-11T17:16:56.000000Z'
+                      created_at: '2026-08-11T20:44:16.000000Z'
+                      updated_at: '2026-08-11T20:44:16.000000Z'
                     -
-                      id: 019ff1d3-c88f-700a-b25e-fd06da4f06a5
+                      id: 019ff291-9a7e-731f-af4c-9b27f595c533
                       name: 'Dare Group'
                       activation_state: active
                       activated_at: null
                       avatar_url: null
-                      created_at: '2026-08-11T17:16:56.000000Z'
-                      updated_at: '2026-08-11T17:16:56.000000Z'
+                      created_at: '2026-08-11T20:44:16.000000Z'
+                      updated_at: '2026-08-11T20:44:16.000000Z'
                   links:
                     first: null
                     last: null
@@ -2044,13 +2047,13 @@ paths:
                 type: object
                 example:
                   data:
-                    id: 019ff1d3-c8a5-7081-87a0-135d55de5cf6
+                    id: 019ff291-9a94-71c8-a853-45041d7f05c9
                     name: 'Bailey Inc'
                     activation_state: active
                     activated_at: null
                     avatar_url: null
-                    created_at: '2026-08-11T17:16:56.000000Z'
-                    updated_at: '2026-08-11T17:16:56.000000Z'
+                    created_at: '2026-08-11T20:44:16.000000Z'
+                    updated_at: '2026-08-11T20:44:16.000000Z'
                 properties:
                   data:
                     $ref: '#/components/schemas/Account'
@@ -2111,13 +2114,13 @@ paths:
                 type: object
                 example:
                   data:
-                    id: 019ff1d3-c8ea-7328-b39b-4433350f7ec3
+                    id: 019ff291-9ad8-7144-ac18-9695560d29bf
                     name: 'Price Ltd'
                     activation_state: active
                     activated_at: null
                     avatar_url: null
-                    created_at: '2026-08-11T17:16:56.000000Z'
-                    updated_at: '2026-08-11T17:16:56.000000Z'
+                    created_at: '2026-08-11T20:44:16.000000Z'
+                    updated_at: '2026-08-11T20:44:16.000000Z'
                 properties:
                   data:
                     $ref: '#/components/schemas/Account'
@@ -2218,13 +2221,13 @@ paths:
                 type: object
                 example:
                   data:
-                    id: 019ff1d3-c8fb-7394-a008-c752a7fcec6f
+                    id: 019ff291-9ae8-7126-a855-22bfc3ea29bb
                     name: 'Bailey Inc'
                     activation_state: active
                     activated_at: null
                     avatar_url: null
-                    created_at: '2026-08-11T17:16:56.000000Z'
-                    updated_at: '2026-08-11T17:16:56.000000Z'
+                    created_at: '2026-08-11T20:44:16.000000Z'
+                    updated_at: '2026-08-11T20:44:16.000000Z'
                 properties:
                   data:
                     $ref: '#/components/schemas/Account'
@@ -2430,13 +2433,13 @@ paths:
                 type: object
                 example:
                   data:
-                    id: 019ff1d3-c914-7000-b8ed-38b741b56cca
+                    id: 019ff291-9b01-73a5-8208-5ad1da6fdcd2
                     name: 'Bailey Inc'
                     activation_state: active
                     activated_at: null
                     avatar_url: null
-                    created_at: '2026-08-11T17:16:56.000000Z'
-                    updated_at: '2026-08-11T17:16:56.000000Z'
+                    created_at: '2026-08-11T20:44:16.000000Z'
+                    updated_at: '2026-08-11T20:44:16.000000Z'
                 properties:
                   data:
                     $ref: '#/components/schemas/Account'
@@ -2699,8 +2702,8 @@ paths:
                 example:
                   data:
                     -
-                      id: 019ff1d3-c9ca-7357-884a-5d7df152db57
-                      account_id: 019ff1d3-c9bd-73aa-b9de-e8fc9eacf18e
+                      id: 019ff291-9bb7-7299-aabf-315c905fee76
+                      account_id: 019ff291-9baa-71c4-b017-8dcc236e72a5
                       created_by: 29
                       name: 'aut adipisci'
                       description: null
@@ -2708,11 +2711,11 @@ paths:
                       manifest: null
                       mcp_servers: null
                       base_snapshot: null
-                      created_at: '2026-08-11T17:16:56.000000Z'
-                      updated_at: '2026-08-11T17:16:56.000000Z'
+                      created_at: '2026-08-11T20:44:16.000000Z'
+                      updated_at: '2026-08-11T20:44:16.000000Z'
                     -
-                      id: 019ff1d3-c9dc-70c1-9569-90dc4c310df4
-                      account_id: 019ff1d3-c9d0-7046-92e9-552983642641
+                      id: 019ff291-9bc9-707e-827c-6f8dd80b2032
+                      account_id: 019ff291-9bbd-73c4-bcd8-b7aecba48799
                       created_by: 32
                       name: 'facere tempora'
                       description: null
@@ -2720,8 +2723,8 @@ paths:
                       manifest: null
                       mcp_servers: null
                       base_snapshot: null
-                      created_at: '2026-08-11T17:16:56.000000Z'
-                      updated_at: '2026-08-11T17:16:56.000000Z'
+                      created_at: '2026-08-11T20:44:16.000000Z'
+                      updated_at: '2026-08-11T20:44:16.000000Z'
                   links:
                     first: null
                     last: null
@@ -2818,8 +2821,8 @@ paths:
                 type: object
                 example:
                   data:
-                    id: 019ff1d3-c9f2-70ca-99a5-1fde10230ab9
-                    account_id: 019ff1d3-c9e6-71b3-936c-24a729e3ff42
+                    id: 019ff291-9bde-7014-9325-289379b59450
+                    account_id: 019ff291-9bd2-72cd-a28e-80b98d45823e
                     created_by: 35
                     name: 'architecto eius'
                     description: null
@@ -2827,8 +2830,8 @@ paths:
                     manifest: null
                     mcp_servers: null
                     base_snapshot: null
-                    created_at: '2026-08-11T17:16:56.000000Z'
-                    updated_at: '2026-08-11T17:16:56.000000Z'
+                    created_at: '2026-08-11T20:44:16.000000Z'
+                    updated_at: '2026-08-11T20:44:16.000000Z'
                 properties:
                   data:
                     $ref: '#/components/schemas/Environment'
@@ -3084,8 +3087,8 @@ paths:
                 type: object
                 example:
                   data:
-                    id: 019ff1d3-ca06-70f9-9e08-e216d5e72fad
-                    account_id: 019ff1d3-c9fa-705f-a675-6bbfebe81e10
+                    id: 019ff291-9bf2-715c-ba5f-3023922e4cff
+                    account_id: 019ff291-9be6-7090-a944-f9dfccde1d73
                     created_by: 38
                     name: 'aut adipisci'
                     description: null
@@ -3093,8 +3096,8 @@ paths:
                     manifest: null
                     mcp_servers: null
                     base_snapshot: null
-                    created_at: '2026-08-11T17:16:56.000000Z'
-                    updated_at: '2026-08-11T17:16:56.000000Z'
+                    created_at: '2026-08-11T20:44:16.000000Z'
+                    updated_at: '2026-08-11T20:44:16.000000Z'
                 properties:
                   data:
                     $ref: '#/components/schemas/Environment'
@@ -3195,8 +3198,8 @@ paths:
                 type: object
                 example:
                   data:
-                    id: 019ff1d3-ca1d-7222-be0e-34ba8a8ad5d5
-                    account_id: 019ff1d3-ca11-73da-8272-e3ad89b5ee19
+                    id: 019ff291-9c09-7027-8692-42c64aeb2b8b
+                    account_id: 019ff291-9bfd-7303-b172-bd9118b211a0
                     created_by: 41
                     name: 'architecto eius'
                     description: null
@@ -3204,8 +3207,8 @@ paths:
                     manifest: null
                     mcp_servers: null
                     base_snapshot: null
-                    created_at: '2026-08-11T17:16:56.000000Z'
-                    updated_at: '2026-08-11T17:16:56.000000Z'
+                    created_at: '2026-08-11T20:44:16.000000Z'
+                    updated_at: '2026-08-11T20:44:16.000000Z'
                 properties:
                   data:
                     $ref: '#/components/schemas/Environment'
@@ -3628,8 +3631,8 @@ paths:
                 example:
                   data:
                     -
-                      id: 019ff1d3-c943-73aa-9e23-5c1cd8471b71
-                      account_id: 019ff1d3-c938-727a-8d8c-05e7fc09e630
+                      id: 019ff291-9b30-7123-972a-3ec29a945be6
+                      account_id: 019ff291-9b24-710a-98de-b72dfeb9f532
                       status: running
                       ready: false
                       ready_at: null
@@ -3641,13 +3644,13 @@ paths:
                           name: app
                           url: 'https://3000.vm.example.com'
                           protocol: https
-                      last_activity_at: '2026-08-11T17:16:56.000000Z'
+                      last_activity_at: '2026-08-11T20:44:16.000000Z'
                       destroyed_at: null
-                      created_at: '2026-08-11T17:16:56.000000Z'
-                      updated_at: '2026-08-11T17:16:56.000000Z'
+                      created_at: '2026-08-11T20:44:16.000000Z'
+                      updated_at: '2026-08-11T20:44:16.000000Z'
                     -
-                      id: 019ff1d3-c953-723d-81e4-3c797f3617e9
-                      account_id: 019ff1d3-c948-721c-b55f-afc79b22498d
+                      id: 019ff291-9b3f-70df-97bc-7cb5ad530718
+                      account_id: 019ff291-9b35-7119-a7d7-72d061c106e7
                       status: running
                       ready: false
                       ready_at: null
@@ -3659,10 +3662,10 @@ paths:
                           name: app
                           url: 'https://3000.vm.example.com'
                           protocol: https
-                      last_activity_at: '2026-08-11T17:16:56.000000Z'
+                      last_activity_at: '2026-08-11T20:44:16.000000Z'
                       destroyed_at: null
-                      created_at: '2026-08-11T17:16:56.000000Z'
-                      updated_at: '2026-08-11T17:16:56.000000Z'
+                      created_at: '2026-08-11T20:44:16.000000Z'
+                      updated_at: '2026-08-11T20:44:16.000000Z'
                   links:
                     first: null
                     last: null
@@ -3759,8 +3762,8 @@ paths:
                 type: object
                 example:
                   data:
-                    id: 019ff1d3-c96e-708f-adc0-e73816f80612
-                    account_id: 019ff1d3-c964-729d-81e1-d4af7db43957
+                    id: 019ff291-9b5a-735c-9c1f-aabe8538646b
+                    account_id: 019ff291-9b50-7269-a4de-21565e17527f
                     status: running
                     ready: false
                     ready_at: null
@@ -3772,10 +3775,10 @@ paths:
                         name: app
                         url: 'https://3000.vm.example.com'
                         protocol: https
-                    last_activity_at: '2026-08-11T17:16:56.000000Z'
+                    last_activity_at: '2026-08-11T20:44:16.000000Z'
                     destroyed_at: null
-                    created_at: '2026-08-11T17:16:56.000000Z'
-                    updated_at: '2026-08-11T17:16:56.000000Z'
+                    created_at: '2026-08-11T20:44:16.000000Z'
+                    updated_at: '2026-08-11T20:44:16.000000Z'
                 properties:
                   data:
                     $ref: '#/components/schemas/VirtualMachine'
@@ -4042,8 +4045,8 @@ paths:
                 type: object
                 example:
                   data:
-                    id: 019ff1d3-c983-7259-b6af-1300b2ae8ec9
-                    account_id: 019ff1d3-c979-719e-bc5a-39b2d8bff31c
+                    id: 019ff291-9b6e-71ce-aae2-83be833464b6
+                    account_id: 019ff291-9b64-7065-83a3-66b351e009d1
                     status: running
                     ready: false
                     ready_at: null
@@ -4055,10 +4058,10 @@ paths:
                         name: app
                         url: 'https://3000.vm.example.com'
                         protocol: https
-                    last_activity_at: '2026-08-11T17:16:56.000000Z'
+                    last_activity_at: '2026-08-11T20:44:16.000000Z'
                     destroyed_at: null
-                    created_at: '2026-08-11T17:16:56.000000Z'
-                    updated_at: '2026-08-11T17:16:56.000000Z'
+                    created_at: '2026-08-11T20:44:16.000000Z'
+                    updated_at: '2026-08-11T20:44:16.000000Z'
                 properties:
                   data:
                     $ref: '#/components/schemas/VirtualMachine'
@@ -4159,8 +4162,8 @@ paths:
                 type: object
                 example:
                   data:
-                    id: 019ff1d3-c998-7377-bfee-8d263334eafb
-                    account_id: 019ff1d3-c98e-7195-9d95-1a333dd8a9a6
+                    id: 019ff291-9b83-73e0-bd81-4fa0ba37641c
+                    account_id: 019ff291-9b77-7385-9cf1-9d4b1a0ee74a
                     status: running
                     ready: false
                     ready_at: null
@@ -4172,10 +4175,10 @@ paths:
                         name: app
                         url: 'https://3000.vm.example.com'
                         protocol: https
-                    last_activity_at: '2026-08-11T17:16:56.000000Z'
+                    last_activity_at: '2026-08-11T20:44:16.000000Z'
                     destroyed_at: null
-                    created_at: '2026-08-11T17:16:56.000000Z'
-                    updated_at: '2026-08-11T17:16:56.000000Z'
+                    created_at: '2026-08-11T20:44:16.000000Z'
+                    updated_at: '2026-08-11T20:44:16.000000Z'
                 properties:
                   data:
                     $ref: '#/components/schemas/VirtualMachine'
@@ -4981,17 +4984,17 @@ paths:
                 example:
                   data:
                     -
-                      id: 019ff1d3-d097-7322-8f83-a32976078321
+                      id: 019ff291-a19b-720c-b44f-7596e22f7fa8
                       event: ios_app.rebuild_started
                       level: info
                       payload: null
-                      created_at: '2026-08-11T17:16:58.000000Z'
+                      created_at: '2026-08-11T20:44:18.000000Z'
                     -
-                      id: 019ff1d3-d0a5-72e8-bc91-5361f620de03
+                      id: 019ff291-a1a9-733f-86a1-013f9eb69a1d
                       event: ios_app.rebuild_failed
                       level: info
                       payload: null
-                      created_at: '2026-08-11T17:16:58.000000Z'
+                      created_at: '2026-08-11T20:44:18.000000Z'
                   links:
                     first: '/?page=1'
                     last: '/?page=1'
@@ -5239,11 +5242,11 @@ paths:
                 example:
                   data:
                     -
-                      id: 019ff1d3-cb71-7344-8b99-34100e6e39e7
-                      account_id: 019ff1d3-cb61-7271-a28b-b7c3eefbdeac
-                      environment_id: 019ff1d3-cb6f-7027-b0ba-7342651c4b74
-                      title: 'Dolore voluptate soluta vitae consequatur distinctio placeat.'
-                      prompt: 'Ut est vitae earum inventore distinctio nobis. Ea eius porro et et nihil. Dignissimos aut necessitatibus et quis necessitatibus et voluptates.'
+                      id: 019ff291-9d4d-73d4-bf8e-7642f0bc89cd
+                      account_id: 019ff291-9d3d-706c-ad0b-d2d75a3dabe9
+                      environment_id: 019ff291-9d4b-7307-a949-85e403d6c12a
+                      title: 'Quod et minima nihil vel.'
+                      prompt: 'Deserunt doloribus est aut nihil itaque est. Distinctio inventore ex fuga ad quis reprehenderit quo. Aut voluptatem consequatur voluptatem repudiandae.'
                       attachments: []
                       status: active
                       pipeline_id: null
@@ -5270,18 +5273,18 @@ paths:
                       error_details: null
                       binding_constraint: null
                       vm_state: stopped
-                      last_activity_at: '2026-08-11T17:16:57.000000Z'
+                      last_activity_at: '2026-08-11T20:44:17.000000Z'
                       last_event_at: null
                       idle_timeout_seconds: 300
                       created_by: 69
-                      created_at: '2026-08-11T17:16:57.000000Z'
-                      updated_at: '2026-08-11T17:16:57.000000Z'
+                      created_at: '2026-08-11T20:44:17.000000Z'
+                      updated_at: '2026-08-11T20:44:17.000000Z'
                     -
-                      id: 019ff1d3-cbc5-7003-9230-ef5fca13e9e1
-                      account_id: 019ff1d3-cbb4-7313-a01d-109cbe10a060
-                      environment_id: 019ff1d3-cbc3-70f7-ae98-5c3393a68d29
-                      title: 'Itaque quos repellat rem fugit temporibus deserunt quas.'
-                      prompt: 'Facere quod reiciendis sequi. Dicta aut in consequuntur nihil. Aspernatur qui id omnis praesentium animi ex. Quis dolore accusantium ut consequuntur magni perferendis expedita.'
+                      id: 019ff291-9d7a-7366-9227-0e620eb114bb
+                      account_id: 019ff291-9d69-7250-9774-a524ae5d694a
+                      environment_id: 019ff291-9d78-706a-b1b9-680e5b22c1f6
+                      title: 'Nihil ipsum occaecati quaerat maiores aliquam.'
+                      prompt: 'Architecto et dolor omnis iure dolorum autem. In labore enim laudantium laborum ipsa. Cum debitis odit consequuntur velit iure et doloremque. Dolor alias sunt voluptatem fuga molestias repudiandae.'
                       attachments: []
                       status: active
                       pipeline_id: null
@@ -5308,12 +5311,12 @@ paths:
                       error_details: null
                       binding_constraint: null
                       vm_state: stopped
-                      last_activity_at: '2026-08-11T17:16:57.000000Z'
+                      last_activity_at: '2026-08-11T20:44:17.000000Z'
                       last_event_at: null
                       idle_timeout_seconds: 300
                       created_by: 73
-                      created_at: '2026-08-11T17:16:57.000000Z'
-                      updated_at: '2026-08-11T17:16:57.000000Z'
+                      created_at: '2026-08-11T20:44:17.000000Z'
+                      updated_at: '2026-08-11T20:44:17.000000Z'
                   links:
                     first: null
                     last: null
@@ -5410,9 +5413,9 @@ paths:
                 type: object
                 example:
                   data:
-                    id: 019ff1d3-cc03-7284-85a1-0c901ba9a484
-                    account_id: 019ff1d3-cbf1-7324-a56d-e766b4e2e1a6
-                    environment_id: 019ff1d3-cc01-73ba-bbdc-015fec2e4288
+                    id: 019ff291-9db6-7159-8b26-9fece46cbccb
+                    account_id: 019ff291-9da4-720e-adb6-99f936cdb1b5
+                    environment_id: 019ff291-9db4-706e-b245-1853db64246c
                     title: 'Animi quos velit et fugiat.'
                     prompt: 'Accusantium harum mollitia modi deserunt aut ab. Perspiciatis quo omnis nostrum aut adipisci quidem nostrum qui. Incidunt iure odit et et modi ipsum.'
                     attachments: []
@@ -5441,12 +5444,12 @@ paths:
                     error_details: null
                     binding_constraint: null
                     vm_state: stopped
-                    last_activity_at: '2026-08-11T17:16:57.000000Z'
+                    last_activity_at: '2026-08-11T20:44:17.000000Z'
                     last_event_at: null
                     idle_timeout_seconds: 300
                     created_by: 77
-                    created_at: '2026-08-11T17:16:57.000000Z'
-                    updated_at: '2026-08-11T17:16:57.000000Z'
+                    created_at: '2026-08-11T20:44:17.000000Z'
+                    updated_at: '2026-08-11T20:44:17.000000Z'
                 properties:
                   data:
                     $ref: '#/components/schemas/Task'
@@ -5696,9 +5699,9 @@ paths:
                 type: object
                 example:
                   data:
-                    id: 019ff1d3-cc2b-7115-a78d-e0ab09b62e7f
-                    account_id: 019ff1d3-cc19-7182-93cd-37fd49ad2a52
-                    environment_id: 019ff1d3-cc29-72d0-bca5-1507548a2ec3
+                    id: 019ff291-9ddd-7359-8c8e-bd0bd26b12e3
+                    account_id: 019ff291-9dcb-713c-84c2-169d44492fe5
+                    environment_id: 019ff291-9ddb-7162-a0c9-af6083ea8987
                     title: 'Adipisci quidem nostrum qui commodi incidunt iure.'
                     prompt: 'Et modi ipsum nostrum omnis autem et consequatur. Dolores enim non facere tempora. Voluptatem laboriosam praesentium quis adipisci.'
                     attachments: []
@@ -5727,12 +5730,12 @@ paths:
                     error_details: null
                     binding_constraint: null
                     vm_state: stopped
-                    last_activity_at: '2026-08-11T17:16:57.000000Z'
+                    last_activity_at: '2026-08-11T20:44:17.000000Z'
                     last_event_at: null
                     idle_timeout_seconds: 300
                     created_by: 81
-                    created_at: '2026-08-11T17:16:57.000000Z'
-                    updated_at: '2026-08-11T17:16:57.000000Z'
+                    created_at: '2026-08-11T20:44:17.000000Z'
+                    updated_at: '2026-08-11T20:44:17.000000Z'
                 properties:
                   data:
                     $ref: '#/components/schemas/Task'
@@ -5833,9 +5836,9 @@ paths:
                 type: object
                 example:
                   data:
-                    id: 019ff1d3-cc5e-7257-a814-86c9d9720e18
-                    account_id: 019ff1d3-cc4b-705a-9b49-dc7270e7ef05
-                    environment_id: 019ff1d3-cc5c-7227-b358-da92968f6309
+                    id: 019ff291-9e04-73b4-89bd-ae3852d02314
+                    account_id: 019ff291-9df3-722d-8099-1a9f013015b1
+                    environment_id: 019ff291-9e02-7123-a866-c841a4a3ca64
                     title: 'Eius et animi quos velit et.'
                     prompt: 'Nihil accusantium harum mollitia modi deserunt. Ab provident perspiciatis quo omnis nostrum aut adipisci. Nostrum qui commodi incidunt iure.'
                     attachments: []
@@ -5864,12 +5867,12 @@ paths:
                     error_details: null
                     binding_constraint: null
                     vm_state: stopped
-                    last_activity_at: '2026-08-11T17:16:57.000000Z'
+                    last_activity_at: '2026-08-11T20:44:17.000000Z'
                     last_event_at: null
                     idle_timeout_seconds: 300
                     created_by: 85
-                    created_at: '2026-08-11T17:16:57.000000Z'
-                    updated_at: '2026-08-11T17:16:57.000000Z'
+                    created_at: '2026-08-11T20:44:17.000000Z'
+                    updated_at: '2026-08-11T20:44:17.000000Z'
                 properties:
                   data:
                     $ref: '#/components/schemas/Task'
@@ -6204,9 +6207,9 @@ paths:
                 type: object
                 example:
                   data:
-                    id: 019ff1d3-cc94-735e-9d86-e56c00e31305
-                    account_id: 019ff1d3-cc83-73d8-b317-876097ce6631
-                    environment_id: 019ff1d3-cc92-7269-bb0c-0df13439d110
+                    id: 019ff291-9e33-70fb-b7f8-d760a15d0819
+                    account_id: 019ff291-9e22-734b-8b0d-18aa1a99eb10
+                    environment_id: 019ff291-9e31-711c-a93f-c8eef5ea1c09
                     title: 'Adipisci quidem nostrum qui commodi incidunt iure.'
                     prompt: 'Et modi ipsum nostrum omnis autem et consequatur. Dolores enim non facere tempora. Voluptatem laboriosam praesentium quis adipisci.'
                     attachments: []
@@ -6235,12 +6238,12 @@ paths:
                     error_details: null
                     binding_constraint: null
                     vm_state: stopped
-                    last_activity_at: '2026-08-11T17:16:57.000000Z'
+                    last_activity_at: '2026-08-11T20:44:17.000000Z'
                     last_event_at: null
                     idle_timeout_seconds: 300
                     created_by: 89
-                    created_at: '2026-08-11T17:16:57.000000Z'
-                    updated_at: '2026-08-11T17:16:57.000000Z'
+                    created_at: '2026-08-11T20:44:17.000000Z'
+                    updated_at: '2026-08-11T20:44:17.000000Z'
                 properties:
                   data:
                     $ref: '#/components/schemas/Task'
@@ -6298,15 +6301,15 @@ paths:
                 type: object
                 example:
                   data:
-                    id: 019ff1d3-cd5a-721d-b2b7-84d7e0f6b4f0
-                    account_id: 019ff1d3-cd48-707a-a82b-93560bb8ee12
-                    environment_id: 019ff1d3-cd57-725b-a160-12f7701d78b6
+                    id: 019ff291-9e6d-719c-a4ed-4d22b787ae3f
+                    account_id: 019ff291-9e5c-7360-afc3-b6799afd3554
+                    environment_id: 019ff291-9e6b-72f9-9e83-bc76389e061a
                     title: 'Adipisci quidem nostrum qui commodi incidunt iure.'
                     prompt: 'Et modi ipsum nostrum omnis autem et consequatur. Dolores enim non facere tempora. Voluptatem laboriosam praesentium quis adipisci.'
                     attachments: []
                     status: active
-                    pipeline_id: 019ff1d3-cd44-71ea-bcd0-8dd5cf7ba6e0
-                    pipeline_version_id: 019ff1d3-cd46-73dd-b123-c3002078d5a6
+                    pipeline_id: 019ff291-9e58-7153-a4bc-94c0e258f2a5
+                    pipeline_version_id: 019ff291-9e5a-7164-8866-38d248f859fd
                     pipeline_version: 1
                     origin:
                       kind: manual
@@ -6320,7 +6323,7 @@ paths:
                     steps_total: 1
                     is_agent_responding: false
                     fields:
-                      branch: hm/implement-the-issue-c25035
+                      branch: hm/implement-the-issue-1c8d6e
                     owner_user_id: null
                     performer_user_id: null
                     responsible_user_id: null
@@ -6330,12 +6333,12 @@ paths:
                     error_details: null
                     binding_constraint: null
                     vm_state: stopped
-                    last_activity_at: '2026-08-11T17:16:57.000000Z'
+                    last_activity_at: '2026-08-11T20:44:17.000000Z'
                     last_event_at: null
                     idle_timeout_seconds: 300
                     created_by: 96
-                    created_at: '2026-08-11T17:16:57.000000Z'
-                    updated_at: '2026-08-11T17:16:57.000000Z'
+                    created_at: '2026-08-11T20:44:17.000000Z'
+                    updated_at: '2026-08-11T20:44:17.000000Z'
                 properties:
                   data:
                     $ref: '#/components/schemas/Task'
@@ -6399,23 +6402,23 @@ paths:
                 example:
                   data:
                     -
-                      id: 019ff1d3-ce79-7178-b1d6-19529536cb77
-                      task_id: 019ff1d3-ce5b-72b1-8594-c4e38d6799d6
-                      environment_id: 019ff1d3-ce77-73cd-9e82-7621321d45c9
-                      title: 'Consequatur maiores corrupti explicabo iure non aut.'
+                      id: 019ff291-9f86-7071-94a9-e2c227a33aeb
+                      task_id: 019ff291-9f68-7184-9706-d41ff85e8f78
+                      environment_id: 019ff291-9f84-71e2-8314-527595cdc198
+                      title: 'Maiores quidem amet quia itaque debitis non non.'
                       status: starting
                       is_agent_responding: false
                       vendor: claude
                       harness_model: null
                       harness_effort: null
                       effort_label: null
-                      branch_name: feature-velit
+                      branch_name: feature-saepe
                       base_branch: null
                       sources:
                         -
-                          repo: chanelle76/excepturi-et-quas
+                          repo: fkoelpin/rerum-exercitationem
                           workspace: /workspace
-                          head_branch: feature-velit
+                          head_branch: feature-saepe
                           base_branch: main
                           base_commit_sha: null
                           has_changes: false
@@ -6430,13 +6433,13 @@ paths:
                       message_count: 0
                       idle_timeout_seconds: 300
                       created_by: 112
-                      started_at: '2026-08-11T17:16:57.000000Z'
+                      started_at: '2026-08-11T20:44:17.000000Z'
                       last_message_at: null
                       closed_at: null
-                      created_at: '2026-08-11T17:16:57.000000Z'
-                      updated_at: '2026-08-11T17:16:57.000000Z'
+                      created_at: '2026-08-11T20:44:17.000000Z'
+                      updated_at: '2026-08-11T20:44:17.000000Z'
                       virtual_machine:
-                        id: 019ff1d3-ce6a-71e9-9cb2-65ddc03fe436
+                        id: 019ff291-9f77-7387-99f8-be9d76a3eb95
                         status: running
                         ready: false
                         ports:
@@ -6446,23 +6449,23 @@ paths:
                             url: 'https://3000.vm.example.com'
                             protocol: https
                     -
-                      id: 019ff1d3-ceb8-7246-bdd8-0ce62c7ed346
-                      task_id: 019ff1d3-ce9a-71fb-a440-7a3c6d391ae0
-                      environment_id: 019ff1d3-ceb6-71ce-bfd0-ab02bb6cce6c
-                      title: 'Corrupti et in et facere vel animi.'
+                      id: 019ff291-9fc3-704f-9640-a1b0964c7f6d
+                      task_id: 019ff291-9fa5-7150-b15e-157492f1e0c0
+                      environment_id: 019ff291-9fc1-72fa-8aca-42db4fcc1573
+                      title: 'Eius illo quaerat dolorem nisi quo non in.'
                       status: starting
                       is_agent_responding: false
                       vendor: claude
                       harness_model: null
                       harness_effort: null
                       effort_label: null
-                      branch_name: feature-et
+                      branch_name: feature-dolores
                       base_branch: null
                       sources:
                         -
-                          repo: vinnie02/natus-temporibus-exercitationem
+                          repo: celine61/aut-quia-doloribus
                           workspace: /workspace
-                          head_branch: feature-et
+                          head_branch: feature-dolores
                           base_branch: main
                           base_commit_sha: null
                           has_changes: false
@@ -6477,13 +6480,13 @@ paths:
                       message_count: 0
                       idle_timeout_seconds: 300
                       created_by: 121
-                      started_at: '2026-08-11T17:16:57.000000Z'
+                      started_at: '2026-08-11T20:44:17.000000Z'
                       last_message_at: null
                       closed_at: null
-                      created_at: '2026-08-11T17:16:57.000000Z'
-                      updated_at: '2026-08-11T17:16:57.000000Z'
+                      created_at: '2026-08-11T20:44:17.000000Z'
+                      updated_at: '2026-08-11T20:44:17.000000Z'
                       virtual_machine:
-                        id: 019ff1d3-cea8-71b5-a947-4c7aed8d5036
+                        id: 019ff291-9fb4-7372-aa52-c05c5dc50c90
                         status: running
                         ready: false
                         ports:
@@ -6588,9 +6591,9 @@ paths:
                 type: object
                 example:
                   data:
-                    id: 019ff1d3-cf00-7058-a7f5-61f4761f5662
-                    task_id: 019ff1d3-cee2-709d-8cd7-730845399d48
-                    environment_id: 019ff1d3-cefe-73c4-96db-2dd2bb282278
+                    id: 019ff291-a00b-7128-92cd-adbe5d1e84c8
+                    task_id: 019ff291-9fed-72de-ae00-978b061e8586
+                    environment_id: 019ff291-a009-70b1-8712-31e228b59d52
                     title: 'Eius et animi quos velit et.'
                     status: starting
                     is_agent_responding: false
@@ -6619,13 +6622,13 @@ paths:
                     message_count: 0
                     idle_timeout_seconds: 300
                     created_by: 130
-                    started_at: '2026-08-11T17:16:57.000000Z'
+                    started_at: '2026-08-11T20:44:17.000000Z'
                     last_message_at: null
                     closed_at: null
-                    created_at: '2026-08-11T17:16:57.000000Z'
-                    updated_at: '2026-08-11T17:16:57.000000Z'
+                    created_at: '2026-08-11T20:44:17.000000Z'
+                    updated_at: '2026-08-11T20:44:17.000000Z'
                     virtual_machine:
-                      id: 019ff1d3-cef0-7058-9e82-e0ba29f1bc5d
+                      id: 019ff291-9ffc-72ba-b8e0-90d43efb8d70
                       status: running
                       ready: false
                       ports:
@@ -6851,9 +6854,9 @@ paths:
                 type: object
                 example:
                   data:
-                    id: 019ff1d3-cf45-72c6-91cb-83ca12859ee0
-                    task_id: 019ff1d3-cf27-70b4-b159-acfff3d09ddf
-                    environment_id: 019ff1d3-cf43-7189-9149-a534bb33cc07
+                    id: 019ff291-a04f-70ff-8240-9adc670032c4
+                    task_id: 019ff291-a031-730d-8f13-f297512096d0
+                    environment_id: 019ff291-a04d-7374-8cb5-6ca2fe844d56
                     title: 'Adipisci quidem nostrum qui commodi incidunt iure.'
                     status: starting
                     is_agent_responding: false
@@ -6882,13 +6885,13 @@ paths:
                     message_count: 0
                     idle_timeout_seconds: 300
                     created_by: 139
-                    started_at: '2026-08-11T17:16:58.000000Z'
+                    started_at: '2026-08-11T20:44:17.000000Z'
                     last_message_at: null
                     closed_at: null
-                    created_at: '2026-08-11T17:16:58.000000Z'
-                    updated_at: '2026-08-11T17:16:58.000000Z'
+                    created_at: '2026-08-11T20:44:17.000000Z'
+                    updated_at: '2026-08-11T20:44:17.000000Z'
                     virtual_machine:
-                      id: 019ff1d3-cf36-730e-80c4-8d3306861990
+                      id: 019ff291-a040-7339-bffe-1227f50684ab
                       status: running
                       ready: false
                       ports:
@@ -6997,9 +7000,9 @@ paths:
                 type: object
                 example:
                   data:
-                    id: 019ff1d3-cf8a-738a-9175-7cec57fd8e08
-                    task_id: 019ff1d3-cf6c-7084-929b-b3d67fcec6b7
-                    environment_id: 019ff1d3-cf88-70f8-a622-0b21383feb0c
+                    id: 019ff291-a093-7044-8456-1f66fadfc5ef
+                    task_id: 019ff291-a075-70e1-bab9-1c09c7724d5c
+                    environment_id: 019ff291-a092-73aa-b19a-b7af62429382
                     title: 'Adipisci quidem nostrum qui commodi incidunt iure.'
                     status: starting
                     is_agent_responding: false
@@ -7028,13 +7031,13 @@ paths:
                     message_count: 0
                     idle_timeout_seconds: 300
                     created_by: 148
-                    started_at: '2026-08-11T17:16:58.000000Z'
+                    started_at: '2026-08-11T20:44:17.000000Z'
                     last_message_at: null
                     closed_at: null
-                    created_at: '2026-08-11T17:16:58.000000Z'
-                    updated_at: '2026-08-11T17:16:58.000000Z'
+                    created_at: '2026-08-11T20:44:17.000000Z'
+                    updated_at: '2026-08-11T20:44:17.000000Z'
                     virtual_machine:
-                      id: 019ff1d3-cf7a-73fa-b481-bf2101e30319
+                      id: 019ff291-a084-7241-94d9-343d29df27cc
                       status: running
                       ready: false
                       ports:
@@ -7275,17 +7278,17 @@ paths:
                   data:
                     -
                       id: 1
-                      session_id: 019ff1d3-cfca-7290-b42d-c0ec603b063f
+                      session_id: 019ff291-a0cf-70cb-8c55-5f7afdf9efca
                       payload:
                         type: user
                         message:
                           role: user
                           content:
                             -
-                              text: 'Velit reiciendis nobis minima porro.'
+                              text: 'Deleniti facere id eius tempore sapiente.'
                               type: text
                       type: user
-                      sequence: 61
+                      sequence: 46
                       status: sent
                       display_text: null
                       author: null
@@ -7295,21 +7298,21 @@ paths:
                       actor:
                         kind: system
                         subsystem: platform
-                      created_at: '2026-08-11T17:16:58.000000Z'
-                      updated_at: '2026-08-11T17:16:58.000000Z'
+                      created_at: '2026-08-11T20:44:18.000000Z'
+                      updated_at: '2026-08-11T20:44:18.000000Z'
                     -
                       id: 2
-                      session_id: 019ff1d3-cff6-7366-96fa-3d9991911b89
+                      session_id: 019ff291-a0fb-7180-9d47-252e665f51fe
                       payload:
                         type: user
                         message:
                           role: user
                           content:
                             -
-                              text: 'Sed qui omnis exercitationem dolorem deserunt.'
+                              text: 'Aliquid quos et quibusdam odit libero ut.'
                               type: text
                       type: user
-                      sequence: 92
+                      sequence: 78
                       status: sent
                       display_text: null
                       author: null
@@ -7319,8 +7322,8 @@ paths:
                       actor:
                         kind: system
                         subsystem: platform
-                      created_at: '2026-08-11T17:16:58.000000Z'
-                      updated_at: '2026-08-11T17:16:58.000000Z'
+                      created_at: '2026-08-11T20:44:18.000000Z'
+                      updated_at: '2026-08-11T20:44:18.000000Z'
                   links:
                     first: null
                     last: null
@@ -7337,17 +7340,17 @@ paths:
                     example:
                       -
                         id: 1
-                        session_id: 019ff1d3-cfca-7290-b42d-c0ec603b063f
+                        session_id: 019ff291-a0cf-70cb-8c55-5f7afdf9efca
                         payload:
                           type: user
                           message:
                             role: user
                             content:
                               -
-                                text: 'Velit reiciendis nobis minima porro.'
+                                text: 'Deleniti facere id eius tempore sapiente.'
                                 type: text
                         type: user
-                        sequence: 61
+                        sequence: 46
                         status: sent
                         display_text: null
                         author: null
@@ -7357,21 +7360,21 @@ paths:
                         actor:
                           kind: system
                           subsystem: platform
-                        created_at: '2026-08-11T17:16:58.000000Z'
-                        updated_at: '2026-08-11T17:16:58.000000Z'
+                        created_at: '2026-08-11T20:44:18.000000Z'
+                        updated_at: '2026-08-11T20:44:18.000000Z'
                       -
                         id: 2
-                        session_id: 019ff1d3-cff6-7366-96fa-3d9991911b89
+                        session_id: 019ff291-a0fb-7180-9d47-252e665f51fe
                         payload:
                           type: user
                           message:
                             role: user
                             content:
                               -
-                                text: 'Sed qui omnis exercitationem dolorem deserunt.'
+                                text: 'Aliquid quos et quibusdam odit libero ut.'
                                 type: text
                         type: user
-                        sequence: 92
+                        sequence: 78
                         status: sent
                         display_text: null
                         author: null
@@ -7381,8 +7384,8 @@ paths:
                         actor:
                           kind: system
                           subsystem: platform
-                        created_at: '2026-08-11T17:16:58.000000Z'
-                        updated_at: '2026-08-11T17:16:58.000000Z'
+                        created_at: '2026-08-11T20:44:18.000000Z'
+                        updated_at: '2026-08-11T20:44:18.000000Z'
                     items:
                       type: object
                       properties:
@@ -7392,7 +7395,7 @@ paths:
                           description: 'Message ID.'
                         session_id:
                           type: string
-                          example: 019ff1d3-cfca-7290-b42d-c0ec603b063f
+                          example: 019ff291-a0cf-70cb-8c55-5f7afdf9efca
                           description: 'Session the message belongs to.'
                         payload:
                           type: object
@@ -7410,12 +7413,12 @@ paths:
                                   type: array
                                   example:
                                     -
-                                      text: 'Velit reiciendis nobis minima porro.'
+                                      text: 'Deleniti facere id eius tempore sapiente.'
                                       type: text
                                   items:
                                     type: object
                                     properties:
-                                      text: { type: string, example: 'Velit reiciendis nobis minima porro.' }
+                                      text: { type: string, example: 'Deleniti facere id eius tempore sapiente.' }
                                       type: { type: string, example: text }
                           description: 'The raw Claude Code SDK JSONL transcript entry this message wraps. Shape varies by `type`. Treat as opaque except for the fields documented on the `Message` schema for the specific `type` you care about.'
                         type:
@@ -7431,7 +7434,7 @@ paths:
                             - ai-title
                         sequence:
                           type: integer
-                          example: 61
+                          example: 46
                           description: 'Order within the session, assigned when the message is delivered to the agent. Queued messages have `sequence: null`. Render with `ORDER BY sequence ASC` then `created_at ASC` to show the conversation top-to-bottom.'
                           nullable: true
                         status:
@@ -7483,11 +7486,11 @@ paths:
                           description: "Who produced this message. Always present, and captured when the message was written, so it keeps rendering correctly after the person is renamed, joins the account, or leaves it. Render the sender from this rather than by looking a user id up: most senders on a channel have no account with us, and a `user_id` of `null` is normal rather than an error.\n\nThe `kind` field says which shape to expect:\n\n- `user`: a person on your account. Carries `user_id`, `display_name`, `email_at_time`.\n- `ai`: one of your agents. Carries `ai_user_id`, `display_name`, `harness`, `model_identifier`.\n- `external`: somebody with no account here. Carries `provider`, `external_id`, `display_name`, `email_at_time`, and `user_id` when their address matched one of your members.\n- `system`: produced by the platform rather than by a person or an agent. Covers non-conversational marker messages and older messages whose author can no longer be resolved; render it as an unattributed platform message."
                         created_at:
                           type: string
-                          example: '2026-08-11T17:16:58.000000Z'
+                          example: '2026-08-11T20:44:18.000000Z'
                           description: 'ISO 8601 timestamp of when this message was created (that is, when it entered the queue or was delivered, depending on `status`).'
                         updated_at:
                           type: string
-                          example: '2026-08-11T17:16:58.000000Z'
+                          example: '2026-08-11T20:44:18.000000Z'
                           description: 'ISO 8601 timestamp of the most recent change to the message record (for example, when it flipped from `queued` to `sent`).'
                     required:
                       - id
@@ -7586,7 +7589,7 @@ paths:
                 example:
                   data:
                     id: 3
-                    session_id: 019ff1d3-d02c-7156-a1b1-5249ee9c6d14
+                    session_id: 019ff291-a12e-7290-ac2a-efad97f319a9
                     payload:
                       type: user
                       message:
@@ -7606,8 +7609,8 @@ paths:
                     actor:
                       kind: system
                       subsystem: platform
-                    created_at: '2026-08-11T17:16:58.000000Z'
-                    updated_at: '2026-08-11T17:16:58.000000Z'
+                    created_at: '2026-08-11T20:44:18.000000Z'
+                    updated_at: '2026-08-11T20:44:18.000000Z'
                 properties:
                   data:
                     type: object
@@ -7618,7 +7621,7 @@ paths:
                         description: 'Message ID.'
                       session_id:
                         type: string
-                        example: 019ff1d3-d02c-7156-a1b1-5249ee9c6d14
+                        example: 019ff291-a12e-7290-ac2a-efad97f319a9
                         description: 'Session the message belongs to.'
                       payload:
                         type: object
@@ -7713,11 +7716,11 @@ paths:
                         description: "Who produced this message. Always present, and captured when the message was written, so it keeps rendering correctly after the person is renamed, joins the account, or leaves it. Render the sender from this rather than by looking a user id up: most senders on a channel have no account with us, and a `user_id` of `null` is normal rather than an error.\n\nThe `kind` field says which shape to expect:\n\n- `user`: a person on your account. Carries `user_id`, `display_name`, `email_at_time`.\n- `ai`: one of your agents. Carries `ai_user_id`, `display_name`, `harness`, `model_identifier`.\n- `external`: somebody with no account here. Carries `provider`, `external_id`, `display_name`, `email_at_time`, and `user_id` when their address matched one of your members.\n- `system`: produced by the platform rather than by a person or an agent. Covers non-conversational marker messages and older messages whose author can no longer be resolved; render it as an unattributed platform message."
                       created_at:
                         type: string
-                        example: '2026-08-11T17:16:58.000000Z'
+                        example: '2026-08-11T20:44:18.000000Z'
                         description: 'ISO 8601 timestamp of when this message was created (that is, when it entered the queue or was delivered, depending on `status`).'
                       updated_at:
                         type: string
-                        example: '2026-08-11T17:16:58.000000Z'
+                        example: '2026-08-11T20:44:18.000000Z'
                         description: 'ISO 8601 timestamp of the most recent change to the message record (for example, when it flipped from `queued` to `sent`).'
                     required:
                       - id
@@ -7949,7 +7952,7 @@ paths:
                 example:
                   data:
                     id: 4
-                    session_id: 019ff1d3-d05c-73a2-8a14-2aebf6125c05
+                    session_id: 019ff291-a15f-7241-9594-0e00842c8ec2
                     payload:
                       type: user
                       message:
@@ -7969,8 +7972,8 @@ paths:
                     actor:
                       kind: system
                       subsystem: platform
-                    created_at: '2026-08-11T17:16:58.000000Z'
-                    updated_at: '2026-08-11T17:16:58.000000Z'
+                    created_at: '2026-08-11T20:44:18.000000Z'
+                    updated_at: '2026-08-11T20:44:18.000000Z'
                 properties:
                   data:
                     type: object
@@ -7981,7 +7984,7 @@ paths:
                         description: 'Message ID.'
                       session_id:
                         type: string
-                        example: 019ff1d3-d05c-73a2-8a14-2aebf6125c05
+                        example: 019ff291-a15f-7241-9594-0e00842c8ec2
                         description: 'Session the message belongs to.'
                       payload:
                         type: object
@@ -8076,11 +8079,11 @@ paths:
                         description: "Who produced this message. Always present, and captured when the message was written, so it keeps rendering correctly after the person is renamed, joins the account, or leaves it. Render the sender from this rather than by looking a user id up: most senders on a channel have no account with us, and a `user_id` of `null` is normal rather than an error.\n\nThe `kind` field says which shape to expect:\n\n- `user`: a person on your account. Carries `user_id`, `display_name`, `email_at_time`.\n- `ai`: one of your agents. Carries `ai_user_id`, `display_name`, `harness`, `model_identifier`.\n- `external`: somebody with no account here. Carries `provider`, `external_id`, `display_name`, `email_at_time`, and `user_id` when their address matched one of your members.\n- `system`: produced by the platform rather than by a person or an agent. Covers non-conversational marker messages and older messages whose author can no longer be resolved; render it as an unattributed platform message."
                       created_at:
                         type: string
-                        example: '2026-08-11T17:16:58.000000Z'
+                        example: '2026-08-11T20:44:18.000000Z'
                         description: 'ISO 8601 timestamp of when this message was created (that is, when it entered the queue or was delivered, depending on `status`).'
                       updated_at:
                         type: string
-                        example: '2026-08-11T17:16:58.000000Z'
+                        example: '2026-08-11T20:44:18.000000Z'
                         description: 'ISO 8601 timestamp of the most recent change to the message record (for example, when it flipped from `queued` to `sent`).'
                     required:
                       - id
@@ -8990,8 +8993,8 @@ paths:
                     -
                       provider: google
                       status: active
-                      identifier: l6npokgc@acme.agents.wallfacer.ai
-                      provisioned_at: '2026-08-11T17:16:59.000000Z'
+                      identifier: kqqgmn6y@acme.agents.wallfacer.ai
+                      provisioned_at: '2026-08-11T20:44:19.000000Z'
                       error: null
                       details:
                         documents_ready: true
@@ -9000,8 +9003,8 @@ paths:
                     -
                       provider: google
                       status: active
-                      identifier: z8lp7hxo@acme.agents.wallfacer.ai
-                      provisioned_at: '2026-08-11T17:16:59.000000Z'
+                      identifier: wxwnvojw@acme.agents.wallfacer.ai
+                      provisioned_at: '2026-08-11T20:44:19.000000Z'
                       error: null
                       details:
                         documents_ready: true
@@ -9129,8 +9132,8 @@ paths:
                   data:
                     provider: google
                     status: active
-                    identifier: cedc7xnk@acme.agents.wallfacer.ai
-                    provisioned_at: '2026-08-11T17:16:59.000000Z'
+                    identifier: 26ibcfeo@acme.agents.wallfacer.ai
+                    provisioned_at: '2026-08-11T20:44:19.000000Z'
                     error: null
                     details:
                       documents_ready: true
@@ -9245,8 +9248,8 @@ paths:
                   data:
                     provider: google
                     status: active
-                    identifier: hhrt7xu2@acme.agents.wallfacer.ai
-                    provisioned_at: '2026-08-11T17:16:59.000000Z'
+                    identifier: 4z8iv9gq@acme.agents.wallfacer.ai
+                    provisioned_at: '2026-08-11T20:44:19.000000Z'
                     error: null
                     details:
                       documents_ready: true
@@ -9878,6 +9881,292 @@ paths:
         required: true
         schema:
           type: string
+  '/v1/accounts/{account_id}/agents/{agent_user_id}/journals':
+    get:
+      summary: "List an agent's journal entries"
+      operationId: listAnAgentsJournalEntries
+      description: "Returns the agent's entries, most recent first. Every entry the agent has written is here; there is no half it keeps to itself.\n\nFilter with `kind` to read one sort of entry, `tag` for the words the agent files entries under, `ref` for entries about a specific thing (a task, a repository, a person), and `q` to search the text."
+      parameters:
+        -
+          in: query
+          name: kind
+          description: 'Only entries of this kind: `episodic` or `relational`.'
+          example: episodic
+          required: false
+          schema:
+            type: string
+            description: 'Only entries of this kind: `episodic` or `relational`.'
+            example: episodic
+        -
+          in: query
+          name: tag
+          description: 'Only entries carrying this tag. Tags are lowercase and hyphenated.'
+          example: flaky-tests
+          required: false
+          schema:
+            type: string
+            description: 'Only entries carrying this tag. Tags are lowercase and hyphenated.'
+            example: flaky-tests
+        -
+          in: query
+          name: ref
+          description: 'Only entries referencing this `type:id`, for example `repo:acme/web` or `task:019f2c1a-0e64-7a3b-9f10-2b6d8a5c4e77`.'
+          example: 'repo:acme/web'
+          required: false
+          schema:
+            type: string
+            description: 'Only entries referencing this `type:id`, for example `repo:acme/web` or `task:019f2c1a-0e64-7a3b-9f10-2b6d8a5c4e77`.'
+            example: 'repo:acme/web'
+        -
+          in: query
+          name: q
+          description: 'Only entries whose text contains this, case-insensitive.'
+          example: migration
+          required: false
+          schema:
+            type: string
+            description: 'Only entries whose text contains this, case-insensitive.'
+            example: migration
+        -
+          in: query
+          name: per_page
+          description: 'Results per page (max 100).'
+          example: 25
+          required: false
+          schema:
+            type: integer
+            description: 'Results per page (max 100).'
+            example: 25
+      responses:
+        200:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  data:
+                    -
+                      id: 019ff291-a500-737d-aa66-29c4e267e8ad
+                      kind: episodic
+                      text: 'Adipisci quidem nostrum qui commodi incidunt iure odit et et modi ipsum nostrum omnis.'
+                      tags: []
+                      refs: []
+                      session_id: null
+                      created_at: '2026-08-11T20:44:19.000000Z'
+                      updated_at: '2026-08-11T20:44:19.000000Z'
+                    -
+                      id: 019ff291-a510-7266-b85c-8f1b71e5d0fb
+                      kind: episodic
+                      text: 'Dolores enim non facere tempora ex voluptatem laboriosam praesentium.'
+                      tags: []
+                      refs: []
+                      session_id: null
+                      created_at: '2026-08-11T20:44:19.000000Z'
+                      updated_at: '2026-08-11T20:44:19.000000Z'
+                  links:
+                    first: '/?page=1'
+                    last: '/?page=1'
+                    prev: null
+                    next: null
+                  meta:
+                    current_page: 1
+                    from: 1
+                    last_page: 1
+                    links:
+                      -
+                        url: null
+                        label: Previous
+                        page: null
+                        active: false
+                      -
+                        url: '/?page=1'
+                        label: '1'
+                        page: 1
+                        active: true
+                      -
+                        url: null
+                        label: Next
+                        page: null
+                        active: false
+                    path: /
+                    per_page: 25
+                    to: 2
+                    total: 2
+                properties:
+                  data:
+                    type: array
+                    example:
+                      -
+                        id: 019ff291-a500-737d-aa66-29c4e267e8ad
+                        kind: episodic
+                        text: 'Adipisci quidem nostrum qui commodi incidunt iure odit et et modi ipsum nostrum omnis.'
+                        tags: []
+                        refs: []
+                        session_id: null
+                        created_at: '2026-08-11T20:44:19.000000Z'
+                        updated_at: '2026-08-11T20:44:19.000000Z'
+                      -
+                        id: 019ff291-a510-7266-b85c-8f1b71e5d0fb
+                        kind: episodic
+                        text: 'Dolores enim non facere tempora ex voluptatem laboriosam praesentium.'
+                        tags: []
+                        refs: []
+                        session_id: null
+                        created_at: '2026-08-11T20:44:19.000000Z'
+                        updated_at: '2026-08-11T20:44:19.000000Z'
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                          example: 019ff291-a500-737d-aa66-29c4e267e8ad
+                          description: 'Unique identifier for the entry.'
+                        kind:
+                          type: string
+                          example: episodic
+                          description: "What the entry is about:\n\n- `episodic`: something that happened, and what the agent took from it.\n- `relational`: what working with a particular person was like."
+                          enum:
+                            - episodic
+                            - relational
+                        text:
+                          type: string
+                          example: 'Adipisci quidem nostrum qui commodi incidunt iure odit et et modi ipsum nostrum omnis.'
+                          description: "The entry itself, in the agent's own words. Written as a short conclusion rather than a record of the session it came from."
+                        tags:
+                          type: array
+                          example: []
+                          description: 'Short words the agent filed the entry under, lowercased and hyphenated, for example `["billing", "flaky-tests"]`. Empty when it filed none.'
+                        refs:
+                          type: array
+                          example: []
+                          description: 'What the entry is about, as `type:id` strings: `task:{id}`, `session:{id}`, `repo:{owner}/{name}`, `person:{email or handle}`. A person outside your account is referenced the same way as anyone in it. Empty when the entry names nothing.'
+                        session_id:
+                          type: string
+                          example: null
+                          description: 'The session the entry was written in, or null once that session no longer exists. An entry outlives the session that produced it.'
+                          nullable: true
+                        created_at:
+                          type: string
+                          example: '2026-08-11T20:44:19.000000Z'
+                          description: 'ISO 8601 timestamp the entry was written.'
+                        updated_at:
+                          type: string
+                          example: '2026-08-11T20:44:19.000000Z'
+                          description: 'ISO 8601 timestamp the entry last changed.'
+                    required:
+                      - id
+                      - kind
+                      - text
+                      - tags
+                      - refs
+                      - session_id
+                      - created_at
+                      - updated_at
+                  links:
+                    $ref: '#/components/schemas/PaginationLinks'
+                  meta:
+                    $ref: '#/components/schemas/PaginationMeta8'
+        401:
+          description: 'Missing or invalid API token.'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: Unauthenticated.
+                      code: unauthenticated
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: Unauthenticated.
+                        code: unauthenticated
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: Unauthenticated.
+                        code:
+                          type: string
+                          example: unauthenticated
+        403:
+          description: 'You do not belong to this account.'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: 'You do not belong to this account.'
+                      code: forbidden
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: 'You do not belong to this account.'
+                        code: forbidden
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: 'You do not belong to this account.'
+                        code:
+                          type: string
+                          example: forbidden
+        404:
+          description: 'Agent not found.'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: 'Resource not found.'
+                      code: not_found
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: 'Resource not found.'
+                        code: not_found
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: 'Resource not found.'
+                        code:
+                          type: string
+                          example: not_found
+      tags:
+        - 'Agent Journal'
+    parameters:
+      -
+        in: path
+        name: account_id
+        description: 'The ID of the account.'
+        example: architecto
+        required: true
+        schema:
+          type: string
+      -
+        in: path
+        name: agent_user_id
+        description: 'The ID of the agent user.'
+        example: 16
+        required: true
+        schema:
+          type: integer
   '/v1/accounts/{account_id}/agents':
     get:
       summary: 'List agents'
@@ -10744,7 +11033,7 @@ paths:
                 example:
                   data:
                     -
-                      uri: 'wallfacer://attachments/019ff1d3-cdf9-702c-8053-7b2df5341544'
+                      uri: 'wallfacer://attachments/019ff291-9f08-70c6-a304-f8c4abc71273'
                       name: 'Adipisci quidem nostrum qui commodi.'
                       description: null
                       mimeType: text/markdown
@@ -10752,15 +11041,15 @@ paths:
                       annotations: null
                       text: 'Odit et et modi. Nostrum omnis autem et consequatur aut. Enim non facere tempora ex voluptatem laboriosam praesentium. Adipisci molestias fugit deleniti distinctio eum doloremque id.'
                       blob: null
-                      id: 019ff1d3-cdf9-702c-8053-7b2df5341544
+                      id: 019ff291-9f08-70c6-a304-f8c4abc71273
                       status: ready
                       error: null
                       metadata: null
                       last_fetched_at: null
-                      created_at: '2026-08-11T17:16:57.000000Z'
-                      updated_at: '2026-08-11T17:16:57.000000Z'
+                      created_at: '2026-08-11T20:44:17.000000Z'
+                      updated_at: '2026-08-11T20:44:17.000000Z'
                     -
-                      uri: 'wallfacer://attachments/019ff1d3-ce11-72a3-b2e0-589b2c80183b'
+                      uri: 'wallfacer://attachments/019ff291-9f20-72b4-8252-fe3a66d4d1ee'
                       name: 'Sunt quisquam sit.'
                       description: null
                       mimeType: text/markdown
@@ -10768,13 +11057,13 @@ paths:
                       annotations: null
                       text: 'Eaque alias ratione dolores sed rem ea ut. Deserunt sint quis in quod. Aspernatur consectetur id a consectetur assumenda eaque neque. Sunt nihil accusantium odit ut. Rem dolorem aut quis.'
                       blob: null
-                      id: 019ff1d3-ce11-72a3-b2e0-589b2c80183b
+                      id: 019ff291-9f20-72b4-8252-fe3a66d4d1ee
                       status: ready
                       error: null
                       metadata: null
                       last_fetched_at: null
-                      created_at: '2026-08-11T17:16:57.000000Z'
-                      updated_at: '2026-08-11T17:16:57.000000Z'
+                      created_at: '2026-08-11T20:44:17.000000Z'
+                      updated_at: '2026-08-11T20:44:17.000000Z'
                 properties:
                   data:
                     type: array
@@ -10884,7 +11173,7 @@ paths:
                 type: object
                 example:
                   data:
-                    uri: 'wallfacer://attachments/019ff1d3-ce2f-702e-a8cf-841d05d2a08d'
+                    uri: 'wallfacer://attachments/019ff291-9f3d-7282-a247-17b39175cab6'
                     name: 'Eius et animi quos.'
                     description: null
                     mimeType: text/markdown
@@ -10892,13 +11181,13 @@ paths:
                     annotations: null
                     text: 'Fugiat sunt nihil accusantium harum mollitia. Deserunt aut ab provident perspiciatis quo omnis nostrum. Adipisci quidem nostrum qui commodi incidunt iure.'
                     blob: null
-                    id: 019ff1d3-ce2f-702e-a8cf-841d05d2a08d
+                    id: 019ff291-9f3d-7282-a247-17b39175cab6
                     status: ready
                     error: null
                     metadata: null
                     last_fetched_at: null
-                    created_at: '2026-08-11T17:16:57.000000Z'
-                    updated_at: '2026-08-11T17:16:57.000000Z'
+                    created_at: '2026-08-11T20:44:17.000000Z'
+                    updated_at: '2026-08-11T20:44:17.000000Z'
                 properties:
                   data:
                     $ref: '#/components/schemas/Attachment'
@@ -11718,18 +12007,18 @@ paths:
                     -
                       provider: slack
                       status: active
-                      workspace_name: 'Price Ltd'
-                      team_id: T1IC6KVVHDK
+                      workspace_name: 'Flatley LLC'
+                      team_id: TMAQUCR3LLU
                       app_slots_remaining: null
-                      connected_at: '2026-08-11T17:16:59.000000Z'
+                      connected_at: '2026-08-11T20:44:19.000000Z'
                       error: null
                     -
                       provider: slack
                       status: active
-                      workspace_name: 'Baumbach Ltd'
-                      team_id: TUTMMJM1S5L
+                      workspace_name: Auer-Lang
+                      team_id: TWZO6V9HI1W
                       app_slots_remaining: null
-                      connected_at: '2026-08-11T17:16:59.000000Z'
+                      connected_at: '2026-08-11T20:44:19.000000Z'
                       error: null
                 properties:
                   data:
@@ -11738,18 +12027,18 @@ paths:
                       -
                         provider: slack
                         status: active
-                        workspace_name: 'Price Ltd'
-                        team_id: T1IC6KVVHDK
+                        workspace_name: 'Flatley LLC'
+                        team_id: TMAQUCR3LLU
                         app_slots_remaining: null
-                        connected_at: '2026-08-11T17:16:59.000000Z'
+                        connected_at: '2026-08-11T20:44:19.000000Z'
                         error: null
                       -
                         provider: slack
                         status: active
-                        workspace_name: 'Baumbach Ltd'
-                        team_id: TUTMMJM1S5L
+                        workspace_name: Auer-Lang
+                        team_id: TWZO6V9HI1W
                         app_slots_remaining: null
-                        connected_at: '2026-08-11T17:16:59.000000Z'
+                        connected_at: '2026-08-11T20:44:19.000000Z'
                         error: null
                     items:
                       type: object
@@ -11769,12 +12058,12 @@ paths:
                             - unhealthy
                         workspace_name:
                           type: string
-                          example: 'Price Ltd'
+                          example: 'Flatley LLC'
                           description: 'The name of the connected Slack workspace. Null until the first agent app is installed, which is the point at which Slack tells us the name.'
                           nullable: true
                         team_id:
                           type: string
-                          example: T1IC6KVVHDK
+                          example: TMAQUCR3LLU
                           description: "Slack's own identifier for the workspace."
                         app_slots_remaining:
                           type: string
@@ -11783,7 +12072,7 @@ paths:
                           nullable: true
                         connected_at:
                           type: string
-                          example: '2026-08-11T17:16:59.000000Z'
+                          example: '2026-08-11T20:44:19.000000Z'
                           description: 'ISO 8601 timestamp the workspace was first connected.'
                           nullable: true
                         error:
@@ -12320,17 +12609,17 @@ paths:
                 example:
                   data:
                     -
-                      id: 019ff1d3-ca3c-7100-8a47-fb257fc6c4b5
+                      id: 019ff291-9c28-71a7-90f4-cba20b16f1ad
                       event: ios_app.rebuild_started
                       level: info
                       payload: null
-                      created_at: '2026-08-11T17:16:56.000000Z'
+                      created_at: '2026-08-11T20:44:16.000000Z'
                     -
-                      id: 019ff1d3-ca4c-70c2-b5ab-3bdb11ac653c
+                      id: 019ff291-9c36-7218-af3f-6910d901a68b
                       event: ios_app.rebuild_failed
                       level: info
                       payload: null
-                      created_at: '2026-08-11T17:16:56.000000Z'
+                      created_at: '2026-08-11T20:44:16.000000Z'
                   links:
                     first: '/?page=1'
                     last: '/?page=1'
@@ -13163,22 +13452,22 @@ paths:
                 type: object
                 example:
                   data:
-                    id: 019ff1d3-c8cb-70b9-92ab-52a2b0b45074
-                    email: kozey.barrett@example.com
+                    id: 019ff291-9aba-7213-9fa7-2a58c8e98513
+                    email: mohamed44@example.org
                     role: member
                     account:
-                      id: 019ff1d3-c8be-7194-a8a1-1e0578eb19b2
-                      name: Reynolds-Homenick
+                      id: 019ff291-9aad-7050-985f-c8c9c0ec66c4
+                      name: 'Mann Group'
                       activation_state: active
                       activated_at: null
                       avatar_url: null
-                      created_at: '2026-08-11T17:16:56.000000Z'
-                      updated_at: '2026-08-11T17:16:56.000000Z'
+                      created_at: '2026-08-11T20:44:16.000000Z'
+                      updated_at: '2026-08-11T20:44:16.000000Z'
                     invited_by:
-                      name: 'Abe Runolfsdottir IV'
+                      name: 'Easton Shanahan'
                     accepted_at: null
-                    expires_at: '2026-08-18T17:16:56.000000Z'
-                    created_at: '2026-08-11T17:16:56.000000Z'
+                    expires_at: '2026-08-18T20:44:16.000000Z'
+                    created_at: '2026-08-11T20:44:16.000000Z'
                 properties:
                   data:
                     $ref: '#/components/schemas/Invitation'
@@ -13342,39 +13631,39 @@ paths:
                 example:
                   data:
                     -
-                      id: 019ff1d3-d0e9-70bc-93b3-9eea214fee52
+                      id: 019ff291-a1ee-72d0-8350-7bc62a30c8dc
                       email: price.amber@example.org
                       role: member
                       account:
-                        id: 019ff1d3-d0dd-71a9-8f45-616d960fb335
+                        id: 019ff291-a1e1-73e1-8b48-80e08838e412
                         name: 'Leuschke Inc'
                         activation_state: active
                         activated_at: null
                         avatar_url: null
-                        created_at: '2026-08-11T17:16:58.000000Z'
-                        updated_at: '2026-08-11T17:16:58.000000Z'
+                        created_at: '2026-08-11T20:44:18.000000Z'
+                        updated_at: '2026-08-11T20:44:18.000000Z'
                       invited_by:
                         name: 'Prof. Mina Bauch'
                       accepted_at: null
-                      expires_at: '2026-08-18T17:16:58.000000Z'
-                      created_at: '2026-08-11T17:16:58.000000Z'
+                      expires_at: '2026-08-18T20:44:18.000000Z'
+                      created_at: '2026-08-11T20:44:18.000000Z'
                     -
-                      id: 019ff1d3-d0fe-71fc-bac1-71edf0184b97
+                      id: 019ff291-a203-70b8-a976-ad4fa7bcba43
                       email: torp.florence@example.org
                       role: member
                       account:
-                        id: 019ff1d3-d0f2-728b-a455-9b2bef313ad2
+                        id: 019ff291-a1f7-735a-83cf-41c329699bcc
                         name: "O'Connell, Beier and Bradtke"
                         activation_state: active
                         activated_at: null
                         avatar_url: null
-                        created_at: '2026-08-11T17:16:58.000000Z'
-                        updated_at: '2026-08-11T17:16:58.000000Z'
+                        created_at: '2026-08-11T20:44:18.000000Z'
+                        updated_at: '2026-08-11T20:44:18.000000Z'
                       invited_by:
                         name: 'Eileen Schmidt'
                       accepted_at: null
-                      expires_at: '2026-08-18T17:16:58.000000Z'
-                      created_at: '2026-08-11T17:16:58.000000Z'
+                      expires_at: '2026-08-18T20:44:18.000000Z'
+                      created_at: '2026-08-11T20:44:18.000000Z'
                   links:
                     first: '/?page=1'
                     last: '/?page=1'
@@ -13429,22 +13718,22 @@ paths:
                 type: object
                 example:
                   data:
-                    id: 019ff1d3-d118-71ec-9646-7041de4f58f1
+                    id: 019ff291-a21d-72c5-b069-5ee6f6ec3d2a
                     email: gbailey@example.net
                     role: member
                     account:
-                      id: 019ff1d3-d10c-7374-9918-90441e379080
+                      id: 019ff291-a211-7336-97f8-05d0b1e53fe3
                       name: "Rempel, Gulgowski and O'Kon"
                       activation_state: active
                       activated_at: null
                       avatar_url: null
-                      created_at: '2026-08-11T17:16:58.000000Z'
-                      updated_at: '2026-08-11T17:16:58.000000Z'
+                      created_at: '2026-08-11T20:44:18.000000Z'
+                      updated_at: '2026-08-11T20:44:18.000000Z'
                     invited_by:
                       name: 'Justina Gaylord'
                     accepted_at: null
-                    expires_at: '2026-08-18T17:16:58.000000Z'
-                    created_at: '2026-08-11T17:16:58.000000Z'
+                    expires_at: '2026-08-18T20:44:18.000000Z'
+                    created_at: '2026-08-11T20:44:18.000000Z'
                 properties:
                   data:
                     $ref: '#/components/schemas/Invitation'
@@ -14252,28 +14541,28 @@ paths:
                 example:
                   data:
                     -
-                      id: 019ff1d3-d1de-7137-8657-78d229fa7168
-                      account_id: 019ff1d3-d1d1-725c-852a-11560f9ccd86
+                      id: 019ff291-a2e0-7264-bcd6-5f8080dda6cc
+                      account_id: 019ff291-a2d4-72b6-a515-896f60a6d4f3
                       parent_page_id: null
                       title: 'Adipisci quidem nostrum qui.'
                       body: "Iure odit et et modi ipsum nostrum omnis. Et consequatur aut dolores enim. Facere tempora ex voluptatem laboriosam. Quis adipisci molestias fugit deleniti distinctio eum.\n\nAut libero aliquam veniam corporis. Mollitia deleniti nemo odit quia officia. Dignissimos neque blanditiis odio."
                       description: 'Excepturi doloribus delectus fugit qui repudiandae laboriosam est alias.'
                       position: 0
                       created_by: 212
-                      created_at: '2026-08-11T17:16:58.000000Z'
-                      updated_at: '2026-08-11T17:16:58.000000Z'
+                      created_at: '2026-08-11T20:44:18.000000Z'
+                      updated_at: '2026-08-11T20:44:18.000000Z'
                       deleted_at: null
                     -
-                      id: 019ff1d3-d1ee-731f-8c5f-f99cd0b390de
-                      account_id: 019ff1d3-d1e2-7252-979b-00af7721a3ff
+                      id: 019ff291-a2f0-723e-ac21-a51f8c55a083
+                      account_id: 019ff291-a2e4-727a-9ffb-39867c6736bf
                       parent_page_id: null
                       title: 'Repellat officiis corporis.'
                       body: "Ratione iure impedit molestiae ut rem. Esse sint aut molestiae sunt suscipit doloribus fugiat.\n\nDeserunt et error neque recusandae et. Dolorem et ut dicta. Assumenda consequatur ut et sunt quisquam. Repellendus ut eaque alias ratione dolores."
                       description: 'Rem ea ut aut deserunt sint quis.'
                       position: 0
                       created_by: 215
-                      created_at: '2026-08-11T17:16:58.000000Z'
-                      updated_at: '2026-08-11T17:16:58.000000Z'
+                      created_at: '2026-08-11T20:44:18.000000Z'
+                      updated_at: '2026-08-11T20:44:18.000000Z'
                       deleted_at: null
                   links:
                     first: '/?page=1'
@@ -14336,16 +14625,16 @@ paths:
                 type: object
                 example:
                   data:
-                    id: 019ff1d3-d203-70ff-83be-f10b174a8acb
-                    account_id: 019ff1d3-d1f6-71d7-9246-4f48b28ca5d9
+                    id: 019ff291-a304-7116-89e9-5b89cfa9874c
+                    account_id: 019ff291-a2f8-7006-87a0-ffa19582390c
                     parent_page_id: null
                     title: 'Eius et animi.'
                     body: "Et fugiat sunt nihil accusantium. Mollitia modi deserunt aut ab provident perspiciatis quo. Nostrum aut adipisci quidem nostrum.\n\nIncidunt iure odit et et modi ipsum. Omnis autem et consequatur."
                     description: 'Dolores enim non facere tempora ex.'
                     position: 0
                     created_by: 218
-                    created_at: '2026-08-11T17:16:58.000000Z'
-                    updated_at: '2026-08-11T17:16:58.000000Z'
+                    created_at: '2026-08-11T20:44:18.000000Z'
+                    updated_at: '2026-08-11T20:44:18.000000Z'
                     deleted_at: null
                 properties:
                   data:
@@ -14753,7 +15042,7 @@ paths:
                       type:
                         type: string
                         description: ''
-                        example: page
+                        example: playbook
                         enum:
                           - page
                           - playbook
@@ -14791,8 +15080,8 @@ paths:
                 example:
                   data:
                     -
-                      id: 019ff1d3-d196-731e-bf89-14c5abad2309
-                      pipeline_id: 019ff1d3-d193-725d-92a0-2c13317ba4d5
+                      id: 019ff291-a29a-70e3-beb5-2c889e443dad
+                      pipeline_id: 019ff291-a297-7388-b0bf-63fd3281a531
                       version: 1
                       definition:
                         steps:
@@ -14804,11 +15093,11 @@ paths:
                             on_failure: halt
                         triggers: []
                       notes: null
-                      created_at: '2026-08-11T17:16:58.000000Z'
+                      created_at: '2026-08-11T20:44:18.000000Z'
                       created_by: 201
                     -
-                      id: 019ff1d3-d1a9-7011-82c9-8adc56ecd661
-                      pipeline_id: 019ff1d3-d1a5-706d-82b9-404927d2983f
+                      id: 019ff291-a2ac-7260-8215-f30c2071b82b
+                      pipeline_id: 019ff291-a2a9-72e8-8459-b4b17d348862
                       version: 1
                       definition:
                         steps:
@@ -14820,7 +15109,7 @@ paths:
                             on_failure: halt
                         triggers: []
                       notes: null
-                      created_at: '2026-08-11T17:16:58.000000Z'
+                      created_at: '2026-08-11T20:44:18.000000Z'
                       created_by: 205
                   links:
                     first: '/?page=1'
@@ -14876,8 +15165,8 @@ paths:
                 type: object
                 example:
                   data:
-                    id: 019ff1d3-d1c0-7024-9118-c2602bc1554a
-                    pipeline_id: 019ff1d3-d1bd-70ef-a8dd-1983c692dc99
+                    id: 019ff291-a2c3-703e-9016-db51c4a6c395
+                    pipeline_id: 019ff291-a2c0-705b-a23d-2139714a406f
                     version: 1
                     definition:
                       steps:
@@ -14889,7 +15178,7 @@ paths:
                           on_failure: halt
                       triggers: []
                     notes: null
-                    created_at: '2026-08-11T17:16:58.000000Z'
+                    created_at: '2026-08-11T20:44:18.000000Z'
                     created_by: 209
                 properties:
                   data:
@@ -15080,10 +15369,10 @@ paths:
                 example:
                   data:
                     -
-                      id: 019ff1d3-d13b-7159-881c-0ec463baa214
-                      account_id: 019ff1d3-d12f-7290-a1c5-8188f036b1e2
-                      name: 'Fix a bug'
-                      description: 'Dolore est quis et et.'
+                      id: 019ff291-a240-73ab-90de-e3df79c66d05
+                      account_id: 019ff291-a233-73cf-b9d8-52f8d3347a8a
+                      name: 'Draft a plan'
+                      description: 'Aspernatur qui sequi impedit voluptatem quae non saepe.'
                       active_version: null
                       version_count: 0
                       task_count: 0
@@ -15093,13 +15382,13 @@ paths:
                       linked_page_ids: []
                       disabled_at: null
                       archived_at: null
-                      created_at: '2026-08-11T17:16:58.000000Z'
+                      created_at: '2026-08-11T20:44:18.000000Z'
                       created_by: 191
                     -
-                      id: 019ff1d3-d14a-7078-bde8-8fa444caab90
-                      account_id: 019ff1d3-d13e-71d6-8a8c-770280602b5d
-                      name: 'Draft a plan'
-                      description: 'Fugit qui pariatur debitis dolor odit.'
+                      id: 019ff291-a24f-70b5-9aa9-b2c37d49039b
+                      account_id: 019ff291-a243-7003-85d8-d392921b1017
+                      name: 'Fix a bug'
+                      description: 'Eius quasi officiis enim ut.'
                       active_version: null
                       version_count: 0
                       task_count: 0
@@ -15109,7 +15398,7 @@ paths:
                       linked_page_ids: []
                       disabled_at: null
                       archived_at: null
-                      created_at: '2026-08-11T17:16:58.000000Z'
+                      created_at: '2026-08-11T20:44:18.000000Z'
                       created_by: 194
                   links:
                     first: '/?page=1'
@@ -15172,8 +15461,8 @@ paths:
                 type: object
                 example:
                   data:
-                    id: 019ff1d3-d15e-71e0-a898-5732da867168
-                    account_id: 019ff1d3-d152-72f0-b601-8de2467b758c
+                    id: 019ff291-a264-732b-a002-4ff0ec768ff4
+                    account_id: 019ff291-a257-71ce-9bc4-54370ca5e0aa
                     name: 'Review a pull request'
                     description: 'Quos velit et fugiat sunt nihil accusantium harum.'
                     active_version: null
@@ -15185,7 +15474,7 @@ paths:
                     linked_page_ids: []
                     disabled_at: null
                     archived_at: null
-                    created_at: '2026-08-11T17:16:58.000000Z'
+                    created_at: '2026-08-11T20:44:18.000000Z'
                     created_by: 197
                 properties:
                   data:
@@ -16061,19 +16350,19 @@ paths:
                 example:
                   data:
                     -
-                      id: 019ff1d3-caa9-7189-9dfb-6d119bf9c769
-                      environment_id: 019ff1d3-caa7-7220-b0b1-70f175e97d5f
-                      name: TEST_L1NPDDGV
+                      id: 019ff291-9c8f-728c-a47b-fde1d27cff9e
+                      environment_id: 019ff291-9c8d-728d-ac6a-5bf508dea12e
+                      name: TEST_0QPHNZRD
                       last_accessed_at: null
-                      created_at: '2026-08-11T17:16:56.000000Z'
-                      updated_at: '2026-08-11T17:16:56.000000Z'
+                      created_at: '2026-08-11T20:44:16.000000Z'
+                      updated_at: '2026-08-11T20:44:16.000000Z'
                     -
-                      id: 019ff1d3-cb07-7067-b383-ac1f485f5318
-                      environment_id: 019ff1d3-cb05-7289-8291-69115e5635cb
-                      name: TEST_JYZFS4QV
+                      id: 019ff291-9ce4-731f-a518-3c3090da8349
+                      environment_id: 019ff291-9ce2-72a6-9226-ed0a50fc551e
+                      name: TEST_EV7NMA5L
                       last_accessed_at: null
-                      created_at: '2026-08-11T17:16:56.000000Z'
-                      updated_at: '2026-08-11T17:16:56.000000Z'
+                      created_at: '2026-08-11T20:44:16.000000Z'
+                      updated_at: '2026-08-11T20:44:16.000000Z'
                 properties:
                   data:
                     type: array
@@ -16183,12 +16472,12 @@ paths:
                 type: object
                 example:
                   data:
-                    id: 019ff1d3-cb1d-718e-8e6f-0fc4807d2c2c
-                    environment_id: 019ff1d3-cb1b-707c-93c7-aae31dc9aad5
-                    name: TEST_FLE4SS9X
+                    id: 019ff291-9cfa-72b9-b835-728c00ec73f9
+                    environment_id: 019ff291-9cf8-724a-b245-fd2146f51bf5
+                    name: TEST_VM0K56FD
                     last_accessed_at: null
-                    created_at: '2026-08-11T17:16:56.000000Z'
-                    updated_at: '2026-08-11T17:16:56.000000Z'
+                    created_at: '2026-08-11T20:44:17.000000Z'
+                    updated_at: '2026-08-11T20:44:17.000000Z'
                 properties:
                   data:
                     $ref: '#/components/schemas/Secret'
@@ -16438,12 +16727,12 @@ paths:
                 type: object
                 example:
                   data:
-                    id: 019ff1d3-cb33-73e4-a66e-a1371dd42b96
-                    environment_id: 019ff1d3-cb31-70e3-b7ec-e048b27ccc4c
-                    name: TEST_AYLJSIMF
+                    id: 019ff291-9d10-7263-a8d1-71ff5668cff3
+                    environment_id: 019ff291-9d0e-7004-a1d0-52469a891d0f
+                    name: TEST_3XYBJH43
                     last_accessed_at: null
-                    created_at: '2026-08-11T17:16:57.000000Z'
-                    updated_at: '2026-08-11T17:16:57.000000Z'
+                    created_at: '2026-08-11T20:44:17.000000Z'
+                    updated_at: '2026-08-11T20:44:17.000000Z'
                 properties:
                   data:
                     $ref: '#/components/schemas/Secret'
@@ -16551,12 +16840,12 @@ paths:
                 type: object
                 example:
                   data:
-                    id: 019ff1d3-cb49-737c-9441-c76935a40074
-                    environment_id: 019ff1d3-cb47-71dc-b5c9-a88ce6227bf9
-                    name: TEST_VPARSNHY
+                    id: 019ff291-9d26-7229-af08-49fc6a079641
+                    environment_id: 019ff291-9d24-7270-9706-965cc672588a
+                    name: TEST_EGR6Y0F2
                     last_accessed_at: null
-                    created_at: '2026-08-11T17:16:57.000000Z'
-                    updated_at: '2026-08-11T17:16:57.000000Z'
+                    created_at: '2026-08-11T20:44:17.000000Z'
+                    updated_at: '2026-08-11T20:44:17.000000Z'
                 properties:
                   data:
                     $ref: '#/components/schemas/Secret'
@@ -16927,7 +17216,7 @@ paths:
                 type: object
                 example:
                   data:
-                    environment_id: 019ff1d3-ca68-7003-a440-f6545414255b
+                    environment_id: 019ff291-9c50-72c9-8dee-b78dcd5df07a
                     snapshot_id: null
                     status: null
                 properties:
@@ -16936,7 +17225,7 @@ paths:
                     properties:
                       environment_id:
                         type: string
-                        example: 019ff1d3-ca68-7003-a440-f6545414255b
+                        example: 019ff291-9c50-72c9-8dee-b78dcd5df07a
                       snapshot_id:
                         type: string
                         example: null
@@ -17651,8 +17940,8 @@ paths:
                 type: object
                 example:
                   data:
-                    id: 019ff1d3-ca87-7348-9c8c-96918718f0aa
-                    account_id: 019ff1d3-ca7b-7068-aed2-feb97554bb6f
+                    id: 019ff291-9c6d-7299-a405-d7d402b47061
+                    account_id: 019ff291-9c61-704b-a426-60b9d76d99ba
                     created_by: 51
                     name: 'aut adipisci'
                     description: null
@@ -17660,8 +17949,8 @@ paths:
                     manifest: null
                     mcp_servers: null
                     base_snapshot: null
-                    created_at: '2026-08-11T17:16:56.000000Z'
-                    updated_at: '2026-08-11T17:16:56.000000Z'
+                    created_at: '2026-08-11T20:44:16.000000Z'
+                    updated_at: '2026-08-11T20:44:16.000000Z'
                 properties:
                   data:
                     $ref: '#/components/schemas/Environment'
@@ -17846,9 +18135,9 @@ paths:
                 example:
                   data:
                     -
-                      id: 019ff1d3-d294-7131-9214-9a7b58793e82
-                      task_id: 019ff1d3-d27f-7239-a9b0-9afe8e767dc7
-                      pipeline_version_id: 019ff1d3-d293-7377-aee2-f2392356d15b
+                      id: 019ff291-a38d-71f2-a8e1-472112c54a9d
+                      task_id: 019ff291-a377-71d4-9538-bd3edb9b7dc3
+                      pipeline_version_id: 019ff291-a38b-709f-ab5c-57141f35ba46
                       step_id: implement
                       kind: ai
                       spec:
@@ -17857,18 +18146,18 @@ paths:
                       result: []
                       attempt: 1
                       manual: false
-                      started_at: '2026-08-11T17:11:58.000000Z'
-                      completed_at: '2026-08-11T17:16:58.000000Z'
+                      started_at: '2026-08-11T20:39:18.000000Z'
+                      completed_at: '2026-08-11T20:44:18.000000Z'
                       next_check_at: null
                       deadline_at: null
                       pending_resolution: null
                       escalations: 0
                       escalated_at: null
-                      created_at: '2026-08-11T17:16:59.000000Z'
+                      created_at: '2026-08-11T20:44:19.000000Z'
                     -
-                      id: 019ff1d3-d2c8-7153-976c-07cb0e0865f9
-                      task_id: 019ff1d3-d2b2-70a3-9838-9a97c7d5fc7c
-                      pipeline_version_id: 019ff1d3-d2c7-73a9-84fc-7b5f55ca7c35
+                      id: 019ff291-a3d3-7340-995a-0e3b4d93e9f3
+                      task_id: 019ff291-a3b5-7145-8fe4-ca3063e1fd40
+                      pipeline_version_id: 019ff291-a3d1-7060-a922-06a0a074c79f
                       step_id: implement
                       kind: ai
                       spec:
@@ -17877,14 +18166,14 @@ paths:
                       result: []
                       attempt: 1
                       manual: false
-                      started_at: '2026-08-11T17:11:58.000000Z'
-                      completed_at: '2026-08-11T17:16:58.000000Z'
+                      started_at: '2026-08-11T20:39:18.000000Z'
+                      completed_at: '2026-08-11T20:44:18.000000Z'
                       next_check_at: null
                       deadline_at: null
                       pending_resolution: null
                       escalations: 0
                       escalated_at: null
-                      created_at: '2026-08-11T17:16:59.000000Z'
+                      created_at: '2026-08-11T20:44:19.000000Z'
                   links:
                     first: '/?page=1'
                     last: '/?page=1'
@@ -17992,9 +18281,9 @@ paths:
                 type: object
                 example:
                   data:
-                    id: 019ff1d3-d306-7317-84ba-67569ffd31fc
-                    task_id: 019ff1d3-d2f1-7045-a639-12430ff1a6de
-                    pipeline_version_id: 019ff1d3-d305-73dd-9549-fb685f899637
+                    id: 019ff291-a420-73e7-8cc3-8e9ae9495a8f
+                    task_id: 019ff291-a407-7363-8167-e0dd0e52d600
+                    pipeline_version_id: 019ff291-a41f-721e-a001-1c763671a457
                     step_id: implement
                     kind: ai
                     spec:
@@ -18003,14 +18292,14 @@ paths:
                     result: []
                     attempt: 1
                     manual: false
-                    started_at: '2026-08-11T17:11:58.000000Z'
-                    completed_at: '2026-08-11T17:16:58.000000Z'
+                    started_at: '2026-08-11T20:39:18.000000Z'
+                    completed_at: '2026-08-11T20:44:18.000000Z'
                     next_check_at: null
                     deadline_at: null
                     pending_resolution: null
                     escalations: 0
                     escalated_at: null
-                    created_at: '2026-08-11T17:16:59.000000Z'
+                    created_at: '2026-08-11T20:44:19.000000Z'
                 properties:
                   data:
                     $ref: '#/components/schemas/TaskAction'
@@ -18138,7 +18427,7 @@ paths:
                 example:
                   data:
                     task:
-                      id: 019ff1d3-d33b-73aa-a3af-4c3aa6834658
+                      id: 019ff291-a455-70e2-9e9e-c17525b56927
                       title: 'Adipisci quidem nostrum qui commodi incidunt iure.'
                       status: active
                       origin:
@@ -18147,14 +18436,14 @@ paths:
                         type: null
                         trigger_event_id: null
                         playbook_name: 'Fix a bug'
-                      created_at: '2026-08-11T17:16:59.000000Z'
+                      created_at: '2026-08-11T20:44:18.000000Z'
                       done_at: null
                     playbook:
-                      pipeline_id: 019ff1d3-d328-7307-8880-c17d686f1ce6
+                      pipeline_id: 019ff291-a443-71ec-bafb-de7d2c4e1802
                       name: 'Fix a bug'
                       version: 1
-                      version_id: 019ff1d3-d329-7109-b400-9598c30e0328
-                      published_at: '2026-08-11T17:16:59.000000Z'
+                      version_id: 019ff291-a444-700f-be09-aa924fc5a7ac
+                      published_at: '2026-08-11T20:44:18.000000Z'
                       published_by: 251
                       steps:
                         -
@@ -18165,7 +18454,7 @@ paths:
                           on_failure: halt
                     steps: []
                     events: []
-                    generated_at: '2026-08-11T17:16:59.158372Z'
+                    generated_at: '2026-08-11T20:44:18.992347Z'
                 properties:
                   data:
                     type: object
@@ -18175,7 +18464,7 @@ paths:
                         properties:
                           id:
                             type: string
-                            example: 019ff1d3-d33b-73aa-a3af-4c3aa6834658
+                            example: 019ff291-a455-70e2-9e9e-c17525b56927
                           title:
                             type: string
                             example: 'Adipisci quidem nostrum qui commodi incidunt iure.'
@@ -18205,7 +18494,7 @@ paths:
                                 example: 'Fix a bug'
                           created_at:
                             type: string
-                            example: '2026-08-11T17:16:59.000000Z'
+                            example: '2026-08-11T20:44:18.000000Z'
                           done_at:
                             type: string
                             example: null
@@ -18216,7 +18505,7 @@ paths:
                         properties:
                           pipeline_id:
                             type: string
-                            example: 019ff1d3-d328-7307-8880-c17d686f1ce6
+                            example: 019ff291-a443-71ec-bafb-de7d2c4e1802
                           name:
                             type: string
                             example: 'Fix a bug'
@@ -18225,10 +18514,10 @@ paths:
                             example: 1
                           version_id:
                             type: string
-                            example: 019ff1d3-d329-7109-b400-9598c30e0328
+                            example: 019ff291-a444-700f-be09-aa924fc5a7ac
                           published_at:
                             type: string
-                            example: '2026-08-11T17:16:59.000000Z'
+                            example: '2026-08-11T20:44:18.000000Z'
                           published_by:
                             type: integer
                             example: 251
@@ -18271,7 +18560,7 @@ paths:
                         description: 'The task event timeline, oldest first: the triggering event, step completions, and anything else routed to this task. Each entry carries the full event payload (`data`), plus `sequence`, `actor`, `policy_attribution`, and timestamps, matching the task events endpoint, so the timeline is self-contained.'
                       generated_at:
                         type: string
-                        example: '2026-08-11T17:16:59.158372Z'
+                        example: '2026-08-11T20:44:18.992347Z'
                         description: 'ISO 8601 timestamp this record was assembled.'
                     required:
                       - task

@@ -118,6 +118,48 @@ func OpenapiCreateAnAccount(params *viper.Viper, body string) (*gentleman.Respon
 	return resp, decoded, nil
 }
 
+// OpenapiGetAnAccount Get an account
+func OpenapiGetAnAccount(paramAccountId string, params *viper.Viper) (*gentleman.Response, map[string]interface{}, error) {
+	handlerPath := "getanaccount"
+	if openapiSubcommand {
+		handlerPath = "openapi " + handlerPath
+	}
+
+	server := viper.GetString("server")
+	if server == "" {
+		server = openapiServers()[viper.GetInt("server-index")]["url"]
+	}
+
+	url := server + "/v1/accounts/{account_id}"
+	url = strings.Replace(url, "{account_id}", paramAccountId, 1)
+
+	req := cli.Client.Get().URL(url)
+
+	cli.HandleBefore(handlerPath, params, req)
+
+	resp, err := req.Do()
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "Request failed")
+	}
+
+	var decoded map[string]interface{}
+
+	if resp.StatusCode < 400 {
+		if err := cli.UnmarshalResponse(resp, &decoded); err != nil {
+			return nil, nil, errors.Wrap(err, "Unmarshalling response failed")
+		}
+	} else {
+		return nil, nil, errors.Errorf("HTTP %d: %s", resp.StatusCode, resp.String())
+	}
+
+	after := cli.HandleAfter(handlerPath, params, resp, decoded)
+	if after != nil {
+		decoded = after.(map[string]interface{})
+	}
+
+	return resp, decoded, nil
+}
+
 // OpenapiUpdateAnAccount Update an account
 func OpenapiUpdateAnAccount(paramAccountId string, params *viper.Viper, body string) (*gentleman.Response, map[string]interface{}, error) {
 	handlerPath := "updateanaccount"
@@ -201,48 +243,6 @@ func OpenapiDeleteAnAccount(paramAccountId string, params *viper.Viper) (*gentle
 	after := cli.HandleAfter(handlerPath, params, resp, decoded)
 	if after != nil {
 		decoded = after
-	}
-
-	return resp, decoded, nil
-}
-
-// OpenapiGetAnAccount Get an account
-func OpenapiGetAnAccount(paramAccountId string, params *viper.Viper) (*gentleman.Response, map[string]interface{}, error) {
-	handlerPath := "getanaccount"
-	if openapiSubcommand {
-		handlerPath = "openapi " + handlerPath
-	}
-
-	server := viper.GetString("server")
-	if server == "" {
-		server = openapiServers()[viper.GetInt("server-index")]["url"]
-	}
-
-	url := server + "/v1/accounts/{account_id}"
-	url = strings.Replace(url, "{account_id}", paramAccountId, 1)
-
-	req := cli.Client.Get().URL(url)
-
-	cli.HandleBefore(handlerPath, params, req)
-
-	resp, err := req.Do()
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "Request failed")
-	}
-
-	var decoded map[string]interface{}
-
-	if resp.StatusCode < 400 {
-		if err := cli.UnmarshalResponse(resp, &decoded); err != nil {
-			return nil, nil, errors.Wrap(err, "Unmarshalling response failed")
-		}
-	} else {
-		return nil, nil, errors.Errorf("HTTP %d: %s", resp.StatusCode, resp.String())
-	}
-
-	after := cli.HandleAfter(handlerPath, params, resp, decoded)
-	if after != nil {
-		decoded = after.(map[string]interface{})
 	}
 
 	return resp, decoded, nil
@@ -483,9 +483,9 @@ func OpenapiDisableAnAgent(paramAccountId string, paramAgentUserId string, param
 	return resp, decoded, nil
 }
 
-// OpenapiDisconnectOneAgentsGitTokenStepsThatRunAsThisIdentityThenHaveNoGitCredentialsUntilATokenIsAttachedAgain Disconnect one agent's git token. Steps that run as this identity then have no git credentials until a token is attached again.
-func OpenapiDisconnectOneAgentsGitTokenStepsThatRunAsThisIdentityThenHaveNoGitCredentialsUntilATokenIsAttachedAgain(paramAccountId string, paramAgentUserId string, params *viper.Viper) (*gentleman.Response, interface{}, error) {
-	handlerPath := "disconnectoneagentsgittokenstepsthatrunasthisidentitythenhavenogitcredentialsuntilatokenisattachedagain"
+// OpenapiAttachorReplaceTheGitTokenOneAgentAuthenticatesWithTheTokenIsValidatedByTheFormRequestStoredEncryptedAndNeverReturnedTheGitUsernameIsResolvedFromTheTokenForDisplay Attach (or replace) the git token one agent authenticates with. The token is validated by the form request, stored encrypted, and never returned; the git username is resolved from the token for display.
+func OpenapiAttachorReplaceTheGitTokenOneAgentAuthenticatesWithTheTokenIsValidatedByTheFormRequestStoredEncryptedAndNeverReturnedTheGitUsernameIsResolvedFromTheTokenForDisplay(paramAccountId string, paramAgentUserId string, params *viper.Viper, body string) (*gentleman.Response, interface{}, error) {
+	handlerPath := "attachorreplacethegittokenoneagentauthenticateswiththetokenisvalidatedbytheformrequeststoredencryptedandneverreturnedthegitusernameisresolvedfromthetokenfordisplay"
 	if openapiSubcommand {
 		handlerPath = "openapi " + handlerPath
 	}
@@ -499,7 +499,11 @@ func OpenapiDisconnectOneAgentsGitTokenStepsThatRunAsThisIdentityThenHaveNoGitCr
 	url = strings.Replace(url, "{account_id}", paramAccountId, 1)
 	url = strings.Replace(url, "{agent_user_id}", paramAgentUserId, 1)
 
-	req := cli.Client.Delete().URL(url)
+	req := cli.Client.Put().URL(url)
+
+	if body != "" {
+		req = req.AddHeader("Content-Type", "application/json").BodyString(body)
+	}
 
 	cli.HandleBefore(handlerPath, params, req)
 
@@ -526,9 +530,9 @@ func OpenapiDisconnectOneAgentsGitTokenStepsThatRunAsThisIdentityThenHaveNoGitCr
 	return resp, decoded, nil
 }
 
-// OpenapiAttachorReplaceTheGitTokenOneAgentAuthenticatesWithTheTokenIsValidatedByTheFormRequestStoredEncryptedAndNeverReturnedTheGitUsernameIsResolvedFromTheTokenForDisplay Attach (or replace) the git token one agent authenticates with. The token is validated by the form request, stored encrypted, and never returned; the git username is resolved from the token for display.
-func OpenapiAttachorReplaceTheGitTokenOneAgentAuthenticatesWithTheTokenIsValidatedByTheFormRequestStoredEncryptedAndNeverReturnedTheGitUsernameIsResolvedFromTheTokenForDisplay(paramAccountId string, paramAgentUserId string, params *viper.Viper, body string) (*gentleman.Response, interface{}, error) {
-	handlerPath := "attachorreplacethegittokenoneagentauthenticateswiththetokenisvalidatedbytheformrequeststoredencryptedandneverreturnedthegitusernameisresolvedfromthetokenfordisplay"
+// OpenapiDisconnectOneAgentsGitTokenStepsThatRunAsThisIdentityThenHaveNoGitCredentialsUntilATokenIsAttachedAgain Disconnect one agent's git token. Steps that run as this identity then have no git credentials until a token is attached again.
+func OpenapiDisconnectOneAgentsGitTokenStepsThatRunAsThisIdentityThenHaveNoGitCredentialsUntilATokenIsAttachedAgain(paramAccountId string, paramAgentUserId string, params *viper.Viper) (*gentleman.Response, interface{}, error) {
+	handlerPath := "disconnectoneagentsgittokenstepsthatrunasthisidentitythenhavenogitcredentialsuntilatokenisattachedagain"
 	if openapiSubcommand {
 		handlerPath = "openapi " + handlerPath
 	}
@@ -542,11 +546,7 @@ func OpenapiAttachorReplaceTheGitTokenOneAgentAuthenticatesWithTheTokenIsValidat
 	url = strings.Replace(url, "{account_id}", paramAccountId, 1)
 	url = strings.Replace(url, "{agent_user_id}", paramAgentUserId, 1)
 
-	req := cli.Client.Put().URL(url)
-
-	if body != "" {
-		req = req.AddHeader("Content-Type", "application/json").BodyString(body)
-	}
+	req := cli.Client.Delete().URL(url)
 
 	cli.HandleBefore(handlerPath, params, req)
 
@@ -611,55 +611,6 @@ func OpenapiListAnAgentsIdentities(paramAccountId string, paramAgentUserId strin
 	after := cli.HandleAfter(handlerPath, params, resp, decoded)
 	if after != nil {
 		decoded = after.(map[string]interface{})
-	}
-
-	return resp, decoded, nil
-}
-
-// OpenapiTakeAnIdentityAway Take an identity away
-func OpenapiTakeAnIdentityAway(paramAccountId string, paramAgentUserId string, paramProvider string, params *viper.Viper) (*gentleman.Response, interface{}, error) {
-	handlerPath := "takeanidentityaway"
-	if openapiSubcommand {
-		handlerPath = "openapi " + handlerPath
-	}
-
-	server := viper.GetString("server")
-	if server == "" {
-		server = openapiServers()[viper.GetInt("server-index")]["url"]
-	}
-
-	url := server + "/v1/accounts/{account_id}/agents/{agent_user_id}/identities/{provider}"
-	url = strings.Replace(url, "{account_id}", paramAccountId, 1)
-	url = strings.Replace(url, "{agent_user_id}", paramAgentUserId, 1)
-	url = strings.Replace(url, "{provider}", paramProvider, 1)
-
-	req := cli.Client.Delete().URL(url)
-
-	paramIdempotencyKey := params.GetString("idempotency-key")
-	if paramIdempotencyKey != "" {
-		req = req.AddHeader("Idempotency-Key", fmt.Sprintf("%v", paramIdempotencyKey))
-	}
-
-	cli.HandleBefore(handlerPath, params, req)
-
-	resp, err := req.Do()
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "Request failed")
-	}
-
-	var decoded interface{}
-
-	if resp.StatusCode < 400 {
-		if err := cli.UnmarshalResponse(resp, &decoded); err != nil {
-			return nil, nil, errors.Wrap(err, "Unmarshalling response failed")
-		}
-	} else {
-		return nil, nil, errors.Errorf("HTTP %d: %s", resp.StatusCode, resp.String())
-	}
-
-	after := cli.HandleAfter(handlerPath, params, resp, decoded)
-	if after != nil {
-		decoded = after
 	}
 
 	return resp, decoded, nil
@@ -762,6 +713,55 @@ func OpenapiGiveAnAgentAnIdentity(paramAccountId string, paramAgentUserId string
 	return resp, decoded, nil
 }
 
+// OpenapiTakeAnIdentityAway Take an identity away
+func OpenapiTakeAnIdentityAway(paramAccountId string, paramAgentUserId string, paramProvider string, params *viper.Viper) (*gentleman.Response, interface{}, error) {
+	handlerPath := "takeanidentityaway"
+	if openapiSubcommand {
+		handlerPath = "openapi " + handlerPath
+	}
+
+	server := viper.GetString("server")
+	if server == "" {
+		server = openapiServers()[viper.GetInt("server-index")]["url"]
+	}
+
+	url := server + "/v1/accounts/{account_id}/agents/{agent_user_id}/identities/{provider}"
+	url = strings.Replace(url, "{account_id}", paramAccountId, 1)
+	url = strings.Replace(url, "{agent_user_id}", paramAgentUserId, 1)
+	url = strings.Replace(url, "{provider}", paramProvider, 1)
+
+	req := cli.Client.Delete().URL(url)
+
+	paramIdempotencyKey := params.GetString("idempotency-key")
+	if paramIdempotencyKey != "" {
+		req = req.AddHeader("Idempotency-Key", fmt.Sprintf("%v", paramIdempotencyKey))
+	}
+
+	cli.HandleBefore(handlerPath, params, req)
+
+	resp, err := req.Do()
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "Request failed")
+	}
+
+	var decoded interface{}
+
+	if resp.StatusCode < 400 {
+		if err := cli.UnmarshalResponse(resp, &decoded); err != nil {
+			return nil, nil, errors.Wrap(err, "Unmarshalling response failed")
+		}
+	} else {
+		return nil, nil, errors.Errorf("HTTP %d: %s", resp.StatusCode, resp.String())
+	}
+
+	after := cli.HandleAfter(handlerPath, params, resp, decoded)
+	if after != nil {
+		decoded = after
+	}
+
+	return resp, decoded, nil
+}
+
 // OpenapiMintAnAccessToken Mint an access token
 func OpenapiMintAnAccessToken(paramAccountId string, paramAgentUserId string, paramProvider string, params *viper.Viper, body string) (*gentleman.Response, map[string]interface{}, error) {
 	handlerPath := "mintanaccesstoken"
@@ -783,6 +783,70 @@ func OpenapiMintAnAccessToken(paramAccountId string, paramAgentUserId string, pa
 
 	if body != "" {
 		req = req.AddHeader("Content-Type", "").BodyString(body)
+	}
+
+	cli.HandleBefore(handlerPath, params, req)
+
+	resp, err := req.Do()
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "Request failed")
+	}
+
+	var decoded map[string]interface{}
+
+	if resp.StatusCode < 400 {
+		if err := cli.UnmarshalResponse(resp, &decoded); err != nil {
+			return nil, nil, errors.Wrap(err, "Unmarshalling response failed")
+		}
+	} else {
+		return nil, nil, errors.Errorf("HTTP %d: %s", resp.StatusCode, resp.String())
+	}
+
+	after := cli.HandleAfter(handlerPath, params, resp, decoded)
+	if after != nil {
+		decoded = after.(map[string]interface{})
+	}
+
+	return resp, decoded, nil
+}
+
+// OpenapiListAnAgentsJournalEntries List an agent's journal entries
+func OpenapiListAnAgentsJournalEntries(paramAccountId string, paramAgentUserId string, params *viper.Viper) (*gentleman.Response, map[string]interface{}, error) {
+	handlerPath := "listanagentsjournalentries"
+	if openapiSubcommand {
+		handlerPath = "openapi " + handlerPath
+	}
+
+	server := viper.GetString("server")
+	if server == "" {
+		server = openapiServers()[viper.GetInt("server-index")]["url"]
+	}
+
+	url := server + "/v1/accounts/{account_id}/agents/{agent_user_id}/journals"
+	url = strings.Replace(url, "{account_id}", paramAccountId, 1)
+	url = strings.Replace(url, "{agent_user_id}", paramAgentUserId, 1)
+
+	req := cli.Client.Get().URL(url)
+
+	paramKind := params.GetString("kind")
+	if paramKind != "" {
+		req = req.AddQuery("kind", fmt.Sprintf("%v", paramKind))
+	}
+	paramTag := params.GetString("tag")
+	if paramTag != "" {
+		req = req.AddQuery("tag", fmt.Sprintf("%v", paramTag))
+	}
+	paramRef := params.GetString("ref")
+	if paramRef != "" {
+		req = req.AddQuery("ref", fmt.Sprintf("%v", paramRef))
+	}
+	paramQ := params.GetString("q")
+	if paramQ != "" {
+		req = req.AddQuery("q", fmt.Sprintf("%v", paramQ))
+	}
+	paramPerPage := params.GetInt64("per-page")
+	if paramPerPage != 0 {
+		req = req.AddQuery("per_page", fmt.Sprintf("%v", paramPerPage))
 	}
 
 	cli.HandleBefore(handlerPath, params, req)
@@ -2892,9 +2956,9 @@ func OpenapiCheckAHandle(paramAccountId string, paramHandle string, params *vipe
 	return resp, decoded, nil
 }
 
-// OpenapiCreateAnInvitation Create an invitation
-func OpenapiCreateAnInvitation(paramAccountId string, params *viper.Viper, body string) (*gentleman.Response, map[string]interface{}, error) {
-	handlerPath := "createaninvitation"
+// OpenapiListPendingInvitations List pending invitations
+func OpenapiListPendingInvitations(paramAccountId string, params *viper.Viper) (*gentleman.Response, map[string]interface{}, error) {
+	handlerPath := "listpendinginvitations"
 	if openapiSubcommand {
 		handlerPath = "openapi " + handlerPath
 	}
@@ -2907,10 +2971,11 @@ func OpenapiCreateAnInvitation(paramAccountId string, params *viper.Viper, body 
 	url := server + "/v1/accounts/{account_id}/invitations"
 	url = strings.Replace(url, "{account_id}", paramAccountId, 1)
 
-	req := cli.Client.Post().URL(url)
+	req := cli.Client.Get().URL(url)
 
-	if body != "" {
-		req = req.AddHeader("Content-Type", "application/json").BodyString(body)
+	paramPerPage := params.GetInt64("per-page")
+	if paramPerPage != 0 {
+		req = req.AddQuery("per_page", fmt.Sprintf("%v", paramPerPage))
 	}
 
 	cli.HandleBefore(handlerPath, params, req)
@@ -2938,9 +3003,9 @@ func OpenapiCreateAnInvitation(paramAccountId string, params *viper.Viper, body 
 	return resp, decoded, nil
 }
 
-// OpenapiListPendingInvitations List pending invitations
-func OpenapiListPendingInvitations(paramAccountId string, params *viper.Viper) (*gentleman.Response, map[string]interface{}, error) {
-	handlerPath := "listpendinginvitations"
+// OpenapiCreateAnInvitation Create an invitation
+func OpenapiCreateAnInvitation(paramAccountId string, params *viper.Viper, body string) (*gentleman.Response, map[string]interface{}, error) {
+	handlerPath := "createaninvitation"
 	if openapiSubcommand {
 		handlerPath = "openapi " + handlerPath
 	}
@@ -2953,11 +3018,10 @@ func OpenapiListPendingInvitations(paramAccountId string, params *viper.Viper) (
 	url := server + "/v1/accounts/{account_id}/invitations"
 	url = strings.Replace(url, "{account_id}", paramAccountId, 1)
 
-	req := cli.Client.Get().URL(url)
+	req := cli.Client.Post().URL(url)
 
-	paramPerPage := params.GetInt64("per-page")
-	if paramPerPage != 0 {
-		req = req.AddQuery("per_page", fmt.Sprintf("%v", paramPerPage))
+	if body != "" {
+		req = req.AddHeader("Content-Type", "application/json").BodyString(body)
 	}
 
 	cli.HandleBefore(handlerPath, params, req)
@@ -5460,6 +5524,54 @@ func OpenapiAttachAnExistingUserToTheAccount(paramAccountId string, params *vipe
 	return resp, decoded, nil
 }
 
+// OpenapiUpdateAUsersRole Update a user's role
+func OpenapiUpdateAUsersRole(paramAccountId string, paramUserId string, paramUser string, params *viper.Viper, body string) (*gentleman.Response, map[string]interface{}, error) {
+	handlerPath := "updateausersrole"
+	if openapiSubcommand {
+		handlerPath = "openapi " + handlerPath
+	}
+
+	server := viper.GetString("server")
+	if server == "" {
+		server = openapiServers()[viper.GetInt("server-index")]["url"]
+	}
+
+	url := server + "/v1/accounts/{account_id}/users/{user_id}"
+	url = strings.Replace(url, "{account_id}", paramAccountId, 1)
+	url = strings.Replace(url, "{user_id}", paramUserId, 1)
+	url = strings.Replace(url, "{user}", paramUser, 1)
+
+	req := cli.Client.Patch().URL(url)
+
+	if body != "" {
+		req = req.AddHeader("Content-Type", "application/json").BodyString(body)
+	}
+
+	cli.HandleBefore(handlerPath, params, req)
+
+	resp, err := req.Do()
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "Request failed")
+	}
+
+	var decoded map[string]interface{}
+
+	if resp.StatusCode < 400 {
+		if err := cli.UnmarshalResponse(resp, &decoded); err != nil {
+			return nil, nil, errors.Wrap(err, "Unmarshalling response failed")
+		}
+	} else {
+		return nil, nil, errors.Errorf("HTTP %d: %s", resp.StatusCode, resp.String())
+	}
+
+	after := cli.HandleAfter(handlerPath, params, resp, decoded)
+	if after != nil {
+		decoded = after.(map[string]interface{})
+	}
+
+	return resp, decoded, nil
+}
+
 // OpenapiRemoveAUserFromTheAccount Remove a user from the account
 func OpenapiRemoveAUserFromTheAccount(paramAccountId string, paramUserId string, paramUser string, params *viper.Viper) (*gentleman.Response, interface{}, error) {
 	handlerPath := "removeauserfromtheaccount"
@@ -5522,54 +5634,6 @@ func OpenapiGetAnAccountUser(paramAccountId string, paramUserId string, paramUse
 	url = strings.Replace(url, "{user}", paramUser, 1)
 
 	req := cli.Client.Get().URL(url)
-
-	cli.HandleBefore(handlerPath, params, req)
-
-	resp, err := req.Do()
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "Request failed")
-	}
-
-	var decoded map[string]interface{}
-
-	if resp.StatusCode < 400 {
-		if err := cli.UnmarshalResponse(resp, &decoded); err != nil {
-			return nil, nil, errors.Wrap(err, "Unmarshalling response failed")
-		}
-	} else {
-		return nil, nil, errors.Errorf("HTTP %d: %s", resp.StatusCode, resp.String())
-	}
-
-	after := cli.HandleAfter(handlerPath, params, resp, decoded)
-	if after != nil {
-		decoded = after.(map[string]interface{})
-	}
-
-	return resp, decoded, nil
-}
-
-// OpenapiUpdateAUsersRole Update a user's role
-func OpenapiUpdateAUsersRole(paramAccountId string, paramUserId string, paramUser string, params *viper.Viper, body string) (*gentleman.Response, map[string]interface{}, error) {
-	handlerPath := "updateausersrole"
-	if openapiSubcommand {
-		handlerPath = "openapi " + handlerPath
-	}
-
-	server := viper.GetString("server")
-	if server == "" {
-		server = openapiServers()[viper.GetInt("server-index")]["url"]
-	}
-
-	url := server + "/v1/accounts/{account_id}/users/{user_id}"
-	url = strings.Replace(url, "{account_id}", paramAccountId, 1)
-	url = strings.Replace(url, "{user_id}", paramUserId, 1)
-	url = strings.Replace(url, "{user}", paramUser, 1)
-
-	req := cli.Client.Patch().URL(url)
-
-	if body != "" {
-		req = req.AddHeader("Content-Type", "application/json").BodyString(body)
-	}
 
 	cli.HandleBefore(handlerPath, params, req)
 
@@ -6511,6 +6575,40 @@ func openapiRegister(subcommand bool) {
 			var examples string
 
 			cmd := &cobra.Command{
+				Use:     "get account-id",
+				Short:   "Get an account",
+				Long:    cli.Markdown("Returns details for a specific account."),
+				Example: examples,
+				Args:    cobra.MinimumNArgs(1),
+				Run: func(cmd *cobra.Command, args []string) {
+
+					_, decoded, err := OpenapiGetAnAccount(args[0], params)
+					if err != nil {
+						log.Fatal().Err(err).Msg("Error calling operation")
+					}
+
+					if err := cli.Formatter.Format(decoded); err != nil {
+						log.Fatal().Err(err).Msg("Formatting failed")
+					}
+
+				},
+			}
+			groupCmd.AddCommand(cmd)
+
+			cli.SetCustomFlags(cmd)
+
+			if cmd.Flags().HasFlags() {
+				params.BindPFlags(cmd.Flags())
+			}
+
+		}()
+
+		func() {
+			params := viper.New()
+
+			var examples string
+
+			cmd := &cobra.Command{
 				Use:     "update account-id",
 				Short:   "Update an account",
 				Long:    cli.Markdown("Rename an account. Requires the `admin` or `owner` role on the account.\n\nOnly the `name` field is mutable through the public API.\n## Request Schema (application/json)\n\nproperties:\n  name:\n    description: A human-readable name for the account. Must not be greater than 255\n      characters.\n    example: Acme Inc.\n    type: string\nrequired:\n- name\ntype: object\n"),
@@ -6557,40 +6655,6 @@ func openapiRegister(subcommand bool) {
 				Run: func(cmd *cobra.Command, args []string) {
 
 					_, decoded, err := OpenapiDeleteAnAccount(args[0], params)
-					if err != nil {
-						log.Fatal().Err(err).Msg("Error calling operation")
-					}
-
-					if err := cli.Formatter.Format(decoded); err != nil {
-						log.Fatal().Err(err).Msg("Formatting failed")
-					}
-
-				},
-			}
-			groupCmd.AddCommand(cmd)
-
-			cli.SetCustomFlags(cmd)
-
-			if cmd.Flags().HasFlags() {
-				params.BindPFlags(cmd.Flags())
-			}
-
-		}()
-
-		func() {
-			params := viper.New()
-
-			var examples string
-
-			cmd := &cobra.Command{
-				Use:     "get account-id",
-				Short:   "Get an account",
-				Long:    cli.Markdown("Returns details for a specific account."),
-				Example: examples,
-				Args:    cobra.MinimumNArgs(1),
-				Run: func(cmd *cobra.Command, args []string) {
-
-					_, decoded, err := OpenapiGetAnAccount(args[0], params)
 					if err != nil {
 						log.Fatal().Err(err).Msg("Error calling operation")
 					}
@@ -7009,7 +7073,7 @@ func openapiRegister(subcommand bool) {
 			cmd := &cobra.Command{
 				Use:     "handbook account-id",
 				Short:   "Reorder the handbook",
-				Long:    cli.Markdown("Reorders one parent's children in a single atomic write. Send the page whose children you are ordering (`parent_page_id`, or null for the top level) and the complete ordered list of its children as `{type, id}` pairs; positions are assigned from the array order. The list must contain exactly that parent's current children. To move an item under a different parent, update the page or playbook itself first. Returns the updated handbook tree.\n## Request Schema (application/json)\n\nproperties:\n  children:\n    description: 'The complete ordered list of that parent''s children, each as `{type,\n      id}` with `type` of `page` or `playbook`. Must contain exactly the parent''s\n      current children: no additions, omissions, or items from other parents (move\n      items between parents first, via the page or playbook update endpoints). Positions\n      are assigned from the array order in one atomic write. Must have at least 1\n      items. Must not have more than 500 items.'\n    example: null\n    items:\n      properties:\n        id:\n          description: Must be a valid UUID.\n          example: 6ff8f7f6-1eb3-3525-be4a-3932c805afed\n          type: string\n        type:\n          description: \"\"\n          enum:\n          - page\n          - playbook\n          example: page\n          type: string\n      required:\n      - type\n      - id\n      type: object\n    type: array\n  parent_page_id:\n    description: The page whose children are being reordered. Pass null to reorder\n      the top level of the handbook. Must be a valid UUID.\n    example: null\n    nullable: true\n    type: string\nrequired:\n- children\ntype: object\n"),
+				Long:    cli.Markdown("Reorders one parent's children in a single atomic write. Send the page whose children you are ordering (`parent_page_id`, or null for the top level) and the complete ordered list of its children as `{type, id}` pairs; positions are assigned from the array order. The list must contain exactly that parent's current children. To move an item under a different parent, update the page or playbook itself first. Returns the updated handbook tree.\n## Request Schema (application/json)\n\nproperties:\n  children:\n    description: 'The complete ordered list of that parent''s children, each as `{type,\n      id}` with `type` of `page` or `playbook`. Must contain exactly the parent''s\n      current children: no additions, omissions, or items from other parents (move\n      items between parents first, via the page or playbook update endpoints). Positions\n      are assigned from the array order in one atomic write. Must have at least 1\n      items. Must not have more than 500 items.'\n    example: null\n    items:\n      properties:\n        id:\n          description: Must be a valid UUID.\n          example: 6ff8f7f6-1eb3-3525-be4a-3932c805afed\n          type: string\n        type:\n          description: \"\"\n          enum:\n          - page\n          - playbook\n          example: playbook\n          type: string\n      required:\n      - type\n      - id\n      type: object\n    type: array\n  parent_page_id:\n    description: The page whose children are being reordered. Pass null to reorder\n      the top level of the handbook. Must be a valid UUID.\n    example: null\n    nullable: true\n    type: string\nrequired:\n- children\ntype: object\n"),
 				Example: examples,
 				Args:    cobra.MinimumNArgs(1),
 				Run: func(cmd *cobra.Command, args []string) {
@@ -7278,6 +7342,44 @@ func openapiRegister(subcommand bool) {
 
 			cmd := &cobra.Command{
 				Use:     "automation account-id agent-user-id",
+				Short:   "Attach (or replace) the git token one agent authenticates with. The token is validated by the form request, stored encrypted, and never returned; the git username is resolved from the token for display.",
+				Long:    cli.Markdown("\n## Request Schema (application/json)\n\nproperties:\n  github_token:\n    description: \"\"\n    example: architecto\n    type: string\nrequired:\n- github_token\ntype: object\n"),
+				Example: examples,
+				Args:    cobra.MinimumNArgs(2),
+				Run: func(cmd *cobra.Command, args []string) {
+					body, err := cli.GetBody("application/json", args[2:])
+					if err != nil {
+						log.Fatal().Err(err).Msg("Unable to get body")
+					}
+
+					_, decoded, err := OpenapiAttachorReplaceTheGitTokenOneAgentAuthenticatesWithTheTokenIsValidatedByTheFormRequestStoredEncryptedAndNeverReturnedTheGitUsernameIsResolvedFromTheTokenForDisplay(args[0], args[1], params, body)
+					if err != nil {
+						log.Fatal().Err(err).Msg("Error calling operation")
+					}
+
+					if err := cli.Formatter.Format(decoded); err != nil {
+						log.Fatal().Err(err).Msg("Formatting failed")
+					}
+
+				},
+			}
+			groupCmd.AddCommand(cmd)
+
+			cli.SetCustomFlags(cmd)
+
+			if cmd.Flags().HasFlags() {
+				params.BindPFlags(cmd.Flags())
+			}
+
+		}()
+
+		func() {
+			params := viper.New()
+
+			var examples string
+
+			cmd := &cobra.Command{
+				Use:     "automation account-id agent-user-id",
 				Short:   "Disconnect one agent's git token. Steps that run as this identity then have no git credentials until a token is attached again.",
 				Long:    cli.Markdown(""),
 				Example: examples,
@@ -7311,18 +7413,14 @@ func openapiRegister(subcommand bool) {
 			var examples string
 
 			cmd := &cobra.Command{
-				Use:     "automation account-id agent-user-id",
-				Short:   "Attach (or replace) the git token one agent authenticates with. The token is validated by the form request, stored encrypted, and never returned; the git username is resolved from the token for display.",
-				Long:    cli.Markdown("\n## Request Schema (application/json)\n\nproperties:\n  github_token:\n    description: \"\"\n    example: architecto\n    type: string\nrequired:\n- github_token\ntype: object\n"),
+				Use:     "journals account-id agent-user-id",
+				Short:   "List an agent's journal entries",
+				Long:    cli.Markdown("Returns the agent's entries, most recent first. Every entry the agent has written is here; there is no half it keeps to itself.\n\nFilter with `kind` to read one sort of entry, `tag` for the words the agent files entries under, `ref` for entries about a specific thing (a task, a repository, a person), and `q` to search the text."),
 				Example: examples,
 				Args:    cobra.MinimumNArgs(2),
 				Run: func(cmd *cobra.Command, args []string) {
-					body, err := cli.GetBody("application/json", args[2:])
-					if err != nil {
-						log.Fatal().Err(err).Msg("Unable to get body")
-					}
 
-					_, decoded, err := OpenapiAttachorReplaceTheGitTokenOneAgentAuthenticatesWithTheTokenIsValidatedByTheFormRequestStoredEncryptedAndNeverReturnedTheGitUsernameIsResolvedFromTheTokenForDisplay(args[0], args[1], params, body)
+					_, decoded, err := OpenapiListAnAgentsJournalEntries(args[0], args[1], params)
 					if err != nil {
 						log.Fatal().Err(err).Msg("Error calling operation")
 					}
@@ -7334,6 +7432,12 @@ func openapiRegister(subcommand bool) {
 				},
 			}
 			groupCmd.AddCommand(cmd)
+
+			cmd.Flags().String("kind", "", "Only entries of this kind: `episodic` or `relational`.")
+			cmd.Flags().String("tag", "", "Only entries carrying this tag. Tags are lowercase and hyphenated.")
+			cmd.Flags().String("ref", "", "Only entries referencing this `type:id`, for example `repo:acme/web` or `task:019f2c1a-0e64-7a3b-9f10-2b6d8a5c4e77`.")
+			cmd.Flags().String("q", "", "Only entries whose text contains this, case-insensitive.")
+			cmd.Flags().Int64("per-page", 0, "Results per page (max 100).")
 
 			cli.SetCustomFlags(cmd)
 
@@ -7494,42 +7598,6 @@ func openapiRegister(subcommand bool) {
 			var examples string
 
 			cmd := &cobra.Command{
-				Use:     "delete account-id agent-user-id provider",
-				Short:   "Take an identity away",
-				Long:    cli.Markdown("Revokes the agent's account on the named system. Admin-only.\n\nFor Google the licence is released and the account is suspended rather than deleted, so the documents it created and the mail it received survive. Moving that ownership to someone else is the transfer your Workspace administrator already runs when a person leaves.\n\nFor Slack the agent's app is deleted, because an app holds nothing: the conversations it took part in belong to your workspace and are untouched, and an app left in place would go on using one of your workspace's app slots. The agent's handle is kept in reserve, so giving the same agent an app again brings back the name people already type.\n\nIdempotent: revoking an account the agent does not hold still succeeds."),
-				Example: examples,
-				Args:    cobra.MinimumNArgs(3),
-				Run: func(cmd *cobra.Command, args []string) {
-
-					_, decoded, err := OpenapiTakeAnIdentityAway(args[0], args[1], args[2], params)
-					if err != nil {
-						log.Fatal().Err(err).Msg("Error calling operation")
-					}
-
-					if err := cli.Formatter.Format(decoded); err != nil {
-						log.Fatal().Err(err).Msg("Formatting failed")
-					}
-
-				},
-			}
-			groupCmd.AddCommand(cmd)
-
-			cmd.Flags().String("idempotency-key", "", "")
-
-			cli.SetCustomFlags(cmd)
-
-			if cmd.Flags().HasFlags() {
-				params.BindPFlags(cmd.Flags())
-			}
-
-		}()
-
-		func() {
-			params := viper.New()
-
-			var examples string
-
-			cmd := &cobra.Command{
 				Use:     "get account-id agent-user-id provider",
 				Short:   "Get an agent identity",
 				Long:    cli.Markdown("Returns one of the agent's external accounts. Poll this after granting one to watch it come up: `status` is `pending` until the account is usable, and `details` says what is outstanding. For Slack that is the install, and `details.install_url` is the link to complete it."),
@@ -7576,6 +7644,42 @@ func openapiRegister(subcommand bool) {
 					}
 
 					_, decoded, err := OpenapiGiveAnAgentAnIdentity(args[0], args[1], args[2], params, body)
+					if err != nil {
+						log.Fatal().Err(err).Msg("Error calling operation")
+					}
+
+					if err := cli.Formatter.Format(decoded); err != nil {
+						log.Fatal().Err(err).Msg("Formatting failed")
+					}
+
+				},
+			}
+			groupCmd.AddCommand(cmd)
+
+			cmd.Flags().String("idempotency-key", "", "")
+
+			cli.SetCustomFlags(cmd)
+
+			if cmd.Flags().HasFlags() {
+				params.BindPFlags(cmd.Flags())
+			}
+
+		}()
+
+		func() {
+			params := viper.New()
+
+			var examples string
+
+			cmd := &cobra.Command{
+				Use:     "delete account-id agent-user-id provider",
+				Short:   "Take an identity away",
+				Long:    cli.Markdown("Revokes the agent's account on the named system. Admin-only.\n\nFor Google the licence is released and the account is suspended rather than deleted, so the documents it created and the mail it received survive. Moving that ownership to someone else is the transfer your Workspace administrator already runs when a person leaves.\n\nFor Slack the agent's app is deleted, because an app holds nothing: the conversations it took part in belong to your workspace and are untouched, and an app left in place would go on using one of your workspace's app slots. The agent's handle is kept in reserve, so giving the same agent an app again brings back the name people already type.\n\nIdempotent: revoking an account the agent does not hold still succeeds."),
+				Example: examples,
+				Args:    cobra.MinimumNArgs(3),
+				Run: func(cmd *cobra.Command, args []string) {
+
+					_, decoded, err := OpenapiTakeAnIdentityAway(args[0], args[1], args[2], params)
 					if err != nil {
 						log.Fatal().Err(err).Msg("Error calling operation")
 					}
@@ -8806,6 +8910,42 @@ func openapiRegister(subcommand bool) {
 			var examples string
 
 			cmd := &cobra.Command{
+				Use:     "list account-id",
+				Short:   "List pending invitations",
+				Long:    cli.Markdown("Returns all pending (unaccepted, unexpired) invitations for the account. Requires admin role or higher."),
+				Example: examples,
+				Args:    cobra.MinimumNArgs(1),
+				Run: func(cmd *cobra.Command, args []string) {
+
+					_, decoded, err := OpenapiListPendingInvitations(args[0], params)
+					if err != nil {
+						log.Fatal().Err(err).Msg("Error calling operation")
+					}
+
+					if err := cli.Formatter.Format(decoded); err != nil {
+						log.Fatal().Err(err).Msg("Formatting failed")
+					}
+
+				},
+			}
+			groupCmd.AddCommand(cmd)
+
+			cmd.Flags().Int64("per-page", 0, "Results per page (max 100).")
+
+			cli.SetCustomFlags(cmd)
+
+			if cmd.Flags().HasFlags() {
+				params.BindPFlags(cmd.Flags())
+			}
+
+		}()
+
+		func() {
+			params := viper.New()
+
+			var examples string
+
+			cmd := &cobra.Command{
 				Use:     "create account-id",
 				Short:   "Create an invitation",
 				Long:    cli.Markdown("Creates a pending invitation for an email that does not yet have a Wallfacer user account,\nand sends the invitee an email with a signed token link. Requires admin role or higher.\nOnly owners can grant the `owner` role.\n\nIf an existing user already has this email, the request is rejected with\n`422 user_already_registered`. Use `POST /v1/accounts/{account}/users` to attach them directly.\n\nIf a pending invitation already exists for the same `(account, email)`, its role is updated\nto the new value (admin's most recent intent wins) and it is returned unchanged. Repeat calls\ndo not send duplicate emails.\n## Request Schema (application/json)\n\nproperties:\n  email:\n    description: The email address to invite. If a user already exists for this email,\n      the request is rejected; use POST /v1/accounts/{account}/users to attach them\n      directly. Must be a valid email address. Must not be greater than 255 characters.\n    example: newcomer@example.com\n    type: string\n  role:\n    description: 'Role to grant when the invitee accepts. One of: owner, admin, member.\n      Only owners can grant the owner role.'\n    enum:\n    - owner\n    - admin\n    - member\n    example: member\n    type: string\nrequired:\n- email\n- role\ntype: object\n"),
@@ -8829,42 +8969,6 @@ func openapiRegister(subcommand bool) {
 				},
 			}
 			groupCmd.AddCommand(cmd)
-
-			cli.SetCustomFlags(cmd)
-
-			if cmd.Flags().HasFlags() {
-				params.BindPFlags(cmd.Flags())
-			}
-
-		}()
-
-		func() {
-			params := viper.New()
-
-			var examples string
-
-			cmd := &cobra.Command{
-				Use:     "list account-id",
-				Short:   "List pending invitations",
-				Long:    cli.Markdown("Returns all pending (unaccepted, unexpired) invitations for the account. Requires admin role or higher."),
-				Example: examples,
-				Args:    cobra.MinimumNArgs(1),
-				Run: func(cmd *cobra.Command, args []string) {
-
-					_, decoded, err := OpenapiListPendingInvitations(args[0], params)
-					if err != nil {
-						log.Fatal().Err(err).Msg("Error calling operation")
-					}
-
-					if err := cli.Formatter.Format(decoded); err != nil {
-						log.Fatal().Err(err).Msg("Formatting failed")
-					}
-
-				},
-			}
-			groupCmd.AddCommand(cmd)
-
-			cmd.Flags().Int64("per-page", 0, "Results per page (max 100).")
 
 			cli.SetCustomFlags(cmd)
 
@@ -10885,6 +10989,44 @@ func openapiRegister(subcommand bool) {
 			var examples string
 
 			cmd := &cobra.Command{
+				Use:     "update account-id user-id user",
+				Short:   "Update a user's role",
+				Long:    cli.Markdown("Change a user's role on the account. Requires admin role or higher.\n\n- Only owners can modify the role of another owner.\n- Only owners can promote a user to owner.\n- The last remaining owner cannot be demoted.\n## Request Schema (application/json)\n\nproperties:\n  role:\n    description: 'New role for the user. One of: owner, admin, member. Only owners\n      can grant or modify the owner role.'\n    enum:\n    - owner\n    - admin\n    - member\n    example: admin\n    type: string\nrequired:\n- role\ntype: object\n"),
+				Example: examples,
+				Args:    cobra.MinimumNArgs(3),
+				Run: func(cmd *cobra.Command, args []string) {
+					body, err := cli.GetBody("application/json", args[3:])
+					if err != nil {
+						log.Fatal().Err(err).Msg("Unable to get body")
+					}
+
+					_, decoded, err := OpenapiUpdateAUsersRole(args[0], args[1], args[2], params, body)
+					if err != nil {
+						log.Fatal().Err(err).Msg("Error calling operation")
+					}
+
+					if err := cli.Formatter.Format(decoded); err != nil {
+						log.Fatal().Err(err).Msg("Formatting failed")
+					}
+
+				},
+			}
+			groupCmd.AddCommand(cmd)
+
+			cli.SetCustomFlags(cmd)
+
+			if cmd.Flags().HasFlags() {
+				params.BindPFlags(cmd.Flags())
+			}
+
+		}()
+
+		func() {
+			params := viper.New()
+
+			var examples string
+
+			cmd := &cobra.Command{
 				Use:     "delete account-id user-id user",
 				Short:   "Remove a user from the account",
 				Long:    cli.Markdown("Revokes the user's access to this account. Effective immediately: any subsequent\nrequest made against this account with one of their API tokens is rejected with `403`.\nTheir tokens stay valid for any other account they still belong to.\n\nRequires admin role or higher.\n\n- Only owners can remove an owner.\n- The last remaining owner cannot be removed."),
@@ -10927,44 +11069,6 @@ func openapiRegister(subcommand bool) {
 				Run: func(cmd *cobra.Command, args []string) {
 
 					_, decoded, err := OpenapiGetAnAccountUser(args[0], args[1], args[2], params)
-					if err != nil {
-						log.Fatal().Err(err).Msg("Error calling operation")
-					}
-
-					if err := cli.Formatter.Format(decoded); err != nil {
-						log.Fatal().Err(err).Msg("Formatting failed")
-					}
-
-				},
-			}
-			groupCmd.AddCommand(cmd)
-
-			cli.SetCustomFlags(cmd)
-
-			if cmd.Flags().HasFlags() {
-				params.BindPFlags(cmd.Flags())
-			}
-
-		}()
-
-		func() {
-			params := viper.New()
-
-			var examples string
-
-			cmd := &cobra.Command{
-				Use:     "update account-id user-id user",
-				Short:   "Update a user's role",
-				Long:    cli.Markdown("Change a user's role on the account. Requires admin role or higher.\n\n- Only owners can modify the role of another owner.\n- Only owners can promote a user to owner.\n- The last remaining owner cannot be demoted.\n## Request Schema (application/json)\n\nproperties:\n  role:\n    description: 'New role for the user. One of: owner, admin, member. Only owners\n      can grant or modify the owner role.'\n    enum:\n    - owner\n    - admin\n    - member\n    example: admin\n    type: string\nrequired:\n- role\ntype: object\n"),
-				Example: examples,
-				Args:    cobra.MinimumNArgs(3),
-				Run: func(cmd *cobra.Command, args []string) {
-					body, err := cli.GetBody("application/json", args[3:])
-					if err != nil {
-						log.Fatal().Err(err).Msg("Unable to get body")
-					}
-
-					_, decoded, err := OpenapiUpdateAUsersRole(args[0], args[1], args[2], params, body)
 					if err != nil {
 						log.Fatal().Err(err).Msg("Error calling operation")
 					}
