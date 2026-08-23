@@ -63,6 +63,9 @@ echo '{"prompt": "fix the login bug", "environment_id": "<env-id>"}' | wallfacer
 # Wait for snapshot and boot a VM in one step
 wallfacer up <environment-id>
 
+# List a session's messages, eliding image data and large tool blobs
+wallfacer messages list <task-id> <session-id> --view trimmed
+
 # Execute a command in a VM (shortcut)
 wallfacer exec --vm <vm-id> -- ls -la /workspace
 wallfacer exec --vm <vm-id> --dir /workspace --timeout 60 -- make build
