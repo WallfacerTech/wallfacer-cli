@@ -6263,6 +6263,10 @@ func OpenapiListMessages(paramAccountId string, paramTaskId string, paramSession
 	if paramView != "" {
 		req = req.AddQuery("view", fmt.Sprintf("%v", paramView))
 	}
+	paramDirection := params.GetString("direction")
+	if paramDirection != "" {
+		req = req.AddQuery("direction", fmt.Sprintf("%v", paramDirection))
+	}
 	paramCursor := params.GetString("cursor")
 	if paramCursor != "" {
 		req = req.AddQuery("cursor", fmt.Sprintf("%v", paramCursor))
@@ -8609,7 +8613,7 @@ func openapiRegister(subcommand bool) {
 			cmd := &cobra.Command{
 				Use:     "search account-id q",
 				Short:   "Search",
-				Long:    cli.Markdown("Runs one query across the account and returns matches grouped by record type.\n\nEvery record is matched across its text (names, titles, descriptions, and bodies). Results are limited to the account, honor environment visibility, and exclude deleted records. Within each type, results are ordered by relevance, highest first, and capped by `per_type`.\n\nThe `data` object always has a key for each requested type, holding an array of results (empty when nothing matched). Each type paginates independently: when more results of a type exist, `meta.next_cursor` carries a cursor for that type. Pass it back as `cursor[<type>]` to fetch that type's next page, narrowing `types` to the type you are paging.\n## Request Schema (application/json)\n\nproperties:\n  cursor:\n    description: \"\"\n    example:\n    - architecto\n    items:\n      type: string\n    type: array\n  per_type:\n    description: Must be at least 1. Must not be greater than 25.\n    example: 22\n    type: integer\n  q:\n    description: Must not be greater than 255 characters.\n    example: b\n    type: string\n  types:\n    description: \"\"\n    example:\n    - tasks\n    items:\n      enum:\n      - environments\n      - tasks\n      - sessions\n      - pages\n      - pipelines\n      type: string\n    type: array\nrequired:\n- q\ntype: object\n"),
+				Long:    cli.Markdown("Runs one query across the account and returns matches grouped by record type.\n\nEvery record is matched across its text (names, titles, descriptions, and bodies). Results are limited to the account, honor environment visibility, and exclude deleted records. Within each type, results are ordered by relevance, highest first, and capped by `per_type`.\n\nThe `data` object always has a key for each requested type, holding an array of results (empty when nothing matched). Each type paginates independently: when more results of a type exist, `meta.next_cursor` carries a cursor for that type. Pass it back as `cursor[<type>]` to fetch that type's next page, narrowing `types` to the type you are paging.\n## Request Schema (application/json)\n\nproperties:\n  cursor:\n    description: \"\"\n    example:\n    - architecto\n    items:\n      type: string\n    type: array\n  per_type:\n    description: Must be at least 1. Must not be greater than 25.\n    example: 22\n    type: integer\n  q:\n    description: Must not be greater than 255 characters.\n    example: b\n    type: string\n  types:\n    description: \"\"\n    example:\n    - sessions\n    items:\n      enum:\n      - environments\n      - tasks\n      - sessions\n      - pages\n      - pipelines\n      type: string\n    type: array\nrequired:\n- q\ntype: object\n"),
 				Example: examples,
 				Args:    cobra.MinimumNArgs(2),
 				Run: func(cmd *cobra.Command, args []string) {
@@ -13107,7 +13111,7 @@ func openapiRegister(subcommand bool) {
 			cmd := &cobra.Command{
 				Use:     "list account-id task-id session-id",
 				Short:   "List messages",
-				Long:    cli.Markdown("Returns paginated messages for a session, ordered by sequence.\n\nEvery row carries the transcript entry it wraps, and on a long or image-heavy session that is most of the response. Pass `view=trimmed` to get the entries with their image data and their large tool inputs and outputs replaced by size markers, and fetch any one of them whole from `GET /v1/accounts/{account}/tasks/{task}/sessions/{session}/messages/{message}`, which is never trimmed."),
+				Long:    cli.Markdown("Returns paginated messages for a session, oldest first by default. Pass `direction=desc` to start at the newest message instead, which is how a client that opens on the end of a conversation fetches the first page it renders; following `meta.next_cursor` then walks backwards through older messages.\n\nEvery row carries the transcript entry it wraps, and on a long or image-heavy session that is most of the response. Pass `view=trimmed` to get the entries with their image data and their large tool inputs and outputs replaced by size markers, and fetch any one of them whole from `GET /v1/accounts/{account}/tasks/{task}/sessions/{session}/messages/{message}`, which is never trimmed."),
 				Example: examples,
 				Args:    cobra.MinimumNArgs(3),
 				Run: func(cmd *cobra.Command, args []string) {
@@ -13126,6 +13130,7 @@ func openapiRegister(subcommand bool) {
 			groupCmd.AddCommand(cmd)
 
 			cmd.Flags().String("view", "", "How much of each `payload` to return: `full` (default) for the stored entry untouched, `trimmed` for the same entry with its oversize blocks replaced by `{\"elided\": true, \"byte_size\": N}` markers.")
+			cmd.Flags().String("direction", "", "The order messages come back in: `asc` (default) for oldest first, `desc` for newest first. The cursor walks in whichever direction the page was fetched in, so a `desc` page is followed toward older messages.")
 			cmd.Flags().String("cursor", "", "Opaque pagination cursor. Pass the `meta.next_cursor` value from a previous response to fetch the next page; omit it for the first page.")
 			cmd.Flags().Int64("per-page", 0, "Results per page (max 100).")
 
