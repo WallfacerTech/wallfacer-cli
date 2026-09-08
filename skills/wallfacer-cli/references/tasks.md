@@ -40,12 +40,17 @@ wallfacer sessions abort <task-id> <session-id>
 
 ```bash
 wallfacer messages list <task-id> <session-id> -o json
+wallfacer messages list <task-id> <session-id> --view trimmed -o json
 wallfacer messages get <task-id> <session-id> <message-id> -o json
 echo '{"content": "check the tests"}' | wallfacer messages create <task-id> <session-id>
 wallfacer messages delete <task-id> <session-id> <message-id>
 ```
 
 Message list is cursor-paginated (`--per-page`, max 100). Returns all transcript rows including non-conversational marker types (`attachment`, `last-prompt`, `queue-operation`, `ai-title`). Conversation UIs should filter to `user` and `assistant` roles.
+
+`--view` controls how much of each `payload` comes back. `full` is the default and returns the stored transcript entry untouched. `trimmed` returns the same entry with its oversize blocks replaced in place by `{"elided": true, "byte_size": N}` markers: image data always, and a `tool_use` input or `tool_result` content over 4 KB. Reach for it when you only need the shape of a long or image-heavy session, where a listing that would run to megabytes comes back in kilobytes. Any other value is a 422, not a fallback to `full`.
+
+`messages get` is never trimmed, whatever `--view` says. Fetch the one message by id to get an elided block back.
 
 ## Attachments
 
