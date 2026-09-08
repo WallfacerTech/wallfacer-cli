@@ -1,6 +1,6 @@
 ---
 name: wallfacer-cli
-description: Drive the Wallfacer platform from the shell via the `wallfacer` CLI. Covers auth, accounts, environments, snapshots, VMs (create/destroy/exec/logs), tasks with sessions/messages/attachments, and iOS simulator. TRIGGER when the user runs `wallfacer` commands, asks to authenticate or manage accounts, lists/creates/destroys VMs, runs commands on a VM, reads task sessions or messages, or parses `wallfacer` JSON output. SKIP unrelated CLIs (`aws`, `gcloud`, `wf` from the `droplet` project).
+description: Drive the Wallfacer platform from the shell via the `wallfacer` CLI. Covers auth, accounts, environments, snapshots, VMs (create/destroy/exec/logs), tasks with sessions/messages/attachments, handbook pages (`wallfacer pages` — the only write path for handbook pages, since the `handbook_*` MCP tools are read-only), and iOS simulator. TRIGGER when the user runs `wallfacer` commands, asks to authenticate or manage accounts, lists/creates/destroys VMs, runs commands on a VM, reads task sessions or messages, asks to create/update/delete a handbook page or playbook page, or parses `wallfacer` JSON output. SKIP unrelated CLIs (`aws`, `gcloud`, `wf` from the `droplet` project).
 ---
 
 # wallfacer
@@ -63,7 +63,9 @@ All commands are flat top-level groups (not nested). Write operations take JSON 
 
 | Group | Read | Write |
 |---|---|---|
-| accounts | `list`, `get` | — |
+| accounts | `list`, `get`, `handbook` | — |
+| pages | `list`, `get <page-id>` | `create`, `update <page-id>`, `delete <page-id>` |
+| revisions | `list <page-id>`, `get <page-id> <revision-id>` | — |
 | environments | `list`, `get <env-id>` | `create`, `update <env-id>`, `delete <env-id>` |
 | snapshots | `list <env-id>`, `get <env-id> <snap-id>`, `logs <env-id> <snap-id>`, `log <env-id> <snap-id> <source>` | `create <env-id>`, `delete <env-id> <snap-id>` |
 | vms | `list`, `get <vm-id>`, `logs <vm-id>`, `log <vm-id> <source>` | `create`, `delete <vm-id>`, `commands <vm-id>` |
@@ -78,6 +80,21 @@ All commands are flat top-level groups (not nested). Write operations take JSON 
 All positional args shown above assume `account_id` is set in config. If not, prepend the account UUID as the first positional arg to every command.
 
 References: [config](references/config.md) · [environments](references/environments.md) · [vms](references/vms.md) · [tasks](references/tasks.md).
+
+## Handbook pages
+
+Handbook pages are Wallfacer **pages**. The `handbook_*` MCP tools an agent gets in a session read pages only, so `wallfacer pages` is the write path for creating, editing, moving, and deleting them.
+
+```bash
+wallfacer accounts handbook                  # the whole handbook as a nested tree
+wallfacer pages list                         # flat, paginated
+wallfacer pages get <page-id>                # includes the markdown body
+echo '{"title": "PR bodies", "body": "..."}' | wallfacer pages create
+echo '{"body": "..."}' | wallfacer pages update <page-id>
+wallfacer pages delete <page-id>
+```
+
+`update` takes any of `title`, `body`, `parent_page_id`, `position`, and `deleted: false` (restores a deleted page). `delete` keeps the page's revision history and re-parents its children to the deleted page's parent. Revision history is `wallfacer revisions list <page-id>` / `get <page-id> <revision-id>`.
 
 ## Request bodies via stdin
 
