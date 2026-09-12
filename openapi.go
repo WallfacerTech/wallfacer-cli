@@ -7266,6 +7266,224 @@ func OpenapiExecuteACommand(paramAccountId string, paramVmId string, params *vip
 	return resp, decoded, nil
 }
 
+// OpenapiListCommandRuns List command runs
+func OpenapiListCommandRuns(paramAccountId string, paramVmId string, params *viper.Viper) (*gentleman.Response, map[string]interface{}, error) {
+	handlerPath := "listcommandruns"
+	if openapiSubcommand {
+		handlerPath = "openapi " + handlerPath
+	}
+
+	server := viper.GetString("server")
+	if server == "" {
+		server = openapiServers()[viper.GetInt("server-index")]["url"]
+	}
+
+	url := server + "/v1/accounts/{account_id}/vms/{vm_id}/runs"
+	url = strings.Replace(url, "{account_id}", paramAccountId, 1)
+	url = strings.Replace(url, "{vm_id}", paramVmId, 1)
+
+	req := cli.Client.Get().URL(url)
+
+	paramStatus := params.GetString("status")
+	if paramStatus != "" {
+		req = req.AddQuery("status", fmt.Sprintf("%v", paramStatus))
+	}
+	paramActive := params.GetBool("active")
+	if paramActive != false {
+		req = req.AddQuery("active", fmt.Sprintf("%v", paramActive))
+	}
+	paramPerPage := params.GetInt64("per-page")
+	if paramPerPage != 0 {
+		req = req.AddQuery("per_page", fmt.Sprintf("%v", paramPerPage))
+	}
+
+	cli.HandleBefore(handlerPath, params, req)
+
+	resp, err := req.Do()
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "Request failed")
+	}
+
+	var decoded map[string]interface{}
+
+	if resp.StatusCode < 400 {
+		if err := cli.UnmarshalResponse(resp, &decoded); err != nil {
+			return nil, nil, errors.Wrap(err, "Unmarshalling response failed")
+		}
+	} else {
+		return nil, nil, errors.Errorf("HTTP %d: %s", resp.StatusCode, resp.String())
+	}
+
+	after := cli.HandleAfter(handlerPath, params, resp, decoded)
+	if after != nil {
+		decoded = after.(map[string]interface{})
+	}
+
+	return resp, decoded, nil
+}
+
+// OpenapiStartACommandRun Start a command run
+func OpenapiStartACommandRun(paramAccountId string, paramVmId string, params *viper.Viper, body string) (*gentleman.Response, map[string]interface{}, error) {
+	handlerPath := "startacommandrun"
+	if openapiSubcommand {
+		handlerPath = "openapi " + handlerPath
+	}
+
+	server := viper.GetString("server")
+	if server == "" {
+		server = openapiServers()[viper.GetInt("server-index")]["url"]
+	}
+
+	url := server + "/v1/accounts/{account_id}/vms/{vm_id}/runs"
+	url = strings.Replace(url, "{account_id}", paramAccountId, 1)
+	url = strings.Replace(url, "{vm_id}", paramVmId, 1)
+
+	req := cli.Client.Post().URL(url)
+
+	paramIdempotencyKey := params.GetString("idempotency-key")
+	if paramIdempotencyKey != "" {
+		req = req.AddHeader("Idempotency-Key", fmt.Sprintf("%v", paramIdempotencyKey))
+	}
+
+	if body != "" {
+		req = req.AddHeader("Content-Type", "application/json").BodyString(body)
+	}
+
+	cli.HandleBefore(handlerPath, params, req)
+
+	resp, err := req.Do()
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "Request failed")
+	}
+
+	var decoded map[string]interface{}
+
+	if resp.StatusCode < 400 {
+		if err := cli.UnmarshalResponse(resp, &decoded); err != nil {
+			return nil, nil, errors.Wrap(err, "Unmarshalling response failed")
+		}
+	} else {
+		return nil, nil, errors.Errorf("HTTP %d: %s", resp.StatusCode, resp.String())
+	}
+
+	after := cli.HandleAfter(handlerPath, params, resp, decoded)
+	if after != nil {
+		decoded = after.(map[string]interface{})
+	}
+
+	return resp, decoded, nil
+}
+
+// OpenapiCancelACommandRun Cancel a command run
+func OpenapiCancelACommandRun(paramAccountId string, paramVmId string, paramRun string, params *viper.Viper, body string) (*gentleman.Response, map[string]interface{}, error) {
+	handlerPath := "cancelacommandrun"
+	if openapiSubcommand {
+		handlerPath = "openapi " + handlerPath
+	}
+
+	server := viper.GetString("server")
+	if server == "" {
+		server = openapiServers()[viper.GetInt("server-index")]["url"]
+	}
+
+	url := server + "/v1/accounts/{account_id}/vms/{vm_id}/runs/{run}"
+	url = strings.Replace(url, "{account_id}", paramAccountId, 1)
+	url = strings.Replace(url, "{vm_id}", paramVmId, 1)
+	url = strings.Replace(url, "{run}", paramRun, 1)
+
+	req := cli.Client.Patch().URL(url)
+
+	paramIdempotencyKey := params.GetString("idempotency-key")
+	if paramIdempotencyKey != "" {
+		req = req.AddHeader("Idempotency-Key", fmt.Sprintf("%v", paramIdempotencyKey))
+	}
+
+	if body != "" {
+		req = req.AddHeader("Content-Type", "application/json").BodyString(body)
+	}
+
+	cli.HandleBefore(handlerPath, params, req)
+
+	resp, err := req.Do()
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "Request failed")
+	}
+
+	var decoded map[string]interface{}
+
+	if resp.StatusCode < 400 {
+		if err := cli.UnmarshalResponse(resp, &decoded); err != nil {
+			return nil, nil, errors.Wrap(err, "Unmarshalling response failed")
+		}
+	} else {
+		return nil, nil, errors.Errorf("HTTP %d: %s", resp.StatusCode, resp.String())
+	}
+
+	after := cli.HandleAfter(handlerPath, params, resp, decoded)
+	if after != nil {
+		decoded = after.(map[string]interface{})
+	}
+
+	return resp, decoded, nil
+}
+
+// OpenapiGetACommandRun Get a command run
+func OpenapiGetACommandRun(paramAccountId string, paramVmId string, paramRun string, params *viper.Viper) (*gentleman.Response, map[string]interface{}, error) {
+	handlerPath := "getacommandrun"
+	if openapiSubcommand {
+		handlerPath = "openapi " + handlerPath
+	}
+
+	server := viper.GetString("server")
+	if server == "" {
+		server = openapiServers()[viper.GetInt("server-index")]["url"]
+	}
+
+	url := server + "/v1/accounts/{account_id}/vms/{vm_id}/runs/{run}"
+	url = strings.Replace(url, "{account_id}", paramAccountId, 1)
+	url = strings.Replace(url, "{vm_id}", paramVmId, 1)
+	url = strings.Replace(url, "{run}", paramRun, 1)
+
+	req := cli.Client.Get().URL(url)
+
+	paramSince := params.GetInt64("since")
+	if paramSince != 0 {
+		req = req.AddQuery("since", fmt.Sprintf("%v", paramSince))
+	}
+	paramMaxBytes := params.GetInt64("max-bytes")
+	if paramMaxBytes != 0 {
+		req = req.AddQuery("max_bytes", fmt.Sprintf("%v", paramMaxBytes))
+	}
+	paramWaitSeconds := params.GetInt64("wait-seconds")
+	if paramWaitSeconds != 0 {
+		req = req.AddQuery("wait_seconds", fmt.Sprintf("%v", paramWaitSeconds))
+	}
+
+	cli.HandleBefore(handlerPath, params, req)
+
+	resp, err := req.Do()
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "Request failed")
+	}
+
+	var decoded map[string]interface{}
+
+	if resp.StatusCode < 400 {
+		if err := cli.UnmarshalResponse(resp, &decoded); err != nil {
+			return nil, nil, errors.Wrap(err, "Unmarshalling response failed")
+		}
+	} else {
+		return nil, nil, errors.Errorf("HTTP %d: %s", resp.StatusCode, resp.String())
+	}
+
+	after := cli.HandleAfter(handlerPath, params, resp, decoded)
+	if after != nil {
+		decoded = after.(map[string]interface{})
+	}
+
+	return resp, decoded, nil
+}
+
 // OpenapiListLogsForAVM List logs for a VM
 func OpenapiListLogsForAVM(paramAccountId string, paramVmId string, params *viper.Viper) (*gentleman.Response, map[string]interface{}, error) {
 	handlerPath := "listlogsforavm"
@@ -14055,6 +14273,171 @@ func openapiRegister(subcommand bool) {
 				},
 			}
 			groupCmd.AddCommand(cmd)
+
+			cli.SetCustomFlags(cmd)
+
+			if cmd.Flags().HasFlags() {
+				params.BindPFlags(cmd.Flags())
+			}
+
+		}()
+
+	}()
+
+	func() {
+		groupCmd := &cobra.Command{
+			Use:   "runs",
+			Short: "Manage runs",
+		}
+		root.AddCommand(groupCmd)
+
+		func() {
+			params := viper.New()
+
+			var examples string
+
+			cmd := &cobra.Command{
+				Use:     "list account-id vm-id",
+				Short:   "List command runs",
+				Long:    cli.Markdown("A VM's runs, newest first, covering both the in-flight ones and the history. Records only: use `GET /runs/{run}` to read a run's output.\n\nThe window is the VM's most recent runs (up to 200), paged over. A run is recorded before its process starts, so a run appears here even if the response to the request that started it was lost."),
+				Example: examples,
+				Args:    cobra.MinimumNArgs(2),
+				Run: func(cmd *cobra.Command, args []string) {
+
+					_, decoded, err := OpenapiListCommandRuns(args[0], args[1], params)
+					if err != nil {
+						log.Fatal().Err(err).Msg("Error calling operation")
+					}
+
+					if err := cli.Formatter.Format(decoded); err != nil {
+						log.Fatal().Err(err).Msg("Formatting failed")
+					}
+
+				},
+			}
+			groupCmd.AddCommand(cmd)
+
+			cmd.Flags().String("status", "", "Return only runs with this status.")
+			cmd.Flags().String("active", "", "Return only runs that are still holding the VM: in flight and inside their deadline. This is the set that stops the VM being reclaimed as idle.")
+			cmd.Flags().Int64("per-page", 0, "Results per page (max 100).")
+
+			cli.SetCustomFlags(cmd)
+
+			if cmd.Flags().HasFlags() {
+				params.BindPFlags(cmd.Flags())
+			}
+
+		}()
+
+		func() {
+			params := viper.New()
+
+			var examples string
+
+			cmd := &cobra.Command{
+				Use:     "create account-id vm-id",
+				Short:   "Start a command run",
+				Long:    cli.Markdown("Starts a command inside the VM and returns the run tracking it.\n\nGive either `name`, a command declared in the manifest the VM booted from, or `command`, an ad hoc shell command.\n\nThe run is recorded before the process starts, so a lost response does not leave an untracked process: a start that could not be confirmed comes back as a `pending` run to poll or cancel, and retrying with the same `Idempotency-Key` replays the original response instead of starting a second run.\n\nAnswers `201` when the command finished inside `wait_seconds`, with its exit code and output, and `202` when it is still executing. Follow a `202` with `GET /runs/{run}`.\n## Request Schema (application/json)\n\nproperties:\n  command:\n    description: 'A shell command to run instead of a named one. Provide this or `name`,\n      not both. Prefer a named command where one exists: it is declared once on the\n      environment and every caller runs the same thing.'\n    example: null\n    nullable: true\n    type: string\n  env:\n    description: 'Environment variables for this run only, on top of the ones the\n      environment already provides. Keys and values are strings. Not stored: they\n      are passed to the process and not kept on the run record.'\n    example: null\n    nullable: true\n    properties: {}\n    type: object\n  name:\n    description: The name of a command declared in the `commands` block of the manifest\n      the VM booted from. Provide this or `command`, not both. Starting a named command\n      that is already in flight on the VM is rejected with `409`, so a run is never\n      started twice by a retry.\n    example: test\n    nullable: true\n    type: string\n  timeout_seconds:\n    description: 'How long the run may execute before its process group is killed.\n      Maximum 14400. Omit it and a named command runs to the `timeout` its manifest\n      declares, and an ad hoc command to the platform default of 1800 seconds. The\n      deadline is recorded before the command is dispatched: while it has not passed,\n      the VM is treated as busy and is not reclaimed as idle, and once it has, the\n      run stops protecting the VM whatever state it is in.'\n    example: 1800\n    nullable: true\n    type: integer\n  wait_seconds:\n    description: How long to hold this request open waiting for the run to finish.\n      A run that finishes inside the window comes back complete, with its output,\n      in one round trip (`201`). Anything slower comes back as a run to poll (`202`).\n      Defaults to 0, which returns as soon as the run has been started. Values above\n      30 are held to 30 seconds; the run still starts.\n    example: 10\n    nullable: true\n    type: integer\n  working_directory:\n    description: Absolute path to run the command in. When omitted, the command runs\n      from the in-VM agent's startup directory, which depends on the environment's\n      platform and source layout.\n    example: null\n    nullable: true\n    type: string\ntype: object\n"),
+				Example: examples,
+				Args:    cobra.MinimumNArgs(2),
+				Run: func(cmd *cobra.Command, args []string) {
+					body, err := cli.GetBody("application/json", args[2:])
+					if err != nil {
+						log.Fatal().Err(err).Msg("Unable to get body")
+					}
+
+					_, decoded, err := OpenapiStartACommandRun(args[0], args[1], params, body)
+					if err != nil {
+						log.Fatal().Err(err).Msg("Error calling operation")
+					}
+
+					if err := cli.Formatter.Format(decoded); err != nil {
+						log.Fatal().Err(err).Msg("Formatting failed")
+					}
+
+				},
+			}
+			groupCmd.AddCommand(cmd)
+
+			cmd.Flags().String("idempotency-key", "", "")
+
+			cli.SetCustomFlags(cmd)
+
+			if cmd.Flags().HasFlags() {
+				params.BindPFlags(cmd.Flags())
+			}
+
+		}()
+
+		func() {
+			params := viper.New()
+
+			var examples string
+
+			cmd := &cobra.Command{
+				Use:     "update account-id vm-id run",
+				Short:   "Cancel a command run",
+				Long:    cli.Markdown("Stops a run by setting its status to `canceled`. Idempotent: cancelling a run that has already finished returns its terminal record unchanged.\n\nAnswers `200` once the run is stopped, and `202` when the cancellation was recorded but could not be carried out because the run has no confirmed process to signal. A `202` run keeps executing until its deadline and carries `cancel_requested_at`; repeat the request to retry.\n## Request Schema (application/json)\n\nproperties:\n  status:\n    description: Set to `canceled` to stop the run.\n    example: canceled\n    type: string\nrequired:\n- status\ntype: object\n"),
+				Example: examples,
+				Args:    cobra.MinimumNArgs(3),
+				Run: func(cmd *cobra.Command, args []string) {
+					body, err := cli.GetBody("application/json", args[3:])
+					if err != nil {
+						log.Fatal().Err(err).Msg("Unable to get body")
+					}
+
+					_, decoded, err := OpenapiCancelACommandRun(args[0], args[1], args[2], params, body)
+					if err != nil {
+						log.Fatal().Err(err).Msg("Error calling operation")
+					}
+
+					if err := cli.Formatter.Format(decoded); err != nil {
+						log.Fatal().Err(err).Msg("Formatting failed")
+					}
+
+				},
+			}
+			groupCmd.AddCommand(cmd)
+
+			cmd.Flags().String("idempotency-key", "", "")
+
+			cli.SetCustomFlags(cmd)
+
+			if cmd.Flags().HasFlags() {
+				params.BindPFlags(cmd.Flags())
+			}
+
+		}()
+
+		func() {
+			params := viper.New()
+
+			var examples string
+
+			cmd := &cobra.Command{
+				Use:     "get account-id vm-id run",
+				Short:   "Get a command run",
+				Long:    cli.Markdown("The run's current status plus the output it has produced since a byte cursor. This is the follow endpoint: pass the previous read's `output.next_offset` as `since` and each read returns only what is new.\n\n`wait_seconds` holds the request open until the run finishes, so following a run costs one request per `wait_seconds` rather than one per poll interval. The response arrives as soon as the run ends, whether or not the wait is used up.\n\nThe record is authoritative even when the output is not: `output` is null when the VM could not be reached or the run finished long enough ago for its output to have been dropped, and the status, exit code, and timings are still correct."),
+				Example: examples,
+				Args:    cobra.MinimumNArgs(3),
+				Run: func(cmd *cobra.Command, args []string) {
+
+					_, decoded, err := OpenapiGetACommandRun(args[0], args[1], args[2], params)
+					if err != nil {
+						log.Fatal().Err(err).Msg("Error calling operation")
+					}
+
+					if err := cli.Formatter.Format(decoded); err != nil {
+						log.Fatal().Err(err).Msg("Formatting failed")
+					}
+
+				},
+			}
+			groupCmd.AddCommand(cmd)
+
+			cmd.Flags().Int64("since", 0, "Byte offset to read output from. Use the previous read's `output.next_offset`. Defaults to 0, the start of the run.")
+			cmd.Flags().Int64("max-bytes", 0, "Cap on the bytes of output this read returns. Omit for the platform default.")
+			cmd.Flags().Int64("wait-seconds", 0, "Hold the request open for up to this many seconds waiting for the run to finish. Defaults to 0, which answers immediately. Values above the platform maximum are held to it rather than rejected.")
 
 			cli.SetCustomFlags(cmd)
 

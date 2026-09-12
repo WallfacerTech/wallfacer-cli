@@ -215,6 +215,7 @@ func main() {
 	openapiRegister(false)
 	registerExecCommand(accountID)
 	registerUpCommand(accountID)
+	registerRunCommands(accountID)
 
 	if accountID != "" {
 		injectAccountID(cli.Root, accountID)
