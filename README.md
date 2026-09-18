@@ -78,6 +78,14 @@ wallfacer handbook create "Writing Great PRs" --body-file pr.md --under "R&D/Eng
 wallfacer handbook update "R&D/Engineering/Build" --body-file build.md
 wallfacer handbook move <playbook-id> --under "R&D/Engineering"
 
+# Find a teammate: agents and human members in one directory
+wallfacer team list
+wallfacer team get jin                         # id, handle, email or name -> one record
+
+# Start work: a conversation with an agent, or a published playbook
+wallfacer chat jin "Look at the failing build on develop"
+wallfacer run "Implement Assigned GitHub Issues" --message "Start with #66"
+
 # Execute a command in a VM (shortcut)
 wallfacer exec --vm <vm-id> -- ls -la /workspace
 wallfacer exec --vm <vm-id> --dir /workspace --timeout 60 -- make build
@@ -124,6 +132,34 @@ Deleting a page keeps its revision history and does not delete what is filed und
 
 `reorder` writes one parent's child order in a single atomic request. Pages and playbooks share one ordering under a parent, so the list is mixed and must be that parent's complete set of children; a list that omits, repeats, or imports a sibling is rejected before anything is written. `move` a playbook and only its parent and position change: no draft save, no publish, no trigger change, and no task.
 
+### Team
+
+`wallfacer team` is the account's directory: its agents and its human members in one list, each record carrying its type, identity, role data, and the IDs the other commands take. Both listings are swept past the first page. References accept a member ID, an agent handle (with or without a leading `@`), an email address, or a unique display name, and an ambiguous reference is reported with its candidates rather than guessed at.
+
+```bash
+wallfacer team list --type agent            # the actor picker
+wallfacer team list --include-disabled      # plus offboarded agents
+wallfacer team get "Grace Hopper"
+wallfacer team get jin -q 'data.role_page_id' --raw
+```
+
+The directory reports no task counts of its own. It names the commands that do: `wallfacer handbook read <role-page-id>` for an agent's job description, and `wallfacer tasks list --created-by <agent-id>` or `--owner-user-id <user-id>` for the work.
+
+### Chat and run
+
+Two ways to start a task, kept separate because they are two different asks. `chat` sends the freeform `prompt` contract to an agent you name; `run` sends `pipeline_id` for a published playbook. Neither ever builds the other's request.
+
+```bash
+wallfacer chat jin "Look at the failing build on develop"
+cat brief.md | wallfacer chat @auggie        # prompt from stdin
+wallfacer run <playbook-id> --message "Start with the checkout regression"
+wallfacer run https://app.wallfacer.ai/accounts/<account-id>/handbook/<playbook-id>
+```
+
+`chat` is agent-directed: a human member, and an agent that is disabled or paused, are refused by name rather than quietly becoming the identity on the task. `run` takes any playbook reference `handbook` accepts, uses the version the server has active, and refuses a page, an archived playbook, and one with a draft and nothing published. Its `--agent` sets the task's identity and default environment; the playbook's steps still run as the actors its published version names.
+
+Both return the created task with its identifiers intact and a `follow_up` object naming the `tasks get`, `sessions list`, `messages list`, and `handbook version` commands for what they started.
+
 ## Configuration
 
 Configuration is stored in `~/.wallfacer/wallfacer.yml` (created automatically by `wallfacer auth login`):
@@ -155,7 +191,7 @@ make generate
 
 This requires the openapi-cli-generator repo to be cloned alongside this one (as `../openapi-cli-generator`). `go.mod` uses a local `replace` directive, so `go install` from a remote module path won't work — build from a local clone.
 
-Product commands — `up`, `exec`, and the `handbook` group — are hand-maintained outside `openapi.go` so that regenerating the spec never drops them. Run the tests with:
+Product commands — `up`, `exec`, `chat`, `run`, and the `handbook` and `team` groups — are hand-maintained outside `openapi.go` so that regenerating the spec never drops them. Run the tests with:
 
 ```bash
 go test ./...
@@ -170,3 +206,5 @@ The `skills/wallfacer-cli/` directory contains a [Claude Code](https://docs.anth
 - `references/environments.md` — Environment and snapshot operations
 - `references/tasks.md` — Tasks, sessions, messages, and attachments
 - `references/vms.md` — VM lifecycle, exec, logs, and simulator
+- `references/handbook.md` — Finding and reading pages and playbooks
+- `references/team.md` — Team discovery, agent chat, and playbook runs
