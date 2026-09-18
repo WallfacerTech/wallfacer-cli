@@ -216,6 +216,9 @@ func main() {
 	registerExecCommand(accountID)
 	registerUpCommand(accountID)
 	registerHandbookCommands(accountID)
+	registerTeamCommands(accountID)
+	registerChatCommand(accountID)
+	registerRunCommand(accountID)
 
 	if accountID != "" {
 		injectAccountID(cli.Root, accountID)

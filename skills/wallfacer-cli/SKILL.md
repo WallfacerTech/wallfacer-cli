@@ -1,6 +1,6 @@
 ---
 name: wallfacer-cli
-description: Drive the Wallfacer platform from the shell via the `wallfacer` CLI. Covers auth, accounts, environments, snapshots, VMs (create/destroy/exec/logs), tasks with sessions/messages/attachments, the handbook (`wallfacer handbook` to find and read pages and playbooks; `wallfacer pages` is the only write path, since the `handbook_*` MCP tools are read-only), and iOS simulator. TRIGGER when the user runs `wallfacer` commands, asks to authenticate or manage accounts, lists/creates/destroys VMs, runs commands on a VM, reads task sessions or messages, asks to find or read a handbook page or playbook, asks to create/update/delete a handbook page or playbook page, or parses `wallfacer` JSON output. SKIP unrelated CLIs (`aws`, `gcloud`, `wf` from the `droplet` project).
+description: Drive the Wallfacer platform from the shell via the `wallfacer` CLI. Covers auth, accounts, environments, snapshots, VMs (create/destroy/exec/logs), tasks with sessions/messages/attachments, the handbook (`wallfacer handbook` to find and read pages and playbooks; `wallfacer pages` is the only write path, since the `handbook_*` MCP tools are read-only), the team directory (`wallfacer team`), starting work (`wallfacer chat` with an agent, `wallfacer run` for a published playbook), and iOS simulator. TRIGGER when the user runs `wallfacer` commands, asks to authenticate or manage accounts, lists/creates/destroys VMs, runs commands on a VM, reads task sessions or messages, asks to find or read a handbook page or playbook, asks to create/update/delete a handbook page or playbook page, asks who is on the team or which agents exist, asks to message an agent or hand it work, asks to run a playbook, or parses `wallfacer` JSON output. SKIP unrelated CLIs (`aws`, `gcloud`, `wf` from the `droplet` project).
 ---
 
 # wallfacer
@@ -63,6 +63,7 @@ All commands are flat top-level groups (not nested). Write operations take JSON 
 
 | Group | Read | Write |
 |---|---|---|
+| team | `list`, `get <reference>` | — |
 | handbook | `tree`, `list`, `search <query>`, `read <ref>`, `resolve <ref>`, `revisions <page-ref>`, `revision <page-ref> <rev-id>`, `versions <playbook-ref>`, `version <playbook-ref> [version]`, `draft <playbook-ref>` | — |
 | accounts | `list`, `get`, `handbook` | — |
 | pages | `list`, `get <page-id>` | `create`, `update <page-id>`, `delete <page-id>` |
@@ -70,7 +71,7 @@ All commands are flat top-level groups (not nested). Write operations take JSON 
 | environments | `list`, `get <env-id>` | `create`, `update <env-id>`, `delete <env-id>` |
 | snapshots | `list <env-id>`, `get <env-id> <snap-id>`, `logs <env-id> <snap-id>`, `log <env-id> <snap-id> <source>` | `create <env-id>`, `delete <env-id> <snap-id>` |
 | vms | `list`, `get <vm-id>`, `logs <vm-id>`, `log <vm-id> <source>` | `create`, `delete <vm-id>`, `commands <vm-id>` |
-| tasks | `list`, `get <task-id>` | `create`, `update <task-id>`, `delete <task-id>` |
+| tasks | `list`, `get <task-id>` | `create`, `update <task-id>`, `delete <task-id>`, and the two entry points `chat <agent> [prompt]` and `run <playbook>` |
 | attachments | `list <task-id>`, `contents <task-id> <att-id>` | `create <task-id>`, `delete <task-id> <att-id>`, `refresh <task-id> <att-id>` |
 | sessions | `list <task-id>`, `get <task-id> <sess-id>` | `create <task-id>`, `update <task-id> <sess-id>`, `abort <task-id> <sess-id>` |
 | messages | `list <task-id> <sess-id>`, `get <task-id> <sess-id> <msg-id>` | `create <task-id> <sess-id>`, `delete <task-id> <sess-id> <msg-id>` |
@@ -80,7 +81,7 @@ All commands are flat top-level groups (not nested). Write operations take JSON 
 
 All positional args shown above assume `account_id` is set in config. If not, prepend the account UUID as the first positional arg to every command.
 
-References: [config](references/config.md) · [environments](references/environments.md) · [vms](references/vms.md) · [tasks](references/tasks.md) · [handbook](references/handbook.md).
+References: [config](references/config.md) · [environments](references/environments.md) · [vms](references/vms.md) · [tasks](references/tasks.md) · [handbook](references/handbook.md) · [team](references/team.md).
 
 ## Handbook
 
@@ -97,6 +98,25 @@ wallfacer handbook resolve <ref>              # a name, path, or URL -> stable I
 References accept a stable ID, a unique name, a full path (`R&D/Engineering/Build`), a page or playbook detail URL inside the configured account, or a `wallfacer://handbook/pages/<id>` link. Ambiguous names are reported with their candidates rather than guessed at, and a URL from another account is refused before any request goes out. Pass `--type page` or `--type playbook` when a page and a playbook share a name.
 
 Read the full detail in [references/handbook.md](references/handbook.md).
+
+## Team, chat, and playbook runs
+
+`wallfacer team` is the directory: the account's agents and its human members in one list, carrying the IDs the other commands take. `wallfacer chat` and `wallfacer run` are the two ways to start work, and they are separate commands because they are two different asks.
+
+```bash
+wallfacer team list                       # agents and humans, swept past page one
+wallfacer team list --type agent          # the actor picker
+wallfacer team get jin                    # id, handle, email or name -> one record
+wallfacer chat jin "Look at the failing build"                              # sends `prompt`
+wallfacer run "Implement Assigned GitHub Issues" --message "Start with #66" # sends `pipeline_id`
+```
+
+- **Chat is agent-directed.** A human member, and a disabled or paused agent, are refused by name rather than quietly becoming the identity on the task.
+- **Run uses the version the server has active.** No version is pinned, a draft-only playbook is refused, and `--agent` is the task's identity and default environment rather than an override of the playbook's step actors.
+- **Neither falls back to the other.** Chat never sends `pipeline_id`; run never sends `prompt`.
+- **Both return the created task plus `follow_up`** naming the `tasks get`, `sessions list`, `messages list`, and `handbook version` commands for what they started.
+
+Reading the directory never creates a task, and running a playbook never edits or publishes it. Read the full detail in [references/team.md](references/team.md).
 
 Handbook **writes** are still `wallfacer pages`: the `handbook_*` MCP tools an agent gets in a session read pages only.
 
@@ -140,6 +160,6 @@ Default output is JSON. Also supports `-o yaml`.
 
 ## Rate limits & pagination
 
-List endpoints accept `--per-page` (max 100). The CLI does not follow pagination links automatically, with one exception: `wallfacer handbook list` takes `--page` to read past the first page, and `wallfacer handbook search` sweeps pages itself up to `--max-pages` and reports how far it got.
+List endpoints accept `--per-page` (max 100). The CLI does not follow pagination links automatically, with three exceptions: `wallfacer handbook list` takes `--page` to read past the first page, and `wallfacer handbook search` and `wallfacer team list` sweep pages themselves up to `--max-pages` and report how far they got. Resolving a team reference (`team get`, `chat`, and `run --agent`) always sweeps both listings in full.
 
 Batch jobs: watch for HTTP error responses indicating rate limiting.
