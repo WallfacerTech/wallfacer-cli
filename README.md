@@ -78,6 +78,11 @@ wallfacer handbook create "Writing Great PRs" --body-file pr.md --under "R&D/Eng
 wallfacer handbook update "R&D/Engineering/Build" --body-file build.md
 wallfacer handbook move <playbook-id> --under "R&D/Engineering"
 
+# Author a playbook: draft, compare, publish
+wallfacer handbook save-draft <playbook-id> --definition-file draft.yaml
+wallfacer handbook diff-draft <playbook-id>    # draft vs the active published definition
+wallfacer handbook publish <playbook-id> --notes "Added the smoke-test step"
+
 # Find a teammate: agents and human members in one directory
 wallfacer team list
 wallfacer team get jin                         # id, handle, email or name -> one record
@@ -131,6 +136,29 @@ A page write is live knowledge immediately: agents running playbooks read the ne
 Deleting a page keeps its revision history and does not delete what is filed under it: sub-pages and playbooks move up to the deleted page's parent, or to the top level, and the result names each one. `restore` brings the page back with its content and history intact.
 
 `reorder` writes one parent's child order in a single atomic request. Pages and playbooks share one ordering under a parent, so the list is mixed and must be that parent's complete set of children; a list that omits, repeats, or imports a sibling is rejected before anything is written. `move` a playbook and only its parent and position change: no draft save, no publish, no trigger change, and no task.
+
+### Authoring playbooks
+
+Only `create-playbook` and `publish` change a playbook's versioned definition. Everything else either reads, or changes metadata that takes effect without a version.
+
+```bash
+wallfacer handbook create-playbook --name "Fix a bug" --definition-file playbook.yaml
+wallfacer handbook save-draft <playbook-id> --definition-file draft.yaml   # not published
+wallfacer handbook diff-draft <playbook-id>                                # draft vs active
+wallfacer handbook diff <playbook-id> 2 3                                  # two published versions
+wallfacer handbook publish <playbook-id> --notes "Added the smoke-test step"
+wallfacer handbook publish <playbook-id> --activate=false                  # version it, don't activate
+wallfacer handbook discard-draft <playbook-id>                             # active version untouched
+wallfacer handbook update-playbook <playbook-id> --disable
+wallfacer handbook archive-playbook <playbook-id>
+wallfacer handbook restore-playbook <playbook-id>                          # comes back disabled
+```
+
+Creation publishes: the definition given to `create-playbook` is validated, stored as version 1, and made active in the same call. Publishing operates on the saved draft and fails without creating a version when there is no draft, when the stored draft holds no definition, or when the server's validation rejects it. Publishing never enables a disabled playbook, and `--activate=false` reports the new version separately from the still-active one.
+
+Page revisions and playbook versions are different histories. A page's current content, and the playbook's set of linked pages, reach every later run as soon as they are saved. A playbook's steps and triggers reach later runs only when a version is published, and a task that is already running stays pinned to the version it was created against.
+
+Definitions are read from `--definition-file` (JSON or YAML) or from stdin, and the bare definition, the API's `{"definition": ...}` envelope, and what `handbook version` or `handbook draft` print are all accepted, so a definition read out of the CLI goes straight back into a draft. To submit a definition directly without saving a draft, the low-level `wallfacer versions create <playbook-id>` command still takes one.
 
 ### Team
 

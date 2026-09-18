@@ -39,6 +39,8 @@ func (a *handbookAPI) send(method, path string, payload map[string]interface{}) 
 	switch method {
 	case http.MethodPost:
 		req = cli.Client.Post().URL(server + path)
+	case http.MethodPut:
+		req = cli.Client.Put().URL(server + path)
 	case http.MethodPatch:
 		req = cli.Client.Patch().URL(server + path)
 	case http.MethodDelete:

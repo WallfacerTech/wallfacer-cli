@@ -29,10 +29,9 @@ var errHandbookNotFound = errors.New("not found")
 var uuidPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 
 // handbookAPI issues the account-scoped requests the handbook commands are
-// built from. Every method in this file is a GET: discovery never writes
-// handbook content and never spawns a task. The writes the authoring and
-// organization commands make live in handbookedit.go, and none of them creates
-// a task either.
+// built from. Discovery uses the GET methods only; the write methods here serve
+// the playbook authoring commands, the page and organization writes live in
+// handbookedit.go, and no method on either side creates a task.
 type handbookAPI struct {
 	accountID string
 
@@ -78,6 +77,77 @@ func (a *handbookAPI) get(path string, query url.Values) (map[string]interface{}
 		return nil, errors.Wrap(err, "Unmarshalling response failed")
 	}
 	return decoded, nil
+}
+
+// sendForRecord unwraps the `data` object writes return, and tolerates a route
+// that answers with no body at all. The write itself goes through the shared
+// send in handbookedit.go, which answers a 204 with an empty map.
+func (a *handbookAPI) sendForRecord(method, path string, body map[string]interface{}) (map[string]interface{}, error) {
+	resp, err := a.send(method, path, body)
+	if err != nil || len(resp) == 0 {
+		return nil, err
+	}
+	if data, ok := resp["data"].(map[string]interface{}); ok {
+		return data, nil
+	}
+	return resp, nil
+}
+
+func (a *handbookAPI) createPipeline(body map[string]interface{}) (map[string]interface{}, error) {
+	record, err := a.sendForRecord(http.MethodPost, a.accountPath("/pipelines"), body)
+	if err != nil {
+		return nil, err
+	}
+	if record == nil {
+		return nil, errors.New("the create call returned no playbook record")
+	}
+	return record, nil
+}
+
+func (a *handbookAPI) archivePipeline(id string) (map[string]interface{}, error) {
+	return a.send(http.MethodDelete, a.accountPath("/pipelines/%s", url.PathEscape(id)), nil)
+}
+
+func (a *handbookAPI) savePipelineDraft(id string, definition map[string]interface{}) (map[string]interface{}, error) {
+	body := map[string]interface{}{"definition": definition}
+	return a.send(http.MethodPut, a.accountPath("/pipelines/%s/draft", url.PathEscape(id)), body)
+}
+
+func (a *handbookAPI) discardPipelineDraft(id string) (map[string]interface{}, error) {
+	return a.send(http.MethodDelete, a.accountPath("/pipelines/%s/draft", url.PathEscape(id)), nil)
+}
+
+func (a *handbookAPI) publishPipelineVersion(id string, body map[string]interface{}) (map[string]interface{}, error) {
+	record, err := a.sendForRecord(http.MethodPost, a.accountPath("/pipelines/%s/versions", url.PathEscape(id)), body)
+	if err != nil {
+		return nil, err
+	}
+	if record == nil {
+		return nil, errors.New("the publish call returned no version record")
+	}
+	return record, nil
+}
+
+func (a *handbookAPI) diffPipelineVersions(id, a1, b string) (map[string]interface{}, error) {
+	return a.get(a.accountPath("/pipelines/%s/versions/%s/diff/%s", url.PathEscape(id), url.PathEscape(a1), url.PathEscape(b)), nil)
+}
+
+// resolvePageIDs turns page references into the IDs a write sends. Every
+// reference is resolved before the write, so a reference naming the wrong type
+// or another account fails with nothing mutated.
+func (a *handbookAPI) resolvePageIDs(references []string) ([]string, error) {
+	if len(references) == 0 {
+		return nil, nil
+	}
+	ids := make([]string, 0, len(references))
+	for _, reference := range references {
+		ref, err := a.resolveHandbookRef(reference, kindPage)
+		if err != nil {
+			return nil, err
+		}
+		ids = append(ids, ref.ID)
+	}
+	return ids, nil
 }
 
 func (a *handbookAPI) accountPath(format string, args ...interface{}) string {
@@ -646,6 +716,16 @@ func responseObject(resp map[string]interface{}) (map[string]interface{}, error)
 		return nil, errors.New("unexpected response format: missing data object")
 	}
 	return data, nil
+}
+
+// responseData is the payload of an API response that is emitted whole. The
+// API wraps every body in `data`, and emitHandbook wraps again, so a response
+// handed straight to it has to be unwrapped once here.
+func responseData(resp map[string]interface{}) interface{} {
+	if data, present := resp["data"]; present {
+		return data
+	}
+	return resp
 }
 
 func responseList(resp map[string]interface{}) []interface{} {

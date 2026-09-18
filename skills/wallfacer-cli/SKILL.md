@@ -1,6 +1,6 @@
 ---
 name: wallfacer-cli
-description: Drive the Wallfacer platform from the shell via the `wallfacer` CLI. Covers auth, accounts, environments, snapshots, VMs (create/destroy/exec/logs), tasks with sessions/messages/attachments, the handbook (`wallfacer handbook` to find, read, edit, and organize pages and playbooks, since the `handbook_*` MCP tools are read-only; `wallfacer pages` is the low-level route to the same endpoints), the team directory (`wallfacer team`), starting work (`wallfacer chat` with an agent, `wallfacer run` for a published playbook), and iOS simulator. TRIGGER when the user runs `wallfacer` commands, asks to authenticate or manage accounts, lists/creates/destroys VMs, runs commands on a VM, reads task sessions or messages, asks to find or read a handbook page or playbook, asks to create/update/delete a handbook page or playbook page, asks who is on the team or which agents exist, asks to message an agent or hand it work, asks to run a playbook, or parses `wallfacer` JSON output. SKIP unrelated CLIs (`aws`, `gcloud`, `wf` from the `droplet` project).
+description: Drive the Wallfacer platform from the shell via the `wallfacer` CLI. Covers auth, accounts, environments, snapshots, VMs (create/destroy/exec/logs), tasks with sessions/messages/attachments, the handbook (`wallfacer handbook` to find, read, edit, and organize pages and playbooks, and to draft and publish playbooks, since the `handbook_*` MCP tools are read-only; `wallfacer pages` is the low-level route to the same endpoints), the team directory (`wallfacer team`), starting work (`wallfacer chat` with an agent, `wallfacer run` for a published playbook), and iOS simulator. TRIGGER when the user runs `wallfacer` commands, asks to authenticate or manage accounts, lists/creates/destroys VMs, runs commands on a VM, reads task sessions or messages, asks to find or read a handbook page or playbook, asks to create/update/delete a handbook page or playbook page, asks to draft or publish a playbook definition, asks who is on the team or which agents exist, asks to message an agent or hand it work, asks to run a playbook, or parses `wallfacer` JSON output. SKIP unrelated CLIs (`aws`, `gcloud`, `wf` from the `droplet` project).
 ---
 
 # wallfacer
@@ -64,7 +64,7 @@ All commands are flat top-level groups (not nested). Write operations take JSON 
 | Group | Read | Write |
 |---|---|---|
 | team | `list`, `get <reference>` | — |
-| handbook | `tree`, `list`, `search <query>`, `read <ref>`, `resolve <ref>`, `revisions <page-ref>`, `revision <page-ref> <rev-id>`, `versions <playbook-ref>`, `version <playbook-ref> [version]`, `draft <playbook-ref>` | `create [title]`, `update <page-ref>`, `delete <page-ref>`, `restore <page-id>`, `move <ref>`, `reorder <ref>...` |
+| handbook | `tree`, `list`, `search <query>`, `read <ref>`, `resolve <ref>`, `revisions <page-ref>`, `revision <page-ref> <rev-id>`, `versions <playbook-ref>`, `version <playbook-ref> [version]`, `draft <playbook-ref>`, `diff <playbook-ref> <a> <b>`, `diff-draft <playbook-ref>` | `create [title]`, `update <page-ref>`, `delete <page-ref>`, `restore <page-id>`, `move <ref>`, `reorder <ref>...`, `create-playbook`, `update-playbook <playbook-ref>`, `archive-playbook <playbook-ref>`, `restore-playbook <playbook-id>`, `save-draft <playbook-ref>`, `discard-draft <playbook-ref>`, `publish <playbook-ref>` |
 | accounts | `list`, `get`, `handbook` | — |
 | pages | `list`, `get <page-id>` | `create`, `update <page-id>`, `delete <page-id>` |
 | revisions | `list <page-id>`, `get <page-id> <revision-id>` | — |
@@ -85,7 +85,7 @@ References: [config](references/config.md) · [environments](references/environm
 
 ## Handbook
 
-`wallfacer handbook` is the entry point for the account's handbook: pages and playbooks in one surface, with every result carrying the references needed for the next command.
+`wallfacer handbook` is the entry point for the account's handbook: pages and playbooks in one surface, with every result carrying the references needed for the next command, and the place its playbooks are authored. No command in the group creates a task.
 
 ```bash
 wallfacer handbook tree                       # pages and playbooks as one nested tree
@@ -108,6 +108,17 @@ wallfacer handbook restore <page-id>          # deleted pages are reached by ID
 ```
 
 A page write is live knowledge immediately, and every editing session is snapshotted, so the previous wording stays readable through `handbook revisions`. `reorder` is one atomic write of a parent's complete, mixed child list. Moving a playbook changes only its parent and position: no draft save, no publish, no trigger change, no task.
+
+Playbook authoring splits saving from publishing. `save-draft` stores a working copy and changes nothing about how the playbook runs; `publish` sends that saved draft to the version endpoint and is the only command besides `create-playbook` that changes the versioned definition.
+
+```bash
+wallfacer handbook save-draft <playbook-ref> --definition-file draft.yaml
+wallfacer handbook diff-draft <playbook-ref>  # local comparison against the active version
+wallfacer handbook publish <playbook-ref> --notes "Added the smoke-test step"
+wallfacer handbook discard-draft <playbook-ref>
+```
+
+Publishing fails without creating a version when there is no saved draft or the server rejects it, never enables a disabled playbook, and with `--activate=false` reports the new version separately from the active one. A page's content and a playbook's linked pages reach later runs as soon as they are saved, with no publish; a task already running stays pinned to the playbook version it was created against.
 
 References accept a stable ID, a unique name, a full path (`R&D/Engineering/Build`), a page or playbook detail URL inside the configured account, or a `wallfacer://handbook/pages/<id>` link. Ambiguous names are reported with their candidates rather than guessed at, and a URL from another account is refused before any request goes out. Pass `--type page` or `--type playbook` when a page and a playbook share a name.
 
@@ -132,7 +143,7 @@ wallfacer run "Implement Assigned GitHub Issues" --message "Start with #66" # se
 
 Reading the directory never creates a task, and running a playbook never edits or publishes it. Read the full detail in [references/team.md](references/team.md).
 
-The low-level `wallfacer pages` group still works unchanged and is the raw route to the same endpoints (the `handbook_*` MCP tools an agent gets in a session read pages only):
+The low-level `wallfacer pages` group still works unchanged and is the raw route to the same endpoints (the `handbook_*` MCP tools an agent gets in a session read pages only). Playbook writes are in the `handbook` group above:
 
 ```bash
 echo '{"title": "PR bodies", "body": "..."}' | wallfacer pages create
