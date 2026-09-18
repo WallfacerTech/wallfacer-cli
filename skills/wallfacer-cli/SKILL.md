@@ -1,6 +1,6 @@
 ---
 name: wallfacer-cli
-description: Drive the Wallfacer platform from the shell via the `wallfacer` CLI. Covers auth, accounts, environments, snapshots, VMs (create/destroy/exec/logs), tasks with sessions/messages/attachments, the handbook (`wallfacer handbook` to find and read pages and playbooks; `wallfacer pages` is the only write path, since the `handbook_*` MCP tools are read-only), and iOS simulator. TRIGGER when the user runs `wallfacer` commands, asks to authenticate or manage accounts, lists/creates/destroys VMs, runs commands on a VM, reads task sessions or messages, asks to find or read a handbook page or playbook, asks to create/update/delete a handbook page or playbook page, or parses `wallfacer` JSON output. SKIP unrelated CLIs (`aws`, `gcloud`, `wf` from the `droplet` project).
+description: Drive the Wallfacer platform from the shell via the `wallfacer` CLI. Covers auth, accounts, environments, snapshots, VMs (create/destroy/exec/logs), tasks with sessions/messages/attachments, the handbook (`wallfacer handbook` to find, read, edit, and organize pages and playbooks, since the `handbook_*` MCP tools are read-only; `wallfacer pages` is the low-level route to the same endpoints), and iOS simulator. TRIGGER when the user runs `wallfacer` commands, asks to authenticate or manage accounts, lists/creates/destroys VMs, runs commands on a VM, reads task sessions or messages, asks to find or read a handbook page or playbook, asks to create/update/delete a handbook page or playbook page, or parses `wallfacer` JSON output. SKIP unrelated CLIs (`aws`, `gcloud`, `wf` from the `droplet` project).
 ---
 
 # wallfacer
@@ -59,11 +59,11 @@ Flags: `--vm` (required), `--dir` (working directory), `--timeout` (seconds, 1-3
 
 ## Command groups
 
-All commands are flat top-level groups (not nested). Write operations take JSON request bodies via **stdin** (piped), not flags. Use `-o json` for JSON output.
+All commands are flat top-level groups (not nested). Write operations take JSON request bodies via **stdin** (piped), not flags; the `handbook` write commands also accept stdin and layer their own flags over it. Use `-o json` for JSON output.
 
 | Group | Read | Write |
 |---|---|---|
-| handbook | `tree`, `list`, `search <query>`, `read <ref>`, `resolve <ref>`, `revisions <page-ref>`, `revision <page-ref> <rev-id>`, `versions <playbook-ref>`, `version <playbook-ref> [version]`, `draft <playbook-ref>` | — |
+| handbook | `tree`, `list`, `search <query>`, `read <ref>`, `resolve <ref>`, `revisions <page-ref>`, `revision <page-ref> <rev-id>`, `versions <playbook-ref>`, `version <playbook-ref> [version]`, `draft <playbook-ref>` | `create [title]`, `update <page-ref>`, `delete <page-ref>`, `restore <page-id>`, `move <ref>`, `reorder <ref>...` |
 | accounts | `list`, `get`, `handbook` | — |
 | pages | `list`, `get <page-id>` | `create`, `update <page-id>`, `delete <page-id>` |
 | revisions | `list <page-id>`, `get <page-id> <revision-id>` | — |
@@ -84,7 +84,7 @@ References: [config](references/config.md) · [environments](references/environm
 
 ## Handbook
 
-`wallfacer handbook` is the entry point for finding and reading the account's handbook: pages and playbooks in one surface, with every result carrying the references needed for the next read. Every command in the group is a read.
+`wallfacer handbook` is the entry point for the account's handbook: pages and playbooks in one surface, with every result carrying the references needed for the next command.
 
 ```bash
 wallfacer handbook tree                       # pages and playbooks as one nested tree
@@ -94,11 +94,25 @@ wallfacer handbook read "Engineering/Build"   # page body, or a playbook's activ
 wallfacer handbook resolve <ref>              # a name, path, or URL -> stable ID, type, state
 ```
 
+Page authoring and tree organization take the same references:
+
+```bash
+wallfacer handbook create "PR bodies" --body-file pr.md --under "Engineering"
+echo '{"title":"PR bodies","body":"..."}' | wallfacer handbook create
+wallfacer handbook update "Engineering/Build" --body-file build.md
+wallfacer handbook move <playbook-id> --under "Engineering" --position 0
+wallfacer handbook reorder --under "Engineering" "Build" <playbook-id> "Review"
+wallfacer handbook delete <page-ref>          # children move up; history is kept
+wallfacer handbook restore <page-id>          # deleted pages are reached by ID
+```
+
+A page write is live knowledge immediately, and every editing session is snapshotted, so the previous wording stays readable through `handbook revisions`. `reorder` is one atomic write of a parent's complete, mixed child list. Moving a playbook changes only its parent and position: no draft save, no publish, no trigger change, no task.
+
 References accept a stable ID, a unique name, a full path (`R&D/Engineering/Build`), a page or playbook detail URL inside the configured account, or a `wallfacer://handbook/pages/<id>` link. Ambiguous names are reported with their candidates rather than guessed at, and a URL from another account is refused before any request goes out. Pass `--type page` or `--type playbook` when a page and a playbook share a name.
 
 Read the full detail in [references/handbook.md](references/handbook.md).
 
-Handbook **writes** are still `wallfacer pages`: the `handbook_*` MCP tools an agent gets in a session read pages only.
+The low-level `wallfacer pages` group still works unchanged and is the raw route to the same endpoints (the `handbook_*` MCP tools an agent gets in a session read pages only):
 
 ```bash
 echo '{"title": "PR bodies", "body": "..."}' | wallfacer pages create

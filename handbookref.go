@@ -28,9 +28,11 @@ var errHandbookNotFound = errors.New("not found")
 
 var uuidPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 
-// handbookAPI issues the account-scoped reads the handbook commands are built
-// from. Every method on it is a GET: discovery never writes handbook content
-// and never spawns a task.
+// handbookAPI issues the account-scoped requests the handbook commands are
+// built from. Every method in this file is a GET: discovery never writes
+// handbook content and never spawns a task. The writes the authoring and
+// organization commands make live in handbookedit.go, and none of them creates
+// a task either.
 type handbookAPI struct {
 	accountID string
 
