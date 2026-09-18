@@ -328,8 +328,11 @@ func runHandbookSearch(api *handbookAPI, query, kind string, limit, maxPages int
 	matches := []*handbookRef{}
 	pagination := map[string]interface{}{}
 
-	if kind == "" || kind == kindPage {
+	if (kind == "" || kind == kindPage) && len(matches) < limit {
 		sweep, err := api.sweep(api.listPages, maxPages, func(record map[string]interface{}) bool {
+			if len(matches) >= limit {
+				return false
+			}
 			matchedIn := matchedFields(needle, map[string]string{
 				"title":       stringField(record, "title"),
 				"description": stringField(record, "description"),
@@ -349,8 +352,11 @@ func runHandbookSearch(api *handbookAPI, query, kind string, limit, maxPages int
 		pagination["pages"] = sweep
 	}
 
-	if kind == "" || kind == kindPlaybook {
+	if (kind == "" || kind == kindPlaybook) && len(matches) < limit {
 		sweep, err := api.sweep(api.listPipelines, maxPages, func(record map[string]interface{}) bool {
+			if len(matches) >= limit {
+				return false
+			}
 			matchedIn := matchedFields(needle, map[string]string{
 				"title":       stringField(record, "name"),
 				"description": stringField(record, "description"),

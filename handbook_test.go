@@ -94,6 +94,9 @@ func (f *handbookFixture) route(r *http.Request) (string, int) {
 
 	case base + "/pages":
 		if r.URL.Query().Get("page") == "2" {
+			if r.URL.Query().Get("include_deleted") == "true" {
+				return pagesPageTwoWithDeletedJSON, http.StatusOK
+			}
 			return pagesPageTwoJSON, http.StatusOK
 		}
 		return pagesPageOneJSON, http.StatusOK
@@ -109,8 +112,6 @@ func (f *handbookFixture) route(r *http.Request) (string, int) {
 
 	case base + "/pages/" + pageBuildID:
 		return wrapData(pageBuildRecordJSON), http.StatusOK
-	case base + "/pages/" + pageDeletedID:
-		return wrapData(pageDeletedRecordJSON), http.StatusOK
 	case base + "/pages/" + pageBuildID + "/revisions":
 		return revisionsJSON, http.StatusOK
 	case base + "/pages/" + pageBuildID + "/revisions/" + revisionID:
@@ -576,6 +577,24 @@ func TestSearchMatchesBothTypes(t *testing.T) {
 	}
 }
 
+// "build" matches a page and a playbook, so a limit of 1 has to stop the
+// second sweep rather than let its first match through.
+func TestSearchLimitIsAHardMaximum(t *testing.T) {
+	fixture := newHandbookFixture(t)
+
+	output := capture(t, func() error {
+		return runHandbookSearch(fixture.api(), "build", "", 1, 20)
+	})
+
+	data := output["data"].([]interface{})
+	if len(data) != 1 {
+		t.Fatalf("search returned %d rows, want 1", len(data))
+	}
+	if kind := data[0].(map[string]interface{})["type"].(string); kind != kindPage {
+		t.Errorf("first match is a %s, want %s", kind, kindPage)
+	}
+}
+
 func TestDiscoveryCommandsOnlyRead(t *testing.T) {
 	fixture := newHandbookFixture(t)
 
@@ -660,6 +679,17 @@ const pagesPageTwoJSON = `{"data":[
   {"id":"` + pageProductID + `","account_id":"` + testAccountID + `","parent_page_id":null,"title":"Product","body":"Idea intake, research, and backlog grooming.","description":"What we build and why.","position":1,"deleted_at":null},
   {"id":"` + pageReviewProdID + `","account_id":"` + testAccountID + `","parent_page_id":"` + pageProductID + `","title":"Review","body":"Reviewing an idea before it becomes work.","description":"Reviewing an idea.","position":0,"deleted_at":null}
 ],"links":{"first":"http://example.test/pages?page=1","last":"http://example.test/pages?page=2","prev":"http://example.test/pages?page=1","next":null},"meta":{"current_page":2,"last_page":2,"per_page":2,"total":5}}`
+
+// The API binds `GET /pages/{page}` to active rows only, so a deleted page is
+// reachable through the list endpoint with include_deleted=true and nowhere
+// else. The fixture mirrors that: the deleted record appears here and the
+// single-page route 404s on its ID.
+const pagesPageTwoWithDeletedJSON = `{"data":[
+  {"id":"` + pageReviewEngID + `","account_id":"` + testAccountID + `","parent_page_id":"` + pageEngineeringID + `","title":"Review","body":"A fresh reader catches what the author cannot.","description":"Checking a prepared pull request.","position":2,"deleted_at":null},
+  {"id":"` + pageProductID + `","account_id":"` + testAccountID + `","parent_page_id":null,"title":"Product","body":"Idea intake, research, and backlog grooming.","description":"What we build and why.","position":1,"deleted_at":null},
+  {"id":"` + pageReviewProdID + `","account_id":"` + testAccountID + `","parent_page_id":"` + pageProductID + `","title":"Review","body":"Reviewing an idea before it becomes work.","description":"Reviewing an idea.","position":0,"deleted_at":null},
+  ` + pageDeletedRecordJSON + `
+],"links":{"first":"http://example.test/pages?page=1","last":"http://example.test/pages?page=2","prev":"http://example.test/pages?page=1","next":null},"meta":{"current_page":2,"last_page":2,"per_page":2,"total":6}}`
 
 const playbookRecordJSON = `{"id":"` + playbookBuildID + `","account_id":"` + testAccountID + `","name":"Build","description":"Implement an assigned issue.","active_version":{"id":"` + playbookVersionID + `","version":2,"created_at":"2026-09-01T00:00:00.000000Z"},"version_count":2,"draft":{"definition":{"steps":[{"id":"implement","kind":"ai","title":"Implement the issue, revised"}]},"updated_at":"2026-09-10T00:00:00.000000Z","updated_by":2},"parent_page_id":"` + pageEngineeringID + `","position":1,"linked_page_ids":["` + pageBuildID + `"],"disabled_at":null,"archived_at":null,"created_at":"2026-08-01T00:00:00.000000Z","created_by":1}`
 
