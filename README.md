@@ -66,12 +66,17 @@ wallfacer up <environment-id>
 # List a session's messages, eliding image data and large tool blobs
 wallfacer messages list <task-id> <session-id> --view trimmed
 
-# Browse the handbook: pages and playbooks in one surface, reads only
+# Browse the handbook: pages and playbooks in one surface
 wallfacer handbook tree
 wallfacer handbook search "pull request"
 wallfacer handbook read "R&D/Engineering/Build"
 wallfacer handbook read <playbook-id>          # record plus the full active definition
 wallfacer handbook resolve "Writing Great PRs" # name, path or URL -> stable ID and type
+
+# Edit a page and organize the tree
+wallfacer handbook create "Writing Great PRs" --body-file pr.md --under "R&D/Engineering"
+wallfacer handbook update "R&D/Engineering/Build" --body-file build.md
+wallfacer handbook move <playbook-id> --under "R&D/Engineering"
 
 # Find a teammate: agents and human members in one directory
 wallfacer team list
@@ -93,7 +98,7 @@ Run `wallfacer --help` to see all command groups, or `wallfacer <group> --help` 
 
 ### Handbook
 
-`wallfacer handbook` lists, searches, and reads the account's handbook pages and playbooks. References accept a stable ID, a unique name, a full path (`R&D/Engineering/Build`), a Wallfacer page or playbook detail URL inside the configured account, or a `wallfacer://handbook/pages/<id>` link. Names and paths resolve against active entries; an ambiguous name is reported with its candidates rather than guessed at.
+`wallfacer handbook` lists, searches, reads, edits, and organizes the account's handbook pages and playbooks. References accept a stable ID, a unique name, a full path (`R&D/Engineering/Build`), a Wallfacer page or playbook detail URL inside the configured account, or a `wallfacer://handbook/pages/<id>` link. Names and paths resolve against active entries; an ambiguous name is reported with its candidates rather than guessed at.
 
 ```bash
 wallfacer handbook list --type playbook            # flat, with each entry's path and state
@@ -107,6 +112,25 @@ wallfacer handbook revisions <page-id>
 ```
 
 Reads never substitute an unpublished draft for a playbook's active definition: `handbook read` reports only that a draft exists, and `handbook draft` returns its content. Every result carries a `follow_up` object naming the command for each reference in it, so the next read is available from one result plus `--help`.
+
+Page edits and hierarchy changes use the same references:
+
+```bash
+wallfacer handbook create "Writing Great PRs" --body-file pr.md --under "R&D/Engineering"
+echo '{"title":"Release","body":"..."}' | wallfacer handbook create   # stdin JSON body
+wallfacer handbook update <page-id> --title "Writing great PRs"
+wallfacer handbook move <playbook-id> --under "R&D/Engineering" --position 0
+wallfacer handbook move <page-id> --top-level
+wallfacer handbook reorder --under "R&D/Engineering" "Build" <playbook-id> "Review"
+wallfacer handbook delete <page-id>
+wallfacer handbook restore <page-id>            # deleted pages are reached by ID
+```
+
+A page write is live knowledge immediately: agents running playbooks read the new content from the next task onward. Nothing is lost by editing, though. Each editing session is snapshotted, and the result names the `revisions` command that reads the earlier wording back.
+
+Deleting a page keeps its revision history and does not delete what is filed under it: sub-pages and playbooks move up to the deleted page's parent, or to the top level, and the result names each one. `restore` brings the page back with its content and history intact.
+
+`reorder` writes one parent's child order in a single atomic request. Pages and playbooks share one ordering under a parent, so the list is mixed and must be that parent's complete set of children; a list that omits, repeats, or imports a sibling is rejected before anything is written. `move` a playbook and only its parent and position change: no draft save, no publish, no trigger change, and no task.
 
 ### Team
 

@@ -15,21 +15,28 @@ import (
 )
 
 // registerHandbookCommands adds the top-level `handbook` surface: one place to
-// list, search, and read the account's pages and playbooks, following the
-// references each result hands back. It reads through the existing
-// account-scoped handbook, page, and pipeline endpoints; the generated
-// `accounts handbook`, `pages`, and `pipelines` groups keep working unchanged.
+// list, search, and read the account's pages and playbooks, to edit a page, and
+// to organize both kinds of entry in the tree, following the references each
+// result hands back. It works through the existing account-scoped handbook,
+// page, and pipeline endpoints; the generated `accounts handbook`, `pages`, and
+// `pipelines` groups keep working unchanged.
 func registerHandbookCommands(accountID string) {
 	handbookCmd := &cobra.Command{
 		Use:   "handbook",
-		Short: "Discover and read handbook pages and playbooks",
-		Long: cli.Markdown(`Discover and read the account's handbook.
+		Short: "Read, edit, and organize handbook pages and playbooks",
+		Long: cli.Markdown(`Read, edit, and organize the account's handbook.
 
-Every command here is a read. Commands that take a ` + "`<reference>`" + ` accept a
-stable ID, a unique entry name, a full path through the tree (` + "`R&D/Engineering/Build`" + `),
-a Wallfacer page or playbook detail URL inside the configured account, or a
-` + "`wallfacer://handbook/pages/<id>`" + ` link. Names and paths resolve against active
-entries and report every candidate rather than guessing when more than one matches.`),
+` + "`tree`" + `, ` + "`list`" + `, ` + "`search`" + `, ` + "`read`" + `, ` + "`resolve`" + `, and the revision and version
+commands are reads. ` + "`create`" + `, ` + "`update`" + `, ` + "`delete`" + `, ` + "`restore`" + `, ` + "`move`" + `, and
+` + "`reorder`" + ` write, and a page write is live knowledge immediately: what agents read from
+the next task onward. Page edits are snapshotted, so the previous wording stays readable
+through the page's revisions.
+
+Commands that take a ` + "`<reference>`" + ` accept a stable ID, a unique entry name, a full path
+through the tree (` + "`R&D/Engineering/Build`" + `), a Wallfacer page or playbook detail URL
+inside the configured account, or a ` + "`wallfacer://handbook/pages/<id>`" + ` link. Names and
+paths resolve against active entries and report every candidate rather than guessing when
+more than one matches; a deleted page is reached by ID, which is what a restore needs.`),
 	}
 
 	handbookCmd.AddCommand(
@@ -44,6 +51,7 @@ entries and report every candidate rather than guessing when more than one match
 		handbookVersionCommand(accountID),
 		handbookDraftCommand(accountID),
 	)
+	registerHandbookEditCommands(accountID, handbookCmd)
 
 	cli.Root.AddCommand(handbookCmd)
 }

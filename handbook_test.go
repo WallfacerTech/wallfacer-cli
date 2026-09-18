@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -27,6 +28,7 @@ const (
 	pageProductID     = "aaaaaaa4-1111-4111-8111-111111111111"
 	pageReviewProdID  = "aaaaaaa5-1111-4111-8111-111111111111"
 	pageDeletedID     = "aaaaaaa9-1111-4111-8111-111111111111"
+	pageCreatedID     = "aaaaaaa6-1111-4111-8111-111111111111"
 
 	playbookBuildID    = "bbbbbbb1-1111-4111-8111-111111111111"
 	playbookArchivedID = "bbbbbbb9-1111-4111-8111-111111111111"
@@ -43,17 +45,36 @@ func TestMain(m *testing.M) {
 }
 
 // recordedRequest is one call the CLI made, so a test can assert that a
-// discovery command only ever reads.
+// discovery command only ever reads, and that a write went to the intended
+// resource with the intended body.
 type recordedRequest struct {
 	method string
 	path   string
 	query  string
+	body   string
+}
+
+// decodedBody is the request's JSON body as a map, for asserting on the fields
+// a write actually sent.
+func (r recordedRequest) decodedBody(t *testing.T) map[string]interface{} {
+	t.Helper()
+	var decoded map[string]interface{}
+	if err := json.Unmarshal([]byte(r.body), &decoded); err != nil {
+		t.Fatalf("%s %s: body is not a JSON object: %v\n%s", r.method, r.path, err, r.body)
+	}
+	return decoded
 }
 
 type handbookFixture struct {
 	server   *httptest.Server
 	mu       sync.Mutex
 	requests []recordedRequest
+
+	// writes, when set, answers a write request instead of the default
+	// routing, so one test can make a page update fail the way the server
+	// would (a parent cycle, an entry in another account) without the others
+	// carrying that behaviour.
+	writes func(r *http.Request, body string) (string, int, bool)
 }
 
 // newHandbookFixture stands up a handbook containing the shapes that make
@@ -66,13 +87,26 @@ func newHandbookFixture(t *testing.T) *handbookFixture {
 
 	fixture := &handbookFixture{}
 	fixture.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		sent, _ := io.ReadAll(r.Body)
+
 		fixture.mu.Lock()
 		fixture.requests = append(fixture.requests, recordedRequest{
 			method: r.Method,
 			path:   r.URL.Path,
 			query:  r.URL.RawQuery,
+			body:   string(sent),
 		})
+		writes := fixture.writes
 		fixture.mu.Unlock()
+
+		if writes != nil && r.Method != http.MethodGet {
+			if body, status, handled := writes(r, string(sent)); handled {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(status)
+				fmt.Fprint(w, body)
+				return
+			}
+		}
 
 		body, status := fixture.route(r)
 		w.Header().Set("Content-Type", "application/json")
@@ -89,6 +123,10 @@ func newHandbookFixture(t *testing.T) *handbookFixture {
 
 func (f *handbookFixture) route(r *http.Request) (string, int) {
 	base := "/v1/accounts/" + testAccountID
+
+	if r.Method != http.MethodGet {
+		return f.routeWrite(r, base)
+	}
 
 	switch r.URL.Path {
 	case base + "/handbook":
@@ -130,6 +168,57 @@ func (f *handbookFixture) route(r *http.Request) (string, int) {
 	}
 
 	return `{"errors":[{"message":"Not found","code":"not_found"}]}`, http.StatusNotFound
+}
+
+// routeWrite answers the page, pipeline, and handbook writes. Each route
+// returns the record the server would return for that write, so a test asserts
+// on the request it recorded and on what the command did with the response.
+func (f *handbookFixture) routeWrite(r *http.Request, base string) (string, int) {
+	switch {
+	case r.Method == http.MethodPost && r.URL.Path == base+"/pages":
+		return wrapData(pageCreatedRecordJSON), http.StatusCreated
+
+	case r.Method == http.MethodPatch && r.URL.Path == base+"/pages/"+pageBuildID:
+		return wrapData(pageBuildRecordJSON), http.StatusOK
+
+	case r.Method == http.MethodPatch && r.URL.Path == base+"/pages/"+pageDeletedID:
+		return wrapData(pageRestoredRecordJSON), http.StatusOK
+
+	case r.Method == http.MethodDelete && r.URL.Path == base+"/pages/"+pageEngineeringID:
+		return "", http.StatusNoContent
+
+	case r.Method == http.MethodDelete && r.URL.Path == base+"/pages/"+pageBuildID:
+		return "", http.StatusNoContent
+
+	case r.Method == http.MethodPatch && r.URL.Path == base+"/pipelines/"+playbookBuildID:
+		return wrapData(playbookRecordJSON), http.StatusOK
+
+	case r.Method == http.MethodPatch && r.URL.Path == base+"/pipelines/"+playbookArchivedID:
+		return wrapData(playbookArchivedRecordJSON), http.StatusOK
+
+	case r.Method == http.MethodPatch && r.URL.Path == base+"/handbook":
+		return handbookTreeJSON, http.StatusOK
+	}
+
+	return `{"errors":[{"message":"Not found","code":"not_found"}]}`, http.StatusNotFound
+}
+
+func (f *handbookFixture) onWrite(fn func(r *http.Request, body string) (string, int, bool)) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.writes = fn
+}
+
+// mutations returns every non-GET request the commands made, which is how a
+// test shows that a rejected reference never reached a write.
+func (f *handbookFixture) mutations() []recordedRequest {
+	var out []recordedRequest
+	for _, request := range f.recorded() {
+		if request.method != http.MethodGet {
+			out = append(out, request)
+		}
+	}
+	return out
 }
 
 func (f *handbookFixture) recorded() []recordedRequest {
@@ -742,6 +831,10 @@ const handbookTreeJSON = `{"data":{"tree":[
 ]}}`
 
 const pageBuildRecordJSON = `{"id":"` + pageBuildID + `","account_id":"` + testAccountID + `","parent_page_id":"` + pageEngineeringID + `","title":"Build","body":"How a change reaches the product: issue, pull request, review, merge.","description":"From issue to merge.","position":0,"created_by":1,"created_at":"2026-08-01T00:00:00.000000Z","updated_at":"2026-09-01T00:00:00.000000Z","deleted_at":null}`
+
+const pageCreatedRecordJSON = `{"id":"` + pageCreatedID + `","account_id":"` + testAccountID + `","parent_page_id":"` + pageEngineeringID + `","title":"Writing Great PRs","body":"Lead with the problem.","description":null,"position":3,"created_by":1,"created_at":"2026-09-18T00:00:00.000000Z","updated_at":"2026-09-18T00:00:00.000000Z","deleted_at":null}`
+
+const pageRestoredRecordJSON = `{"id":"` + pageDeletedID + `","account_id":"` + testAccountID + `","parent_page_id":null,"title":"Deleted Draft Page","body":"Superseded.","description":null,"position":0,"created_by":1,"created_at":"2026-08-01T00:00:00.000000Z","updated_at":"2026-09-18T00:00:00.000000Z","deleted_at":null}`
 
 const pageDeletedRecordJSON = `{"id":"` + pageDeletedID + `","account_id":"` + testAccountID + `","parent_page_id":null,"title":"Deleted Draft Page","body":"Superseded.","description":null,"position":0,"created_by":1,"created_at":"2026-08-01T00:00:00.000000Z","updated_at":"2026-08-02T00:00:00.000000Z","deleted_at":"2026-08-03T00:00:00.000000Z"}`
 
