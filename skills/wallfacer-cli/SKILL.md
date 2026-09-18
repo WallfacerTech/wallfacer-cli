@@ -124,7 +124,7 @@ wallfacer pages delete <page-id>
 
 ## Request bodies via stdin
 
-The CLI does **not** support `--body`, `--name`, `--manifest-file`, or similar flags for passing data. Instead, pipe a JSON body via stdin:
+Outside the `handbook` group the CLI does **not** support `--body`, `--name`, `--manifest-file`, or similar flags for passing data. Instead, pipe a JSON body via stdin:
 
 ```bash
 # Inline JSON
@@ -136,6 +136,8 @@ cat wf-dev-manifest.json | jq '{name: "my-env", manifest: .}' | wallfacer enviro
 # From file directly
 cat vm.json | wallfacer vms create
 ```
+
+`handbook create` and `handbook update` are the exception: they read the same JSON body from stdin and also accept `--title`, `--body`, `--body-file`, `--position`, `--under`, and `--top-level`. A flag wins over the same field in a piped body.
 
 ## Output format
 

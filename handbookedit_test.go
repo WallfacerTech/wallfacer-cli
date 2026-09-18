@@ -2,6 +2,7 @@ package main
 
 import (
 	"net/http"
+	"os"
 	"strings"
 	"testing"
 )
@@ -465,5 +466,79 @@ func TestWriteCommandsNeverCreateTasks(t *testing.T) {
 	}
 	if len(fixture.mutations()) != len(commands) {
 		t.Errorf("expected one write per command, got %d", len(fixture.mutations()))
+	}
+}
+
+// withStdin runs fn with a piped stdin holding contents, which is how
+// cli.GetBody sees a request body.
+func withStdin(t *testing.T, contents string, fn func()) {
+	t.Helper()
+
+	reader, writer, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("pipe: %v", err)
+	}
+	go func() {
+		writer.WriteString(contents)
+		writer.Close()
+	}()
+
+	previous := os.Stdin
+	os.Stdin = reader
+	defer func() {
+		os.Stdin = previous
+		reader.Close()
+	}()
+
+	fn()
+}
+
+func TestARequestBodyOfNullIsRejected(t *testing.T) {
+	cmd := handbookCreateCommand(testAccountID)
+
+	withStdin(t, "null", func() {
+		if _, err := handbookEditFromFlags(cmd); err == nil {
+			t.Fatal("expected a literal null body to be rejected, not to become an empty edit")
+		}
+	})
+}
+
+func TestMoveReportsThePathTheEntryNowHas(t *testing.T) {
+	fixture := newHandbookFixture(t)
+	moved := strings.Replace(pageBuildRecordJSON, `"parent_page_id":"`+pageEngineeringID+`"`, `"parent_page_id":"`+pageProductID+`"`, 1)
+	fixture.onWrite(func(r *http.Request, body string) (string, int, bool) {
+		if r.Method == http.MethodPatch && strings.HasSuffix(r.URL.Path, "/pages/"+pageBuildID) {
+			return wrapData(moved), http.StatusOK, true
+		}
+		return "", 0, false
+	})
+
+	output := capture(t, func() error {
+		return runHandbookMove(fixture.api(), "Engineering/Build", kindPage, handbookEdit{parentRef: "Product"}, 0)
+	})
+
+	reference := output["reference"].(map[string]interface{})
+	if reference["path"] != "Product/Build" {
+		t.Errorf("move reported path %v, want the post-move path Product/Build", reference["path"])
+	}
+}
+
+func TestUpdateToTheTopLevelReportsTheNewPath(t *testing.T) {
+	fixture := newHandbookFixture(t)
+	promoted := strings.Replace(pageBuildRecordJSON, `"parent_page_id":"`+pageEngineeringID+`"`, `"parent_page_id":null`, 1)
+	fixture.onWrite(func(r *http.Request, body string) (string, int, bool) {
+		if r.Method == http.MethodPatch && strings.HasSuffix(r.URL.Path, "/pages/"+pageBuildID) {
+			return wrapData(promoted), http.StatusOK, true
+		}
+		return "", 0, false
+	})
+
+	output := capture(t, func() error {
+		return runHandbookUpdate(fixture.api(), "Engineering/Build", handbookEdit{topLevel: true})
+	})
+
+	reference := output["reference"].(map[string]interface{})
+	if reference["path"] != "Build" {
+		t.Errorf("update reported path %v, want the post-move path Build", reference["path"])
 	}
 }

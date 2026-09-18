@@ -194,6 +194,11 @@ func handbookEditFromFlags(cmd *cobra.Command) (handbookEdit, error) {
 		if err := json.Unmarshal([]byte(raw), &edit.body); err != nil {
 			return edit, errors.Wrap(err, "the request body is not a JSON object")
 		}
+		// A literal `null` unmarshals into a nil map rather than failing, and
+		// the flags below would panic writing into it.
+		if edit.body == nil {
+			return edit, errors.New("the request body is not a JSON object")
+		}
 	}
 
 	if cmd.Flags().Changed("title") {
@@ -449,7 +454,7 @@ func runHandbookUpdate(api *handbookAPI, reference string, edit handbookEdit) er
 		return handbookWriteError(err, ref)
 	}
 
-	updated := refreshRef(ref, refFromPageRecord(record, api.accountID, ref.ResolvedFrom))
+	updated := api.refreshWritten(ref, refFromPageRecord(record, api.accountID, ref.ResolvedFrom))
 	return emitHandbook(map[string]interface{}{
 		"data":      record,
 		"reference": updated,
@@ -522,7 +527,7 @@ func runHandbookRestore(api *handbookAPI, reference string) error {
 		return handbookWriteError(err, ref)
 	}
 
-	restored := refreshRef(ref, refFromPageRecord(record, api.accountID, ref.ResolvedFrom))
+	restored := api.refreshWritten(ref, refFromPageRecord(record, api.accountID, ref.ResolvedFrom))
 	return emitHandbook(map[string]interface{}{
 		"data":      record,
 		"reference": restored,
@@ -555,13 +560,13 @@ func runHandbookMove(api *handbookAPI, reference, kind string, edit handbookEdit
 		if err != nil {
 			return handbookWriteError(err, ref)
 		}
-		moved = refreshRef(ref, refFromPageRecord(record, api.accountID, ref.ResolvedFrom))
+		moved = api.refreshWritten(ref, refFromPageRecord(record, api.accountID, ref.ResolvedFrom))
 	case kindPlaybook:
 		record, err = api.updatePipeline(ref.ID, payload)
 		if err != nil {
 			return handbookWriteError(err, ref)
 		}
-		moved = refreshRef(ref, refFromPipelineRecord(record, api.accountID, ref.ResolvedFrom))
+		moved = api.refreshWritten(ref, refFromPipelineRecord(record, api.accountID, ref.ResolvedFrom))
 	default:
 		return errors.Errorf("unsupported handbook type %q", ref.Type)
 	}
@@ -688,6 +693,34 @@ func (idx *handbookIndex) childrenOfParent(parentID string) []*handbookRef {
 		}
 	}
 	return roots
+}
+
+// refreshWritten takes the entry's current fields from the record the write
+// returned and recomputes its path, which a move or a retitle has just
+// invalidated. The cached tree predates the write, but a write only relocates
+// or renames the entry itself, so its new ancestors' paths in that tree still
+// hold. When the new path cannot be computed the field is left empty and
+// omitted rather than reported stale.
+func (a *handbookAPI) refreshWritten(resolved, refreshed *handbookRef) *handbookRef {
+	ref := refreshRef(resolved, refreshed)
+	ref.Path = ""
+
+	if ref.Title == "" {
+		return ref
+	}
+	if ref.ParentPageID == "" {
+		ref.Path = ref.Title
+		return ref
+	}
+
+	idx, err := a.loadIndex()
+	if err != nil {
+		return ref
+	}
+	if parent, ok := idx.byID[ref.ParentPageID]; ok {
+		ref.Path = parent.Path + "/" + ref.Title
+	}
+	return ref
 }
 
 // handbookWriteFollowUp names the reads that show what a write did: the record
