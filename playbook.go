@@ -494,12 +494,6 @@ func runPlaybookUpdate(api *handbookAPI, reference string, update *playbookUpdat
 	if err != nil {
 		return handbookReadError(err, ref)
 	}
-	if record == nil {
-		record, err = api.getPipeline(ref.ID)
-		if err != nil {
-			return err
-		}
-	}
 
 	updated := refFromPipelineRecord(record, api.accountID, ref.ResolvedFrom)
 	return emitHandbook(map[string]interface{}{
@@ -548,12 +542,6 @@ func runPlaybookRestore(api *handbookAPI, reference string) error {
 	record, err := api.updatePipeline(ref.ID, map[string]interface{}{"archived": false})
 	if err != nil {
 		return handbookReadError(err, ref)
-	}
-	if record == nil {
-		record, err = api.getPipeline(ref.ID)
-		if err != nil {
-			return err
-		}
 	}
 
 	restored := refFromPipelineRecord(record, api.accountID, ref.ResolvedFrom)

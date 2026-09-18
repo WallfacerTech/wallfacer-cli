@@ -1,6 +1,6 @@
 ---
 name: wallfacer-cli
-description: Drive the Wallfacer platform from the shell via the `wallfacer` CLI. Covers auth, accounts, environments, snapshots, VMs (create/destroy/exec/logs), tasks with sessions/messages/attachments, the handbook (`wallfacer handbook` to find and read pages and playbooks, and to draft and publish playbooks; page writes go through `wallfacer pages`, since the `handbook_*` MCP tools are read-only), and iOS simulator. TRIGGER when the user runs `wallfacer` commands, asks to authenticate or manage accounts, lists/creates/destroys VMs, runs commands on a VM, reads task sessions or messages, asks to find or read a handbook page or playbook, asks to create/update/delete a handbook page or playbook page, or parses `wallfacer` JSON output. SKIP unrelated CLIs (`aws`, `gcloud`, `wf` from the `droplet` project).
+description: Drive the Wallfacer platform from the shell via the `wallfacer` CLI. Covers auth, accounts, environments, snapshots, VMs (create/destroy/exec/logs), tasks with sessions/messages/attachments, the handbook (`wallfacer handbook` to find, read, edit, and organize pages and playbooks, and to draft and publish playbooks, since the `handbook_*` MCP tools are read-only; `wallfacer pages` is the low-level route to the same endpoints), the team directory (`wallfacer team`), starting work (`wallfacer chat` with an agent, `wallfacer run` for a published playbook), and iOS simulator. TRIGGER when the user runs `wallfacer` commands, asks to authenticate or manage accounts, lists/creates/destroys VMs, runs commands on a VM, reads task sessions or messages, asks to find or read a handbook page or playbook, asks to create/update/delete a handbook page or playbook page, asks to draft or publish a playbook definition, asks who is on the team or which agents exist, asks to message an agent or hand it work, asks to run a playbook, or parses `wallfacer` JSON output. SKIP unrelated CLIs (`aws`, `gcloud`, `wf` from the `droplet` project).
 ---
 
 # wallfacer
@@ -59,18 +59,19 @@ Flags: `--vm` (required), `--dir` (working directory), `--timeout` (seconds, 1-3
 
 ## Command groups
 
-All commands are flat top-level groups (not nested). Write operations take JSON request bodies via **stdin** (piped), not flags. Use `-o json` for JSON output.
+All commands are flat top-level groups (not nested). Write operations take JSON request bodies via **stdin** (piped), not flags; the `handbook` write commands also accept stdin and layer their own flags over it. Use `-o json` for JSON output.
 
 | Group | Read | Write |
 |---|---|---|
-| handbook | `tree`, `list`, `search <query>`, `read <ref>`, `resolve <ref>`, `revisions <page-ref>`, `revision <page-ref> <rev-id>`, `versions <playbook-ref>`, `version <playbook-ref> [version]`, `draft <playbook-ref>`, `diff <playbook-ref> <a> <b>`, `diff-draft <playbook-ref>` | `create-playbook`, `update-playbook <playbook-ref>`, `archive-playbook <playbook-ref>`, `restore-playbook <playbook-id>`, `save-draft <playbook-ref>`, `discard-draft <playbook-ref>`, `publish <playbook-ref>` |
+| team | `list`, `get <reference>` | — |
+| handbook | `tree`, `list`, `search <query>`, `read <ref>`, `resolve <ref>`, `revisions <page-ref>`, `revision <page-ref> <rev-id>`, `versions <playbook-ref>`, `version <playbook-ref> [version]`, `draft <playbook-ref>`, `diff <playbook-ref> <a> <b>`, `diff-draft <playbook-ref>` | `create [title]`, `update <page-ref>`, `delete <page-ref>`, `restore <page-id>`, `move <ref>`, `reorder <ref>...`, `create-playbook`, `update-playbook <playbook-ref>`, `archive-playbook <playbook-ref>`, `restore-playbook <playbook-id>`, `save-draft <playbook-ref>`, `discard-draft <playbook-ref>`, `publish <playbook-ref>` |
 | accounts | `list`, `get`, `handbook` | — |
 | pages | `list`, `get <page-id>` | `create`, `update <page-id>`, `delete <page-id>` |
 | revisions | `list <page-id>`, `get <page-id> <revision-id>` | — |
 | environments | `list`, `get <env-id>` | `create`, `update <env-id>`, `delete <env-id>` |
 | snapshots | `list <env-id>`, `get <env-id> <snap-id>`, `logs <env-id> <snap-id>`, `log <env-id> <snap-id> <source>` | `create <env-id>`, `delete <env-id> <snap-id>` |
 | vms | `list`, `get <vm-id>`, `logs <vm-id>`, `log <vm-id> <source>` | `create`, `delete <vm-id>`, `commands <vm-id>` |
-| tasks | `list`, `get <task-id>` | `create`, `update <task-id>`, `delete <task-id>` |
+| tasks | `list`, `get <task-id>` | `create`, `update <task-id>`, `delete <task-id>`, and the two entry points `chat <agent> [prompt]` and `run <playbook>` |
 | attachments | `list <task-id>`, `contents <task-id> <att-id>` | `create <task-id>`, `delete <task-id> <att-id>`, `refresh <task-id> <att-id>` |
 | sessions | `list <task-id>`, `get <task-id> <sess-id>` | `create <task-id>`, `update <task-id> <sess-id>`, `abort <task-id> <sess-id>` |
 | messages | `list <task-id> <sess-id>`, `get <task-id> <sess-id> <msg-id>` | `create <task-id> <sess-id>`, `delete <task-id> <sess-id> <msg-id>` |
@@ -80,11 +81,11 @@ All commands are flat top-level groups (not nested). Write operations take JSON 
 
 All positional args shown above assume `account_id` is set in config. If not, prepend the account UUID as the first positional arg to every command.
 
-References: [config](references/config.md) · [environments](references/environments.md) · [vms](references/vms.md) · [tasks](references/tasks.md) · [handbook](references/handbook.md).
+References: [config](references/config.md) · [environments](references/environments.md) · [vms](references/vms.md) · [tasks](references/tasks.md) · [handbook](references/handbook.md) · [team](references/team.md).
 
 ## Handbook
 
-`wallfacer handbook` is the entry point for finding and reading the account's handbook — pages and playbooks in one surface, with every result carrying the references needed for the next read — and for authoring its playbooks. No command in the group creates a task.
+`wallfacer handbook` is the entry point for the account's handbook: pages and playbooks in one surface, with every result carrying the references needed for the next command, and the place its playbooks are authored. No command in the group creates a task.
 
 ```bash
 wallfacer handbook tree                       # pages and playbooks as one nested tree
@@ -93,6 +94,20 @@ wallfacer handbook search "pull request"      # both types, title + description 
 wallfacer handbook read "Engineering/Build"   # page body, or a playbook's active definition
 wallfacer handbook resolve <ref>              # a name, path, or URL -> stable ID, type, state
 ```
+
+Page authoring and tree organization take the same references:
+
+```bash
+wallfacer handbook create "PR bodies" --body-file pr.md --under "Engineering"
+echo '{"title":"PR bodies","body":"..."}' | wallfacer handbook create
+wallfacer handbook update "Engineering/Build" --body-file build.md
+wallfacer handbook move <playbook-id> --under "Engineering" --position 0
+wallfacer handbook reorder --under "Engineering" "Build" <playbook-id> "Review"
+wallfacer handbook delete <page-ref>          # children move up; history is kept
+wallfacer handbook restore <page-id>          # deleted pages are reached by ID
+```
+
+A page write is live knowledge immediately, and every editing session is snapshotted, so the previous wording stays readable through `handbook revisions`. `reorder` is one atomic write of a parent's complete, mixed child list. Moving a playbook changes only its parent and position: no draft save, no publish, no trigger change, no task.
 
 Playbook authoring splits saving from publishing. `save-draft` stores a working copy and changes nothing about how the playbook runs; `publish` sends that saved draft to the version endpoint and is the only command besides `create-playbook` that changes the versioned definition.
 
@@ -109,7 +124,26 @@ References accept a stable ID, a unique name, a full path (`R&D/Engineering/Buil
 
 Read the full detail in [references/handbook.md](references/handbook.md).
 
-Page **writes** are `wallfacer pages`: the `handbook_*` MCP tools an agent gets in a session read pages only. Playbook writes are in the `handbook` group above.
+## Team, chat, and playbook runs
+
+`wallfacer team` is the directory: the account's agents and its human members in one list, carrying the IDs the other commands take. `wallfacer chat` and `wallfacer run` are the two ways to start work, and they are separate commands because they are two different asks.
+
+```bash
+wallfacer team list                       # agents and humans, swept past page one
+wallfacer team list --type agent          # the actor picker
+wallfacer team get jin                    # id, handle, email or name -> one record
+wallfacer chat jin "Look at the failing build"                              # sends `prompt`
+wallfacer run "Implement Assigned GitHub Issues" --message "Start with #66" # sends `pipeline_id`
+```
+
+- **Chat is agent-directed.** A human member, and a disabled or paused agent, are refused by name rather than quietly becoming the identity on the task.
+- **Run uses the version the server has active.** No version is pinned, a draft-only playbook is refused, and `--agent` is the task's identity and default environment rather than an override of the playbook's step actors.
+- **Neither falls back to the other.** Chat never sends `pipeline_id`; run never sends `prompt`.
+- **Both return the created task plus `follow_up`** naming the `tasks get`, `sessions list`, `messages list`, and `handbook version` commands for what they started.
+
+Reading the directory never creates a task, and running a playbook never edits or publishes it. Read the full detail in [references/team.md](references/team.md).
+
+The low-level `wallfacer pages` group still works unchanged and is the raw route to the same endpoints (the `handbook_*` MCP tools an agent gets in a session read pages only). Playbook writes are in the `handbook` group above:
 
 ```bash
 echo '{"title": "PR bodies", "body": "..."}' | wallfacer pages create
@@ -121,7 +155,7 @@ wallfacer pages delete <page-id>
 
 ## Request bodies via stdin
 
-The CLI does **not** support `--body`, `--name`, `--manifest-file`, or similar flags for passing data. Instead, pipe a JSON body via stdin:
+Outside the `handbook` group the CLI does **not** support `--body`, `--name`, `--manifest-file`, or similar flags for passing data. Instead, pipe a JSON body via stdin:
 
 ```bash
 # Inline JSON
@@ -133,6 +167,8 @@ cat wf-dev-manifest.json | jq '{name: "my-env", manifest: .}' | wallfacer enviro
 # From file directly
 cat vm.json | wallfacer vms create
 ```
+
+`handbook create` and `handbook update` are the exception: they read the same JSON body from stdin and also accept `--title`, `--body`, `--body-file`, `--position`, `--under`, and `--top-level`. A flag wins over the same field in a piped body.
 
 ## Output format
 
@@ -151,6 +187,6 @@ Default output is JSON. Also supports `-o yaml`.
 
 ## Rate limits & pagination
 
-List endpoints accept `--per-page` (max 100). The CLI does not follow pagination links automatically, with one exception: `wallfacer handbook list` takes `--page` to read past the first page, and `wallfacer handbook search` sweeps pages itself up to `--max-pages` and reports how far it got.
+List endpoints accept `--per-page` (max 100). The CLI does not follow pagination links automatically, with three exceptions: `wallfacer handbook list` takes `--page` to read past the first page, and `wallfacer handbook search` and `wallfacer team list` sweep pages themselves up to `--max-pages` and report how far they got. Resolving a team reference (`team get`, `chat`, and `run --agent`) always sweeps both listings in full.
 
 Batch jobs: watch for HTTP error responses indicating rate limiting.

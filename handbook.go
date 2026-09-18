@@ -15,32 +15,39 @@ import (
 )
 
 // registerHandbookCommands adds the top-level `handbook` surface: one place to
-// list, search, and read the account's pages and playbooks, following the
-// references each result hands back. It reads through the existing
-// account-scoped handbook, page, and pipeline endpoints; the generated
-// `accounts handbook`, `pages`, and `pipelines` groups keep working unchanged.
+// list, search, and read the account's pages and playbooks, to edit a page, and
+// to organize both kinds of entry in the tree, following the references each
+// result hands back. It works through the existing account-scoped handbook,
+// page, and pipeline endpoints; the generated `accounts handbook`, `pages`, and
+// `pipelines` groups keep working unchanged.
 func registerHandbookCommands(accountID string) {
 	handbookCmd := &cobra.Command{
 		Use:   "handbook",
-		Short: "Discover, read, and author handbook pages and playbooks",
-		Long: cli.Markdown(`Read the account's handbook, and author its playbooks.
+		Short: "Read, edit, organize, and author handbook pages and playbooks",
+		Long: cli.Markdown(`Read, edit, and organize the account's handbook, and author its playbooks.
 
-Commands that take a ` + "`<reference>`" + ` accept a stable ID, a unique entry name, a
-full path through the tree (` + "`R&D/Engineering/Build`" + `), a Wallfacer page or
-playbook detail URL inside the configured account, or a
-` + "`wallfacer://handbook/pages/<id>`" + ` link. Names and paths resolve against active
-entries and report every candidate rather than guessing when more than one matches.
+Commands that take a ` + "`<reference>`" + ` accept a stable ID, a unique entry name, a full path
+through the tree (` + "`R&D/Engineering/Build`" + `), a Wallfacer page or playbook detail URL
+inside the configured account, or a ` + "`wallfacer://handbook/pages/<id>`" + ` link. Names and
+paths resolve against active entries and report every candidate rather than guessing when
+more than one matches; a deleted page is reached by ID, which is what a restore needs.
 
 ` + "`tree`, `list`, `search`, `read`, `resolve`, `revisions`, `revision`, `versions`," + `
-` + "`version`, `draft`, `diff` and `diff-draft` are reads. The rest write, and of those" + `
-` + "only `create-playbook` and `publish` change a playbook's versioned definition." + `
+` + "`version`, `draft`, `diff` and `diff-draft` are reads. The rest write." + `
 
-Two histories run alongside each other and are not the same thing. A page's **revisions**
-are its saved edits, and a page's current content reaches every later run as soon as it is
-saved. A playbook's **versions** are its published definitions: a task pins the version
-that was active when it was created and keeps running that one, so publishing a new
-version changes later tasks and not the ones already in flight. Linking or unlinking a
-page is metadata and reaches later runs immediately, without a publish.`),
+` + "`create`, `update`, `delete`, `restore`, `move`, and `reorder`" + ` act on the handbook
+tree, and a page write is live knowledge immediately: what agents read from the next task
+onward. Page edits are snapshotted, so the previous wording stays readable through the
+page's revisions.
+
+Of the playbook authoring commands, only ` + "`create-playbook` and `publish`" + ` change a
+playbook's versioned definition. Two histories run alongside each other and are not the
+same thing. A page's **revisions** are its saved edits, and a page's current content reaches
+every later run as soon as it is saved. A playbook's **versions** are its published
+definitions: a task pins the version that was active when it was created and keeps running
+that one, so publishing a new version changes later tasks and not the ones already in
+flight. Linking or unlinking a page is metadata and reaches later runs immediately, without
+a publish.`),
 	}
 
 	handbookCmd.AddCommand(
@@ -55,6 +62,7 @@ page is metadata and reaches later runs immediately, without a publish.`),
 		handbookVersionCommand(accountID),
 		handbookDraftCommand(accountID),
 	)
+	registerHandbookEditCommands(accountID, handbookCmd)
 	handbookCmd.AddCommand(playbookAuthoringCommands(accountID)...)
 
 	cli.Root.AddCommand(handbookCmd)
