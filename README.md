@@ -66,6 +66,13 @@ wallfacer up <environment-id>
 # List a session's messages, eliding image data and large tool blobs
 wallfacer messages list <task-id> <session-id> --view trimmed
 
+# Browse the handbook: pages and playbooks in one surface, reads only
+wallfacer handbook tree
+wallfacer handbook search "pull request"
+wallfacer handbook read "R&D/Engineering/Build"
+wallfacer handbook read <playbook-id>          # record plus the full active definition
+wallfacer handbook resolve "Writing Great PRs" # name, path or URL -> stable ID and type
+
 # Execute a command in a VM (shortcut)
 wallfacer exec --vm <vm-id> -- ls -la /workspace
 wallfacer exec --vm <vm-id> --dir /workspace --timeout 60 -- make build
@@ -75,6 +82,23 @@ wallfacer <command> --help
 ```
 
 Run `wallfacer --help` to see all command groups, or `wallfacer <group> --help` for details on a specific group.
+
+### Handbook
+
+`wallfacer handbook` lists, searches, and reads the account's handbook pages and playbooks. References accept a stable ID, a unique name, a full path (`R&D/Engineering/Build`), a Wallfacer page or playbook detail URL inside the configured account, or a `wallfacer://handbook/pages/<id>` link. Names and paths resolve against active entries; an ambiguous name is reported with its candidates rather than guessed at.
+
+```bash
+wallfacer handbook list --type playbook            # flat, with each entry's path and state
+wallfacer handbook list --page 2                   # traverse past the first page
+wallfacer handbook search "review" --limit 5
+wallfacer handbook read <page-id> -q 'data.body' --raw
+wallfacer handbook versions <playbook-id>          # published versions, newest first
+wallfacer handbook version <playbook-id> 3         # one published version in full
+wallfacer handbook draft <playbook-id>             # the unpublished draft, on its own
+wallfacer handbook revisions <page-id>
+```
+
+Reads never substitute an unpublished draft for a playbook's active definition: `handbook read` reports only that a draft exists, and `handbook draft` returns its content. Every result carries a `follow_up` object naming the command for each reference in it, so the next read is available from one result plus `--help`.
 
 ## Configuration
 
@@ -106,6 +130,12 @@ make generate
 ```
 
 This requires the openapi-cli-generator repo to be cloned alongside this one (as `../openapi-cli-generator`). `go.mod` uses a local `replace` directive, so `go install` from a remote module path won't work — build from a local clone.
+
+Product commands — `up`, `exec`, and the `handbook` group — are hand-maintained outside `openapi.go` so that regenerating the spec never drops them. Run the tests with:
+
+```bash
+go test ./...
+```
 
 ## Agent Skills
 

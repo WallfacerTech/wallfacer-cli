@@ -1,6 +1,6 @@
 ---
 name: wallfacer-cli
-description: Drive the Wallfacer platform from the shell via the `wallfacer` CLI. Covers auth, accounts, environments, snapshots, VMs (create/destroy/exec/logs), tasks with sessions/messages/attachments, handbook pages (`wallfacer pages` — the only write path for handbook pages, since the `handbook_*` MCP tools are read-only), and iOS simulator. TRIGGER when the user runs `wallfacer` commands, asks to authenticate or manage accounts, lists/creates/destroys VMs, runs commands on a VM, reads task sessions or messages, asks to create/update/delete a handbook page or playbook page, or parses `wallfacer` JSON output. SKIP unrelated CLIs (`aws`, `gcloud`, `wf` from the `droplet` project).
+description: Drive the Wallfacer platform from the shell via the `wallfacer` CLI. Covers auth, accounts, environments, snapshots, VMs (create/destroy/exec/logs), tasks with sessions/messages/attachments, the handbook (`wallfacer handbook` to find and read pages and playbooks; `wallfacer pages` is the only write path, since the `handbook_*` MCP tools are read-only), and iOS simulator. TRIGGER when the user runs `wallfacer` commands, asks to authenticate or manage accounts, lists/creates/destroys VMs, runs commands on a VM, reads task sessions or messages, asks to find or read a handbook page or playbook, asks to create/update/delete a handbook page or playbook page, or parses `wallfacer` JSON output. SKIP unrelated CLIs (`aws`, `gcloud`, `wf` from the `droplet` project).
 ---
 
 # wallfacer
@@ -63,6 +63,7 @@ All commands are flat top-level groups (not nested). Write operations take JSON 
 
 | Group | Read | Write |
 |---|---|---|
+| handbook | `tree`, `list`, `search <query>`, `read <ref>`, `resolve <ref>`, `revisions <page-ref>`, `revision <page-ref> <rev-id>`, `versions <playbook-ref>`, `version <playbook-ref> [version]`, `draft <playbook-ref>` | — |
 | accounts | `list`, `get`, `handbook` | — |
 | pages | `list`, `get <page-id>` | `create`, `update <page-id>`, `delete <page-id>` |
 | revisions | `list <page-id>`, `get <page-id> <revision-id>` | — |
@@ -79,22 +80,33 @@ All commands are flat top-level groups (not nested). Write operations take JSON 
 
 All positional args shown above assume `account_id` is set in config. If not, prepend the account UUID as the first positional arg to every command.
 
-References: [config](references/config.md) · [environments](references/environments.md) · [vms](references/vms.md) · [tasks](references/tasks.md).
+References: [config](references/config.md) · [environments](references/environments.md) · [vms](references/vms.md) · [tasks](references/tasks.md) · [handbook](references/handbook.md).
 
-## Handbook pages
+## Handbook
 
-Handbook pages are Wallfacer **pages**. The `handbook_*` MCP tools an agent gets in a session read pages only, so `wallfacer pages` is the write path for creating, editing, moving, and deleting them.
+`wallfacer handbook` is the entry point for finding and reading the account's handbook: pages and playbooks in one surface, with every result carrying the references needed for the next read. Every command in the group is a read.
 
 ```bash
-wallfacer accounts handbook                  # the whole handbook as a nested tree
-wallfacer pages list                         # flat, paginated
-wallfacer pages get <page-id>                # includes the markdown body
+wallfacer handbook tree                       # pages and playbooks as one nested tree
+wallfacer handbook list --type playbook       # flat, with each entry's path and state
+wallfacer handbook search "pull request"      # both types, title + description + page body
+wallfacer handbook read "Engineering/Build"   # page body, or a playbook's active definition
+wallfacer handbook resolve <ref>              # a name, path, or URL -> stable ID, type, state
+```
+
+References accept a stable ID, a unique name, a full path (`R&D/Engineering/Build`), a page or playbook detail URL inside the configured account, or a `wallfacer://handbook/pages/<id>` link. Ambiguous names are reported with their candidates rather than guessed at, and a URL from another account is refused before any request goes out. Pass `--type page` or `--type playbook` when a page and a playbook share a name.
+
+Read the full detail in [references/handbook.md](references/handbook.md).
+
+Handbook **writes** are still `wallfacer pages`: the `handbook_*` MCP tools an agent gets in a session read pages only.
+
+```bash
 echo '{"title": "PR bodies", "body": "..."}' | wallfacer pages create
 echo '{"body": "..."}' | wallfacer pages update <page-id>
 wallfacer pages delete <page-id>
 ```
 
-`update` takes any of `title`, `body`, `parent_page_id`, `position`, and `deleted: false` (restores a deleted page). `delete` keeps the page's revision history and re-parents its children to the deleted page's parent. Revision history is `wallfacer revisions list <page-id>` / `get <page-id> <revision-id>`.
+`update` takes any of `title`, `body`, `parent_page_id`, `position`, and `deleted: false` (restores a deleted page). `delete` keeps the page's revision history and re-parents its children to the deleted page's parent.
 
 ## Request bodies via stdin
 
@@ -128,6 +140,6 @@ Default output is JSON. Also supports `-o yaml`.
 
 ## Rate limits & pagination
 
-List endpoints accept `--per-page` (max 100). The CLI does not follow pagination links automatically.
+List endpoints accept `--per-page` (max 100). The CLI does not follow pagination links automatically, with one exception: `wallfacer handbook list` takes `--page` to read past the first page, and `wallfacer handbook search` sweeps pages itself up to `--max-pages` and reports how far it got.
 
 Batch jobs: watch for HTTP error responses indicating rate limiting.
