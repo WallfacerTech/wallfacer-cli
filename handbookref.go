@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -11,6 +12,7 @@ import (
 	"github.com/WallfacerTech/openapi-cli-generator/cli"
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
+	"gopkg.in/h2non/gentleman.v2"
 )
 
 // Handbook entries come in two kinds. The API spells the second one
@@ -28,9 +30,9 @@ var errHandbookNotFound = errors.New("not found")
 
 var uuidPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 
-// handbookAPI issues the account-scoped reads the handbook commands are built
-// from. Every method on it is a GET: discovery never writes handbook content
-// and never spawns a task.
+// handbookAPI issues the account-scoped calls the handbook commands are built
+// from. Discovery uses the GET methods only; the write methods belong to the
+// authoring commands, and no method here creates a task.
 type handbookAPI struct {
 	accountID string
 
@@ -76,6 +78,133 @@ func (a *handbookAPI) get(path string, query url.Values) (map[string]interface{}
 		return nil, errors.Wrap(err, "Unmarshalling response failed")
 	}
 	return decoded, nil
+}
+
+// send issues a write against the account-scoped API. The response body is
+// returned when there is one: the draft and metadata routes may answer 204, and
+// a caller that needs the record reads it back rather than inventing it.
+func (a *handbookAPI) send(method, path string, body interface{}) (map[string]interface{}, error) {
+	server := viper.GetString("server")
+	if server == "" {
+		server = openapiServers()[viper.GetInt("server-index")]["url"]
+	}
+
+	var req *gentleman.Request
+	switch method {
+	case http.MethodPost:
+		req = cli.Client.Post()
+	case http.MethodPut:
+		req = cli.Client.Put()
+	case http.MethodPatch:
+		req = cli.Client.Patch()
+	case http.MethodDelete:
+		req = cli.Client.Delete()
+	default:
+		return nil, errors.Errorf("unsupported method %s", method)
+	}
+	req = req.URL(server + path)
+
+	if body != nil {
+		encoded, err := json.Marshal(body)
+		if err != nil {
+			return nil, err
+		}
+		req = req.AddHeader("Content-Type", "application/json").BodyString(string(encoded))
+	}
+
+	resp, err := req.Do()
+	if err != nil {
+		return nil, errors.Wrap(err, "Request failed")
+	}
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, errHandbookNotFound
+	}
+	if resp.StatusCode >= 400 {
+		return nil, errors.Errorf("HTTP %d: %s", resp.StatusCode, resp.String())
+	}
+	if strings.TrimSpace(resp.String()) == "" {
+		return nil, nil
+	}
+
+	var decoded map[string]interface{}
+	if err := cli.UnmarshalResponse(resp, &decoded); err != nil {
+		return nil, errors.Wrap(err, "Unmarshalling response failed")
+	}
+	return decoded, nil
+}
+
+// sendForRecord unwraps the `data` object writes return, and tolerates a route
+// that answers with no body at all.
+func (a *handbookAPI) sendForRecord(method, path string, body interface{}) (map[string]interface{}, error) {
+	resp, err := a.send(method, path, body)
+	if err != nil || resp == nil {
+		return nil, err
+	}
+	if data, ok := resp["data"].(map[string]interface{}); ok {
+		return data, nil
+	}
+	return resp, nil
+}
+
+func (a *handbookAPI) createPipeline(body map[string]interface{}) (map[string]interface{}, error) {
+	record, err := a.sendForRecord(http.MethodPost, a.accountPath("/pipelines"), body)
+	if err != nil {
+		return nil, err
+	}
+	if record == nil {
+		return nil, errors.New("the create call returned no playbook record")
+	}
+	return record, nil
+}
+
+func (a *handbookAPI) updatePipeline(id string, body map[string]interface{}) (map[string]interface{}, error) {
+	return a.sendForRecord(http.MethodPatch, a.accountPath("/pipelines/%s", url.PathEscape(id)), body)
+}
+
+func (a *handbookAPI) archivePipeline(id string) (map[string]interface{}, error) {
+	return a.send(http.MethodDelete, a.accountPath("/pipelines/%s", url.PathEscape(id)), nil)
+}
+
+func (a *handbookAPI) savePipelineDraft(id string, definition map[string]interface{}) (map[string]interface{}, error) {
+	body := map[string]interface{}{"definition": definition}
+	return a.send(http.MethodPut, a.accountPath("/pipelines/%s/draft", url.PathEscape(id)), body)
+}
+
+func (a *handbookAPI) discardPipelineDraft(id string) (map[string]interface{}, error) {
+	return a.send(http.MethodDelete, a.accountPath("/pipelines/%s/draft", url.PathEscape(id)), nil)
+}
+
+func (a *handbookAPI) publishPipelineVersion(id string, body map[string]interface{}) (map[string]interface{}, error) {
+	record, err := a.sendForRecord(http.MethodPost, a.accountPath("/pipelines/%s/versions", url.PathEscape(id)), body)
+	if err != nil {
+		return nil, err
+	}
+	if record == nil {
+		return nil, errors.New("the publish call returned no version record")
+	}
+	return record, nil
+}
+
+func (a *handbookAPI) diffPipelineVersions(id, a1, b string) (map[string]interface{}, error) {
+	return a.get(a.accountPath("/pipelines/%s/versions/%s/diff/%s", url.PathEscape(id), url.PathEscape(a1), url.PathEscape(b)), nil)
+}
+
+// resolvePageIDs turns page references into the IDs a write sends. Every
+// reference is resolved before the write, so a reference naming the wrong type
+// or another account fails with nothing mutated.
+func (a *handbookAPI) resolvePageIDs(references []string) ([]string, error) {
+	if len(references) == 0 {
+		return nil, nil
+	}
+	ids := make([]string, 0, len(references))
+	for _, reference := range references {
+		ref, err := a.resolveHandbookRef(reference, kindPage)
+		if err != nil {
+			return nil, err
+		}
+		ids = append(ids, ref.ID)
+	}
+	return ids, nil
 }
 
 func (a *handbookAPI) accountPath(format string, args ...interface{}) string {

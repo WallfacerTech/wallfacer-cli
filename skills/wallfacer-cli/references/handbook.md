@@ -1,6 +1,8 @@
-# Handbook discovery and reading
+# Handbook discovery, reading, and playbook authoring
 
-`wallfacer handbook` finds and reads the account's handbook: pages and playbooks in one surface. Every command in the group issues reads only. It never creates a task and never changes handbook content or state.
+`wallfacer handbook` finds and reads the account's handbook: pages and playbooks in one surface, and authors its playbooks. No command in the group ever creates a task.
+
+`tree`, `list`, `search`, `read`, `resolve`, `revisions`, `revision`, `versions`, `version`, `draft`, `diff`, and `diff-draft` are reads. `create-playbook`, `update-playbook`, `archive-playbook`, `restore-playbook`, `save-draft`, `discard-draft`, and `publish` write, and of those only `create-playbook` and `publish` change a playbook's versioned definition.
 
 All commands use the `account_id` from config (or the `WALLFACER_ACCOUNT_ID` / `WF_ACCOUNT_ID` environment fallback). Without one they exit with `account_id not set in config`.
 
@@ -69,6 +71,59 @@ wallfacer handbook draft     <playbook-reference>
 ```
 
 `version` takes a version number or a version UUID. Omit it to read the active version, or pass a playbook version URL as the reference and the version in it is used.
+
+## Authoring a playbook
+
+```bash
+wallfacer handbook create-playbook --name <name> [--description ...] [--parent <page-ref>]
+                                   [--link-page <page-ref>]... [--draft]
+                                   [--definition-file <path>]
+wallfacer handbook update-playbook <playbook-reference> [--name ...] [--description ... | --clear-description]
+                                   [--enable | --disable]
+                                   [--link-page <page-ref>]... [--clear-linked-pages]
+wallfacer handbook archive-playbook <playbook-reference>
+wallfacer handbook restore-playbook <playbook-id>
+```
+
+**Creation publishes.** The definition given to `create-playbook` is validated server-side, stored as version 1, and made the active version in the same call. There is no separate backend draft lifecycle to walk through first. `--draft` additionally saves the same definition as an unpublished draft.
+
+**`update-playbook` is metadata only.** Name, description, linked pages, and the enabled state, all of which take effect immediately. Steps and triggers change only through `publish`. Moving the playbook in the tree and ordering it among siblings are hierarchy edits and are not in this command.
+
+**A restore comes back disabled.** `restore-playbook` takes an ID or detail URL, since names resolve against active entries only. Its triggers stay cleared until `update-playbook --enable`, and the server renames it with a numeric suffix if another playbook claimed its name.
+
+## Drafts and publication
+
+```bash
+wallfacer handbook save-draft    <playbook-reference> [--definition-file <path>]
+wallfacer handbook diff-draft    <playbook-reference>
+wallfacer handbook diff          <playbook-reference> <a> <b>
+wallfacer handbook publish       <playbook-reference> [--notes ...] [--activate=false]
+wallfacer handbook discard-draft <playbook-reference>
+```
+
+Definitions are read from `--definition-file` (JSON or YAML) or from stdin. Either the bare definition or the API's `{"definition": ...}` envelope is accepted, so a definition read with `handbook version` can go straight back into a draft.
+
+- **Saving is not publishing.** `save-draft` stores a working copy and changes nothing about how the playbook runs; the response reports `published: false` and the unchanged active version. There is one draft per playbook and saving again overwrites it. Drafts are stored verbatim and are not validated until publication.
+- **`diff-draft` compares locally.** It reads the draft and the active version and compares them field by field, emitting one entry per differing path (`added`, `removed`, `changed`). It issues no writes: nothing is published to produce a comparison. With no published version yet, every field of the draft reads as added.
+- **`diff` is the API's structural diff** between two published versions, each named by version number or UUID.
+- **`publish` operates on the saved draft.** It reads the draft back and sends it to the version endpoint. With no draft, with a stored draft that holds no definition object, or on a server validation failure, it fails and says no version was created. On success it returns the new version's identifiers, enough to read it with `handbook version`.
+- **`--activate=false`** publishes without activating, and the result reports `published_version` and `active_version` separately with `activated: false`.
+- **Publishing never enables a disabled playbook.** A disabled playbook is still disabled afterwards; the result says so and names `update-playbook --enable`.
+- **`discard-draft`** uses the draft's own delete operation and leaves the published definition exactly as it was.
+
+To submit a definition directly without saving it as a draft, the low-level `wallfacer versions create <playbook-id>` command still takes one.
+
+## Page revisions versus playbook versions
+
+These are separate histories and only one of them needs a publish.
+
+| | Reaches later runs when | History |
+|---|---|---|
+| Page content | Saved | `handbook revisions` / `handbook revision` |
+| A playbook's linked-page set | Saved (metadata, via `update-playbook`) | — |
+| A playbook's steps and triggers | Published | `handbook versions` / `handbook version` |
+
+A task pins the playbook version that was active when it was created and keeps running that version, so publishing changes later tasks and not the ones already in flight. Page content is not pinned: a run reads pages as they are at the time it reads them.
 
 ## Following a result
 

@@ -66,12 +66,17 @@ wallfacer up <environment-id>
 # List a session's messages, eliding image data and large tool blobs
 wallfacer messages list <task-id> <session-id> --view trimmed
 
-# Browse the handbook: pages and playbooks in one surface, reads only
+# Browse the handbook: pages and playbooks in one surface
 wallfacer handbook tree
 wallfacer handbook search "pull request"
 wallfacer handbook read "R&D/Engineering/Build"
 wallfacer handbook read <playbook-id>          # record plus the full active definition
 wallfacer handbook resolve "Writing Great PRs" # name, path or URL -> stable ID and type
+
+# Author a playbook: draft, compare, publish
+wallfacer handbook save-draft <playbook-id> --definition-file draft.yaml
+wallfacer handbook diff-draft <playbook-id>    # draft vs the active published definition
+wallfacer handbook publish <playbook-id> --notes "Added the smoke-test step"
 
 # Execute a command in a VM (shortcut)
 wallfacer exec --vm <vm-id> -- ls -la /workspace
@@ -99,6 +104,29 @@ wallfacer handbook revisions <page-id>
 ```
 
 Reads never substitute an unpublished draft for a playbook's active definition: `handbook read` reports only that a draft exists, and `handbook draft` returns its content. Every result carries a `follow_up` object naming the command for each reference in it, so the next read is available from one result plus `--help`.
+
+### Authoring playbooks
+
+Only `create-playbook` and `publish` change a playbook's versioned definition. Everything else either reads, or changes metadata that takes effect without a version.
+
+```bash
+wallfacer handbook create-playbook --name "Fix a bug" --definition-file playbook.yaml
+wallfacer handbook save-draft <playbook-id> --definition-file draft.yaml   # not published
+wallfacer handbook diff-draft <playbook-id>                                # draft vs active
+wallfacer handbook diff <playbook-id> 2 3                                  # two published versions
+wallfacer handbook publish <playbook-id> --notes "Added the smoke-test step"
+wallfacer handbook publish <playbook-id> --activate=false                  # version it, don't activate
+wallfacer handbook discard-draft <playbook-id>                             # active version untouched
+wallfacer handbook update-playbook <playbook-id> --disable
+wallfacer handbook archive-playbook <playbook-id>
+wallfacer handbook restore-playbook <playbook-id>                          # comes back disabled
+```
+
+Creation publishes: the definition given to `create-playbook` is validated, stored as version 1, and made active in the same call. Publishing operates on the saved draft and fails without creating a version when there is no draft, when the stored draft holds no definition, or when the server's validation rejects it. Publishing never enables a disabled playbook, and `--activate=false` reports the new version separately from the still-active one.
+
+Page revisions and playbook versions are different histories. A page's current content, and the playbook's set of linked pages, reach every later run as soon as they are saved. A playbook's steps and triggers reach later runs only when a version is published, and a task that is already running stays pinned to the version it was created against.
+
+Definitions are read from `--definition-file` (JSON or YAML) or from stdin, and either the bare definition or the API's `{"definition": ...}` envelope is accepted. To submit a definition directly without saving a draft, the low-level `wallfacer versions create <playbook-id>` command still takes one.
 
 ## Configuration
 

@@ -22,14 +22,25 @@ import (
 func registerHandbookCommands(accountID string) {
 	handbookCmd := &cobra.Command{
 		Use:   "handbook",
-		Short: "Discover and read handbook pages and playbooks",
-		Long: cli.Markdown(`Discover and read the account's handbook.
+		Short: "Discover, read, and author handbook pages and playbooks",
+		Long: cli.Markdown(`Read the account's handbook, and author its playbooks.
 
-Every command here is a read. Commands that take a ` + "`<reference>`" + ` accept a
-stable ID, a unique entry name, a full path through the tree (` + "`R&D/Engineering/Build`" + `),
-a Wallfacer page or playbook detail URL inside the configured account, or a
+Commands that take a ` + "`<reference>`" + ` accept a stable ID, a unique entry name, a
+full path through the tree (` + "`R&D/Engineering/Build`" + `), a Wallfacer page or
+playbook detail URL inside the configured account, or a
 ` + "`wallfacer://handbook/pages/<id>`" + ` link. Names and paths resolve against active
-entries and report every candidate rather than guessing when more than one matches.`),
+entries and report every candidate rather than guessing when more than one matches.
+
+` + "`tree`, `list`, `search`, `read`, `resolve`, `revisions`, `revision`, `versions`," + `
+` + "`version`, `draft`, `diff` and `diff-draft` are reads. The rest write, and of those" + `
+` + "only `create-playbook` and `publish` change a playbook's versioned definition." + `
+
+Two histories run alongside each other and are not the same thing. A page's **revisions**
+are its saved edits, and a page's current content reaches every later run as soon as it is
+saved. A playbook's **versions** are its published definitions: a task pins the version
+that was active when it was created and keeps running that one, so publishing a new
+version changes later tasks and not the ones already in flight. Linking or unlinking a
+page is metadata and reaches later runs immediately, without a publish.`),
 	}
 
 	handbookCmd.AddCommand(
@@ -44,6 +55,7 @@ entries and report every candidate rather than guessing when more than one match
 		handbookVersionCommand(accountID),
 		handbookDraftCommand(accountID),
 	)
+	handbookCmd.AddCommand(playbookAuthoringCommands(accountID)...)
 
 	cli.Root.AddCommand(handbookCmd)
 }
