@@ -99,8 +99,9 @@ func (f *authoringFixture) route(r *http.Request) (string, int) {
 		return wrapData(playbookRecordJSON), http.StatusOK
 	case r.URL.Path == base+"/pipelines/"+playbookBuildID && r.Method == http.MethodDelete:
 		return "", http.StatusNoContent
+	// The draft endpoint answers with the whole playbook record.
 	case r.URL.Path == base+"/pipelines/"+playbookBuildID+"/draft" && r.Method == http.MethodPut:
-		return "", http.StatusNoContent
+		return wrapData(playbookRecordJSON), http.StatusOK
 	case r.URL.Path == base+"/pipelines/"+playbookBuildID+"/draft" && r.Method == http.MethodDelete:
 		f.mu.Lock()
 		f.discarded++
@@ -226,6 +227,16 @@ func TestSaveDraftStoresTheDraftWithoutPublishing(t *testing.T) {
 	}
 	if active := data["active_version"].(map[string]interface{}); active["version"].(float64) != 2 {
 		t.Errorf("the active version must be reported unchanged: %v", active)
+	}
+
+	// The save answers with the playbook record; what is reported is the
+	// draft inside it, not the playbook wrapped as one.
+	draft := data["draft"].(map[string]interface{})
+	if _, ok := draft["definition"].(map[string]interface{}); !ok {
+		t.Errorf("the saved draft must be reported with its definition: %v", draft)
+	}
+	if _, nested := draft["draft"]; nested {
+		t.Errorf("the playbook record must not be reported as the draft: %v", draft)
 	}
 
 	body := fixture.bodyOf(t, http.MethodPut, "/pipelines/"+playbookBuildID+"/draft")
@@ -500,8 +511,17 @@ func TestVersionDiffUsesTheDiffEndpoint(t *testing.T) {
 		return runPlaybookDiff(fixture.api(), playbookBuildID, "2", "3")
 	})
 
-	if output["data"] == nil {
-		t.Errorf("the diff response should be passed through: %v", output)
+	// The endpoint answers under `data` and the CLI wraps once more, so the
+	// diff has to arrive at data.changes rather than data.data.changes.
+	data, ok := output["data"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("the diff response should be passed through: %v", output)
+	}
+	if _, nested := data["data"]; nested {
+		t.Errorf("the diff response must not be wrapped twice: %v", data)
+	}
+	if changes, ok := data["changes"].([]interface{}); !ok || len(changes) != 1 {
+		t.Errorf("the diff's changes must survive unwrapping: %v", data)
 	}
 
 	var sawDiff bool
@@ -701,6 +721,11 @@ func TestLoadDefinitionAcceptsJSONYAMLAndTheRequestEnvelope(t *testing.T) {
 		"definition.json": `{"format_version":1,"steps":[{"id":"implement","kind":"ai"}]}`,
 		"envelope.json":   `{"definition":{"format_version":1,"steps":[{"id":"implement","kind":"ai"}]}}`,
 		"definition.yaml": "format_version: 1\nsteps:\n  - id: implement\n    kind: ai\n",
+		// What `handbook version` prints: the version record under the
+		// CLI's own envelope.
+		"printed-version.json": `{"data":{"id":"v","version":2,"definition":{"format_version":1,"steps":[{"id":"implement","kind":"ai"}]},"created_at":"2026-09-18T00:00:00Z"},"reference":{"id":"p"},"follow_up":{"versions":"wallfacer handbook versions p"}}`,
+		// What `handbook draft` prints.
+		"printed-draft.json": `{"data":{"present":true,"draft":{"definition":{"format_version":1,"steps":[{"id":"implement","kind":"ai"}]},"updated_at":"2026-09-18T00:00:00Z"}},"reference":{"id":"p"}}`,
 	}
 
 	for name, content := range cases {

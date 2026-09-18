@@ -126,7 +126,7 @@ Creation publishes: the definition given to `create-playbook` is validated, stor
 
 Page revisions and playbook versions are different histories. A page's current content, and the playbook's set of linked pages, reach every later run as soon as they are saved. A playbook's steps and triggers reach later runs only when a version is published, and a task that is already running stays pinned to the version it was created against.
 
-Definitions are read from `--definition-file` (JSON or YAML) or from stdin, and either the bare definition or the API's `{"definition": ...}` envelope is accepted. To submit a definition directly without saving a draft, the low-level `wallfacer versions create <playbook-id>` command still takes one.
+Definitions are read from `--definition-file` (JSON or YAML) or from stdin, and the bare definition, the API's `{"definition": ...}` envelope, and what `handbook version` or `handbook draft` print are all accepted, so a definition read out of the CLI goes straight back into a draft. To submit a definition directly without saving a draft, the low-level `wallfacer versions create <playbook-id>` command still takes one.
 
 ## Configuration
 

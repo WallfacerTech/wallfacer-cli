@@ -775,6 +775,16 @@ func responseObject(resp map[string]interface{}) (map[string]interface{}, error)
 	return data, nil
 }
 
+// responseData is the payload of an API response that is emitted whole. The
+// API wraps every body in `data`, and emitHandbook wraps again, so a response
+// handed straight to it has to be unwrapped once here.
+func responseData(resp map[string]interface{}) interface{} {
+	if data, present := resp["data"]; present {
+		return data
+	}
+	return resp
+}
+
 func responseList(resp map[string]interface{}) []interface{} {
 	items, _ := resp["data"].([]interface{})
 	return items

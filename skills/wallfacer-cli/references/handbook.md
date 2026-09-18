@@ -101,7 +101,7 @@ wallfacer handbook publish       <playbook-reference> [--notes ...] [--activate=
 wallfacer handbook discard-draft <playbook-reference>
 ```
 
-Definitions are read from `--definition-file` (JSON or YAML) or from stdin. Either the bare definition or the API's `{"definition": ...}` envelope is accepted, so a definition read with `handbook version` can go straight back into a draft.
+Definitions are read from `--definition-file` (JSON or YAML) or from stdin. The bare definition, the API's `{"definition": ...}` envelope, and the output `handbook version` and `handbook draft` print are all accepted, so a definition read with `handbook version` can be piped straight back into a draft.
 
 - **Saving is not publishing.** `save-draft` stores a working copy and changes nothing about how the playbook runs; the response reports `published: false` and the unchanged active version. There is one draft per playbook and saving again overwrites it. Drafts are stored verbatim and are not validated until publication.
 - **`diff-draft` compares locally.** It reads the draft and the active version and compares them field by field, emitting one entry per differing path (`added`, `removed`, `changed`). It issues no writes: nothing is published to produce a comparison. With no published version yet, every field of the draft reads as added.

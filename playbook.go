@@ -238,9 +238,10 @@ func definitionFromFlags(cmd *cobra.Command) (map[string]interface{}, error) {
 }
 
 // loadDefinition reads a definition document from a file or from stdin. Both
-// JSON and YAML are accepted, and a `{"definition": ...}` envelope — the shape
-// the API takes and the shape `handbook version` prints — is unwrapped, so a
-// definition can be round-tripped out of a read and back into a draft.
+// JSON and YAML are accepted, and the wrappers around a definition — the API's
+// `{"definition": ...}` request envelope and what `handbook version` and
+// `handbook draft` print — are unwrapped, so a definition can be round-tripped
+// out of a read and back into a draft.
 func loadDefinition(path string) (map[string]interface{}, error) {
 	var raw []byte
 	var err error
@@ -281,20 +282,58 @@ func decodeDefinition(raw []byte) (map[string]interface{}, error) {
 	return document, nil
 }
 
-// unwrapDefinition accepts the API's request envelope as well as the bare
-// definition. A document whose only interesting key is `definition` is the
-// envelope; anything else is the definition itself.
+// cliEnvelopeKeys are the keys every handbook response is printed with. They
+// accompany the payload rather than being part of it, so a document carrying
+// `data` and nothing but these is a printed CLI response.
+var cliEnvelopeKeys = map[string]bool{
+	"reference":  true,
+	"follow_up":  true,
+	"pagination": true,
+	"versions":   true,
+}
+
+// unwrapDefinition accepts the API's request envelope and the shapes the CLI
+// prints as well as the bare definition, so a definition read with `handbook
+// version` or `handbook draft` goes straight back into a draft. A definition
+// never carries a top-level `definition` object of its own, so wherever one
+// appears it is the wrapper that is being peeled.
 func unwrapDefinition(document map[string]interface{}) map[string]interface{} {
-	inner, ok := document["definition"].(map[string]interface{})
-	if !ok {
-		return document
-	}
-	for key := range document {
-		if key != "definition" && key != "notes" && key != "activate" {
+	for i := 0; i < 4; i++ {
+		inner, wrapped := unwrapDefinitionOnce(document)
+		if !wrapped {
 			return document
 		}
+		document = inner
 	}
-	return inner
+	return document
+}
+
+func unwrapDefinitionOnce(document map[string]interface{}) (map[string]interface{}, bool) {
+	// `{"definition": ...}` — the API's request envelope, and the version
+	// record `handbook version` prints under `data`.
+	if inner, ok := document["definition"].(map[string]interface{}); ok {
+		return inner, true
+	}
+
+	// `{"data": ..., "reference": ..., "follow_up": ...}` — a printed CLI
+	// response, whose payload is what was meant.
+	if inner, ok := document["data"].(map[string]interface{}); ok {
+		for key := range document {
+			if key != "data" && !cliEnvelopeKeys[key] {
+				return nil, false
+			}
+		}
+		return inner, true
+	}
+
+	// `{"present": true, "draft": ...}` — what `handbook draft` prints.
+	if inner, ok := document["draft"].(map[string]interface{}); ok {
+		if _, ok := inner["definition"]; ok {
+			return inner, true
+		}
+	}
+
+	return nil, false
 }
 
 // normalizeYAML converts what yaml.v2 decodes into the map shapes the rest of
@@ -742,7 +781,10 @@ func runPlaybookDiff(api *handbookAPI, reference, a, b string) error {
 	}
 
 	return emitHandbook(map[string]interface{}{
-		"data":      diff,
+		// The diff endpoint answers under `data` already; emitting the
+		// response as-is would nest it a second time and break the query
+		// projection every other handbook command shares.
+		"data":      responseData(diff),
 		"reference": ref,
 		"versions":  map[string]interface{}{"a": a, "b": b},
 		"follow_up": map[string]interface{}{
@@ -771,14 +813,26 @@ func draftDefinitionOf(record map[string]interface{}, pipelineID string) (map[st
 
 // draftRecordOf prefers whatever the save returned and falls back to what was
 // sent, since the draft endpoint's response body is not part of its contract.
+// The save answers with the whole playbook record under `data`, so the draft
+// itself is lifted out of it rather than reported as the playbook.
 func draftRecordOf(saved map[string]interface{}, definition map[string]interface{}) map[string]interface{} {
 	if saved != nil {
 		if data, ok := saved["data"].(map[string]interface{}); ok {
-			return data
+			return draftWithin(data, definition)
 		}
 		if len(saved) > 0 {
-			return saved
+			return draftWithin(saved, definition)
 		}
+	}
+	return map[string]interface{}{"definition": definition}
+}
+
+func draftWithin(record map[string]interface{}, definition map[string]interface{}) map[string]interface{} {
+	if draft, ok := record["draft"].(map[string]interface{}); ok {
+		return draft
+	}
+	if _, ok := record["definition"]; ok {
+		return record
 	}
 	return map[string]interface{}{"definition": definition}
 }
