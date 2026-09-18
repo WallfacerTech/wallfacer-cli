@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"net/url"
 	"os"
 	"strconv"
@@ -398,7 +399,7 @@ func runHandbookRead(api *handbookAPI, reference, kind string) error {
 	var record map[string]interface{}
 	switch ref.Type {
 	case kindPage:
-		record, err = api.getPage(ref.ID)
+		record, err = api.readPage(ref)
 		if err != nil {
 			return handbookReadError(err, ref)
 		}
@@ -661,10 +662,17 @@ func (a *handbookAPI) followUp(ref *handbookRef) map[string]interface{} {
 	return out
 }
 
+// sweepUnbounded asks sweep to keep reading until the pages run out, for a
+// lookup that has to be exhaustive rather than fast.
+const sweepUnbounded = -1
+
 // sweep walks a paginated list endpoint, handing every record to visit until it
 // returns false or the pages run out, and reports how far it got.
 func (a *handbookAPI) sweep(list func(url.Values) (map[string]interface{}, error), maxPages int, visit func(map[string]interface{}) bool) (map[string]interface{}, error) {
-	if maxPages <= 0 {
+	switch {
+	case maxPages == sweepUnbounded:
+		maxPages = math.MaxInt32
+	case maxPages <= 0:
 		maxPages = 20
 	}
 

@@ -141,13 +141,15 @@ func (a *handbookAPI) listPages(query url.Values) (map[string]interface{}, error
 
 // findDeletedPage looks a deleted page up in the list endpoint, which is the
 // only page read that includes trashed rows: `GET /pages/{page}` binds the
-// active row only and 404s on a deleted ID.
+// active row only and 404s on a deleted ID. The sweep is unbounded because an
+// ID either belongs to the account or does not, and a page that happens to sort
+// past the search default would otherwise be reported as missing.
 func (a *handbookAPI) findDeletedPage(id string) (map[string]interface{}, error) {
 	var found map[string]interface{}
 	_, err := a.sweep(func(query url.Values) (map[string]interface{}, error) {
 		query.Set("include_deleted", "true")
 		return a.listPages(query)
-	}, 0, func(record map[string]interface{}) bool {
+	}, sweepUnbounded, func(record map[string]interface{}) bool {
 		if stringField(record, "id") != id {
 			return true
 		}
@@ -161,6 +163,24 @@ func (a *handbookAPI) findDeletedPage(id string) (map[string]interface{}, error)
 		return nil, errHandbookNotFound
 	}
 	return found, nil
+}
+
+// readPage reads the record behind a resolved page reference. A deleted page is
+// readable only through the include-deleted list, so `handbook read <id>`
+// reaches the same rows the resolver does instead of 404ing on the show route.
+func (a *handbookAPI) readPage(ref *handbookRef) (map[string]interface{}, error) {
+	if ref.State == "deleted" {
+		return a.findDeletedPage(ref.ID)
+	}
+	record, err := a.getPage(ref.ID)
+	if err == errHandbookNotFound {
+		// Deleted between the resolve and the read, or resolved off a tree
+		// node that has since been trashed.
+		if deleted, deletedErr := a.findDeletedPage(ref.ID); deletedErr == nil {
+			return deleted, nil
+		}
+	}
+	return record, err
 }
 
 func (a *handbookAPI) listPipelines(query url.Values) (map[string]interface{}, error) {

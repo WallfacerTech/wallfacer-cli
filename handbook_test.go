@@ -7,8 +7,10 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/WallfacerTech/openapi-cli-generator/cli"
@@ -372,6 +374,80 @@ func TestReadPageReturnsBodyAndFollowUps(t *testing.T) {
 		if _, ok := followUp[key]; !ok {
 			t.Errorf("follow_up is missing %q: %v", key, followUp)
 		}
+	}
+}
+
+// A deleted page is not on the show route, so the read has to go back to the
+// include-deleted list the resolver found it in.
+func TestReadDeletedPageServesTheListRecord(t *testing.T) {
+	fixture := newHandbookFixture(t)
+
+	output := capture(t, func() error {
+		return runHandbookRead(fixture.api(), pageDeletedID, "")
+	})
+
+	data := output["data"].(map[string]interface{})
+	if data["body"] != "Superseded." {
+		t.Errorf("deleted page body is %v, want the stored body", data["body"])
+	}
+
+	reference := output["reference"].(map[string]interface{})
+	if reference["id"] != pageDeletedID || reference["state"] != "deleted" {
+		t.Errorf("unexpected reference: %v", reference)
+	}
+
+	var sawIncludeDeleted bool
+	for _, request := range fixture.recorded() {
+		if strings.Contains(request.query, "include_deleted=true") {
+			sawIncludeDeleted = true
+		}
+	}
+	if !sawIncludeDeleted {
+		t.Error("the read never asked for the include-deleted list")
+	}
+}
+
+// The deleted-page lookup is exhaustive: a stable ID either belongs to the
+// account or does not, so the sweep must not stop at the page-count default
+// that bounds search.
+func TestDeletedPageLookupWalksPastTheSweepDefault(t *testing.T) {
+	const deletedOnPage = 25
+
+	var pagesRead atomic.Int64
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		page := 1
+		if raw := r.URL.Query().Get("page"); raw != "" {
+			page, _ = strconv.Atoi(raw)
+		}
+		pagesRead.Add(1)
+
+		record := fmt.Sprintf(`{"id":"filler-%d","title":"Filler","body":"","deleted_at":null}`, page)
+		if page == deletedOnPage {
+			record = pageDeletedRecordJSON
+		}
+		next := ""
+		if page < deletedOnPage {
+			next = fmt.Sprintf("%s?page=%d", r.URL.Path, page+1)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{"data":[%s],"links":{"next":%s},"meta":{"current_page":%d}}`, record, strconv.Quote(next), page)
+	}))
+	t.Cleanup(server.Close)
+
+	viper.Set("server", server.URL)
+	t.Cleanup(func() { viper.Set("server", "") })
+
+	api := &handbookAPI{accountID: testAccountID}
+	record, err := api.findDeletedPage(pageDeletedID)
+	if err != nil {
+		t.Fatalf("finding a deleted page on list page %d: %v", deletedOnPage, err)
+	}
+	if stringField(record, "id") != pageDeletedID {
+		t.Errorf("found %q, want the deleted page", stringField(record, "id"))
+	}
+	if got := pagesRead.Load(); got != deletedOnPage {
+		t.Errorf("read %d list pages, want %d", got, deletedOnPage)
 	}
 }
 
