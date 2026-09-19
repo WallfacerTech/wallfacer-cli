@@ -139,6 +139,12 @@ func (f *authoringFixture) route(r *http.Request) (string, int) {
 		f.mu.Unlock()
 		return wrapData(newVersionRecordJSON), http.StatusCreated
 
+	// Archived, so it is outside the tree and only the record says so.
+	case r.URL.Path == base+"/pipelines/"+playbookArchivedID && r.Method == http.MethodGet:
+		return wrapData(playbookArchivedRecordJSON), http.StatusOK
+	case r.URL.Path == base+"/pipelines/"+playbookArchivedID && r.Method == http.MethodPatch:
+		return wrapData(playbookRestoredRecordJSON), http.StatusOK
+
 	// A draft stored verbatim that holds no definition object.
 	case r.URL.Path == base+"/pipelines/"+playbookInvalidDraftID:
 		return wrapData(playbookInvalidDraftRecordJSON), http.StatusOK
@@ -625,17 +631,36 @@ func TestArchiveAndRestorePlaybook(t *testing.T) {
 	}
 
 	restored := capture(t, func() error {
-		return runPlaybookRestore(fixture.api(), playbookBuildID)
+		return runPlaybookRestore(fixture.api(), playbookArchivedID)
 	})
-	body := fixture.bodyOf(t, http.MethodPatch, "/pipelines/"+playbookBuildID)
+	body := fixture.bodyOf(t, http.MethodPatch, "/pipelines/"+playbookArchivedID)
 	if body["archived"] != false {
 		t.Errorf("restore sends archived=false, got %v", body)
 	}
 	if len(body) != 1 {
 		t.Errorf("restore must send nothing else: %v", body)
 	}
-	if restored["data"].(map[string]interface{})["name"] != "Build" {
+	if restored["data"].(map[string]interface{})["name"] != "Retired Playbook (2)" {
 		t.Errorf("the restored name should come from the server: %v", restored["data"])
+	}
+}
+
+// A restore the server would silently no-op is refused here instead: its PATCH
+// is idempotent and answers 200 whether or not anything was written.
+func TestRestorePlaybookRefusesAPlaybookThatIsNotArchived(t *testing.T) {
+	fixture := newAuthoringFixture(t)
+
+	err := captureError(t, func() error {
+		return runPlaybookRestore(fixture.api(), playbookBuildID)
+	})
+	if !strings.Contains(err.Error(), "is not archived, so there is nothing to restore") {
+		t.Errorf("the refusal should name the state it found: %v", err)
+	}
+
+	for _, request := range fixture.recorded() {
+		if request.method != http.MethodGet {
+			t.Errorf("a refused restore must not mutate anything: %s %s", request.method, request.path)
+		}
 	}
 }
 
@@ -681,7 +706,7 @@ func TestAuthoringNeverCreatesATask(t *testing.T) {
 		func() error { return runPlaybookDiscardDraft(fixture.api(), playbookBuildID) },
 		func() error { return runPlaybookDiff(fixture.api(), playbookBuildID, "2", "3") },
 		func() error { return runPlaybookArchive(fixture.api(), playbookBuildID) },
-		func() error { return runPlaybookRestore(fixture.api(), playbookBuildID) },
+		func() error { return runPlaybookRestore(fixture.api(), playbookArchivedID) },
 		func() error {
 			return runPlaybookCreate(fixture.api(), "New Playbook", "", "", nil, definition, false)
 		},
@@ -771,6 +796,11 @@ const playbookPublishedOnlyRecordJSON = `{"id":"` + playbookPublishedOnlyID + `"
 const playbookUnpublishedRecordJSON = `{"id":"` + playbookUnpublishedID + `","account_id":"` + testAccountID + `","name":"Not Published Yet","description":null,"active_version":null,"version_count":0,"draft":{"definition":{"format_version":1,"steps":[{"id":"implement","kind":"ai","title":"Implement the issue"}],"triggers":[]},"updated_at":"2026-09-12T00:00:00.000000Z","updated_by":2},"parent_page_id":null,"position":4,"linked_page_ids":[],"disabled_at":null,"archived_at":null,"created_at":"2026-08-01T00:00:00.000000Z","created_by":1}`
 
 const playbookDisabledRecordJSON = `{"id":"` + playbookDisabledID + `","account_id":"` + testAccountID + `","name":"Paused Playbook","description":null,"active_version":{"id":"` + playbookVersionID + `","version":2},"version_count":2,"draft":{"definition":{"format_version":1,"steps":[{"id":"implement","kind":"ai","title":"Implement the issue, revised"}],"triggers":[]},"updated_at":"2026-09-12T00:00:00.000000Z","updated_by":2},"parent_page_id":null,"position":5,"linked_page_ids":[],"disabled_at":"2026-09-01T00:00:00.000000Z","archived_at":null,"created_at":"2026-08-01T00:00:00.000000Z","created_by":1}`
+
+// The server disambiguates the name on restore and leaves the playbook
+// disabled, so a restore answers with more than the archived record and a
+// cleared date.
+const playbookRestoredRecordJSON = `{"id":"` + playbookArchivedID + `","account_id":"` + testAccountID + `","name":"Retired Playbook (2)","description":null,"active_version":{"id":"` + playbookVersionID + `","version":1},"version_count":1,"draft":null,"parent_page_id":null,"position":9,"linked_page_ids":[],"disabled_at":"2026-08-20T00:00:00.000000Z","archived_at":null,"created_at":"2026-08-01T00:00:00.000000Z","created_by":1}`
 
 const playbookInvalidDraftRecordJSON = `{"id":"` + playbookInvalidDraftID + `","account_id":"` + testAccountID + `","name":"Verbatim Draft","description":null,"active_version":{"id":"` + playbookVersionID + `","version":2},"version_count":2,"draft":{"definition":"steps: not-an-object","updated_at":"2026-09-12T00:00:00.000000Z","updated_by":2},"parent_page_id":null,"position":6,"linked_page_ids":[],"disabled_at":null,"archived_at":null,"created_at":"2026-08-01T00:00:00.000000Z","created_by":1}`
 

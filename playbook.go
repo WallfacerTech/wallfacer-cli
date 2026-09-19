@@ -538,6 +538,12 @@ func runPlaybookRestore(api *handbookAPI, reference string) error {
 	if err != nil {
 		return err
 	}
+	// The server's PATCH is idempotent: on a playbook that was never archived
+	// it writes nothing and still answers 200, so the state is checked here
+	// rather than reporting a restore that did not happen.
+	if ref.State != "archived" {
+		return errors.Errorf("playbook %s is not archived, so there is nothing to restore", ref.ID)
+	}
 
 	record, err := api.updatePipeline(ref.ID, map[string]interface{}{"archived": false})
 	if err != nil {
