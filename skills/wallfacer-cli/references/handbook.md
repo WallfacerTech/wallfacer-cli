@@ -89,7 +89,7 @@ wallfacer handbook restore-playbook <playbook-id>
 
 **`update-playbook` is metadata only.** Name, description, linked pages, and the enabled state, all of which take effect immediately. Steps and triggers change only through `publish`. Moving the playbook in the tree and ordering it among siblings are hierarchy edits and are not in this command.
 
-**A restore comes back disabled.** `restore-playbook` takes an ID or detail URL, since names resolve against active entries only. Its triggers stay cleared until `update-playbook --enable`, and the server renames it with a numeric suffix if another playbook claimed its name.
+**A restore comes back disabled.** `restore-playbook` takes an ID or detail URL, since names resolve against active entries only. Its triggers stay cleared until `update-playbook --enable`, and the server renames it with a numeric suffix if another playbook claimed its name. A playbook that is not archived is refused before the request, naming the state it is in.
 
 ## Drafts and publication
 
