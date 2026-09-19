@@ -75,7 +75,8 @@ The playbook reference is anything ` + "`wallfacer handbook`" + ` accepts for a 
 stable ID, a unique name, a full path through the tree, or a playbook detail URL inside
 the configured account. A page is not a playbook and is refused as one, a reference from
 another account is refused before any request goes out, and a playbook with nothing
-published cannot be run: publish the draft first.
+published cannot be run: publish the draft first. A disabled playbook does run: its
+triggers are cleared, so a manual run is the deliberate way to fire one.
 
 The run follows the steps of the active published version, and each step runs as the
 actor that version names. ` + "`--agent`" + ` sets the task's own identity and default
@@ -190,7 +191,12 @@ func runPlaybook(api *directoryAPI, reference, message, agentReference string, o
 		ref = refreshRef(ref, refFromPipelineRecord(record, api.accountID, ref.ResolvedFrom))
 	}
 
-	if ref.State != "active" {
+	// Only the states the server itself refuses are refused here: `POST /tasks`
+	// validates the playbook against the account, `archived_at`, and the active
+	// version. A disabled playbook stays runnable by hand — disabling clears the
+	// trigger routing so no event spawns a task, and a manual run is the
+	// deliberate way to fire one — so it goes through as any other playbook does.
+	if ref.State == "archived" || ref.State == "deleted" {
 		return errors.Errorf("playbook %s (%s) is %s and cannot be run", ref.Title, ref.ID, ref.State)
 	}
 	if ref.ActiveVersion == nil {
@@ -232,6 +238,12 @@ func runPlaybook(api *directoryAPI, reference, message, agentReference string, o
 		// the work off the actors the published version names.
 		"step_actors": "from the playbook's active published version; the server resolves each step's performer",
 		"follow_up":   taskFollowUp(task, ref),
+	}
+	if ref.State == "disabled" {
+		// Not a refusal: the run was created. Said plainly so a caller sees
+		// they fired a playbook whose triggers are switched off and nothing
+		// else will start it.
+		payload["disabled_note"] = "the playbook is disabled: its triggers are cleared, so this manual run is the only way it starts; use handbook update-playbook --enable to restore the triggers"
 	}
 	if agent != nil {
 		payload["agent"] = agent
