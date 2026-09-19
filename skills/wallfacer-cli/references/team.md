@@ -37,7 +37,7 @@ Sweeps the agent and user listings past the first page and returns one list. Eac
 - `type` — `agent` or `human`.
 - `id`, `name`, `handle`, `email`, `title`, `role`.
 - `role_page_id`, `environment_id`, `github_username`, `vendor`, `model`, `runtime_status` for agents.
-- `state` (`active`, `paused`, `disabled`) and `chatable`. Humans are always `active`: the members listing returns active memberships only, so somebody removed from the account is absent from the list rather than reported as removed.
+- `state` (`active`, `paused`, `disabled`, `removed`) and `chatable`.
 - `follow_up` — the command for each reference in the record.
 
 Offboarded agents are left out unless `--include-disabled` is passed. `pagination` reports how far each sweep got (`pages_read`, `complete`).

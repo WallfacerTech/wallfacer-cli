@@ -247,9 +247,10 @@ func memberFromUserRecord(record map[string]interface{}) *teamMember {
 		Email:          stringField(record, "email"),
 		Role:           stringField(record, "role"),
 		GithubUsername: stringField(record, "github_username"),
-		// The members listing returns active memberships only: a removed human
-		// is absent from it rather than reported with a state of their own.
-		State: "active",
+		State:          "active",
+	}
+	if stringField(record, "removed_at") != "" {
+		member.State = "removed"
 	}
 	member.FollowUp = memberFollowUp(member)
 	return member
