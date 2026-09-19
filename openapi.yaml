@@ -1282,7 +1282,7 @@ components:
         disabled_at:
           type: string
           nullable: true
-          description: 'ISO 8601 timestamp the pipeline was disabled. While set, the pipeline spawns no tasks but stays visible and editable. Null while enabled.'
+          description: 'ISO 8601 timestamp the pipeline was disabled. While set, the pipeline''s triggers are cleared so no event spawns a task from it; a manual run still works, and the pipeline stays visible and editable. Null while enabled.'
         archived_at:
           type: string
           nullable: true
@@ -21692,7 +21692,7 @@ paths:
                   nullable: true
                 disabled:
                   type: boolean
-                  description: "Pause or resume routing. `true` clears the pipeline's triggers from the routing index so it spawns no new tasks but stays visible and editable; `false` re-materialises them. Already-running tasks continue either way. Idempotent."
+                  description: "Pause or resume routing. `true` clears the pipeline's triggers from the routing index so no event spawns a task from it, while the pipeline stays visible, editable, and runnable by a manual task create with `pipeline_id`; `false` re-materialises them. Already-running tasks continue either way. Idempotent."
                   example: true
                 archived:
                   type: boolean
