@@ -318,13 +318,14 @@ func (a *directoryAPI) loadDirectory() ([]*teamMember, error) {
 }
 
 // readDirectory sweeps the agent and user listings and reports how far each
-// sweep got, alongside the records themselves.
+// sweep got, alongside the records themselves. The two listings paginate
+// differently: agents is cursor-paginated, users is offset-paginated.
 func (a *directoryAPI) readDirectory(kind string, includeDisabled bool, maxPages int) ([]*teamMember, map[string]interface{}, error) {
 	members := []*teamMember{}
 	pagination := map[string]interface{}{}
 
 	if kind == "" || kind == memberAgent {
-		sweep, err := a.sweep(func(query url.Values) (map[string]interface{}, error) {
+		sweep, err := a.sweepCursor(func(query url.Values) (map[string]interface{}, error) {
 			if includeDisabled {
 				query.Set("include_disabled", "true")
 			}

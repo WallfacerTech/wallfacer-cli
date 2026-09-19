@@ -81,9 +81,12 @@ func (f *teamFixture) route(r *http.Request) (string, int) {
 	base := "/v1/accounts/" + testAccountID
 
 	switch r.URL.Path {
+	// The agents listing is cursor-paginated, as the API is: it answers with
+	// the second page only for the cursor it handed out, and ignores a page=N
+	// exactly the way cursorPaginate does.
 	case base + "/agents":
 		includeDisabled := r.URL.Query().Get("include_disabled") == "true"
-		if r.URL.Query().Get("page") == "2" {
+		if r.URL.Query().Get("cursor") == agentsNextCursor {
 			if includeDisabled {
 				return agentsPageTwoWithDisabledJSON, http.StatusOK
 			}
@@ -227,6 +230,59 @@ func TestTeamListTraversesBothListingsBeyondTheFirstPage(t *testing.T) {
 		if sweep["pages_read"].(float64) < 2 {
 			t.Errorf("%s sweep read %v pages, want both", listing, sweep["pages_read"])
 		}
+	}
+}
+
+// The agents listing is cursor-paginated. Paged with page=N it would answer
+// with the first page for every request, so the sweep would repeat those
+// records and never see a null next, and an unbounded sweep (`team get`,
+// `chat`, `run --agent`) would not terminate.
+func TestTeamListPagesTheAgentsListingByCursor(t *testing.T) {
+	fixture := newTeamFixture(t)
+
+	output := capture(t, func() error { return runTeamList(fixture.api(), memberAgent, false, 20) })
+
+	agentRequests := []recordedRequest{}
+	for _, request := range fixture.recorded() {
+		if strings.HasSuffix(request.path, "/agents") {
+			agentRequests = append(agentRequests, request)
+		}
+	}
+	if len(agentRequests) != 2 {
+		t.Fatalf("the agents listing was read %d times, want both pages exactly once: %v", len(agentRequests), agentRequests)
+	}
+	if strings.Contains(agentRequests[0].query, "cursor=") {
+		t.Errorf("the first request carried a cursor: %q", agentRequests[0].query)
+	}
+	if !strings.Contains(agentRequests[1].query, "cursor="+agentsNextCursor) {
+		t.Errorf("the second request did not carry the cursor the first page reported: %q", agentRequests[1].query)
+	}
+	for _, request := range agentRequests {
+		for _, param := range strings.Split(request.query, "&") {
+			if strings.HasPrefix(param, "page=") {
+				t.Errorf("the agents listing was paged with page=N: %q", request.query)
+			}
+		}
+	}
+
+	// Each agent exactly once, and the sweep knows it reached the end.
+	seen := map[string]int{}
+	for _, record := range members(t, output) {
+		seen[record["id"].(string)]++
+	}
+	for id, count := range seen {
+		if count != 1 {
+			t.Errorf("agent %s returned %d times", id, count)
+		}
+	}
+	for _, id := range []string{agentJinID, agentAuggieID, agentAdaID} {
+		if seen[id] != 1 {
+			t.Errorf("agent %s missing from the sweep", id)
+		}
+	}
+	sweep := output["pagination"].(map[string]interface{})["agents"].(map[string]interface{})
+	if sweep["complete"] != true {
+		t.Errorf("the agents sweep reported incomplete: %v", sweep)
 	}
 }
 
@@ -635,17 +691,23 @@ func TestTeamOutputStaysProjectableWithQuery(t *testing.T) {
 	}
 }
 
+// The cursors the agents fixture hands out, opaque as the API's own are.
+const (
+	agentsNextCursor = "eyJ1c2VyX2lkIjoxMDUsIl9wb2ludHNUb05leHRJdGVtcyI6dHJ1ZX0"
+	agentsPrevCursor = "eyJ1c2VyX2lkIjoxMDIsIl9wb2ludHNUb05leHRJdGVtcyI6ZmFsc2V9"
+)
+
 const agentJinRecordJSON = `{"id":101,"runtime":{"status":"ready","source":"account","vendor":"claude"},"display_name":"Jin","handle":"jin","email":"jin@example.test","title":"Software Engineer","role_page_id":"` + pageEngineeringID + `","environment_id":"eeee1111-1111-4111-8111-111111111111","vendor":"claude","model":"claude-opus-5","disabled":false,"disabled_at":null,"paused":false,"paused_at":null,"github_connected":true,"github_username":"wallfacer-jin","created_at":"2026-08-01T00:00:00.000000Z"}`
 
 const agentsPageOneJSON = `{"data":[
   ` + agentJinRecordJSON + `,
   {"id":105,"runtime":{"status":"ready"},"display_name":"Rester","handle":"rester","email":"rester@example.test","title":"Release Tester","role_page_id":null,"environment_id":null,"disabled":false,"paused":true,"paused_at":"2026-09-10T00:00:00.000000Z","github_username":null}
-],"links":{"first":"http://example.test/agents?page=1","last":"http://example.test/agents?page=2","prev":null,"next":"http://example.test/agents?page=2"},"meta":{"current_page":1,"last_page":2,"per_page":2,"total":4}}`
+],"links":{"first":null,"last":null,"prev":null,"next":"http://example.test/agents?cursor=` + agentsNextCursor + `"},"meta":{"path":"http://example.test/agents","per_page":2,"next_cursor":"` + agentsNextCursor + `","prev_cursor":null}}`
 
 const agentsPageTwoJSON = `{"data":[
   {"id":102,"runtime":{"status":"ready"},"display_name":"Auggie","handle":"auggie","email":"auggie@example.test","title":"Code Reviewer","role_page_id":"` + pageReviewEngID + `","environment_id":null,"disabled":false,"paused":false,"github_username":"wallfacer-auggie"},
   {"id":104,"runtime":{"status":"ready"},"display_name":"Ada Lovelace","handle":"ada-agent","email":"ada-agent@example.test","title":"Research Agent","role_page_id":null,"environment_id":null,"disabled":false,"paused":false,"github_username":null}
-],"links":{"first":"http://example.test/agents?page=1","last":"http://example.test/agents?page=2","prev":"http://example.test/agents?page=1","next":null},"meta":{"current_page":2,"last_page":2,"per_page":2,"total":4}}`
+],"links":{"first":null,"last":null,"prev":"http://example.test/agents?cursor=` + agentsPrevCursor + `","next":null},"meta":{"path":"http://example.test/agents","per_page":2,"next_cursor":null,"prev_cursor":"` + agentsPrevCursor + `"}}`
 
 // The disabled agent is only ever returned with include_disabled=true, exactly
 // as the API behaves.
@@ -653,7 +715,7 @@ const agentsPageTwoWithDisabledJSON = `{"data":[
   {"id":102,"runtime":{"status":"ready"},"display_name":"Auggie","handle":"auggie","email":"auggie@example.test","title":"Code Reviewer","role_page_id":"` + pageReviewEngID + `","environment_id":null,"disabled":false,"paused":false,"github_username":"wallfacer-auggie"},
   {"id":104,"runtime":{"status":"ready"},"display_name":"Ada Lovelace","handle":"ada-agent","email":"ada-agent@example.test","title":"Research Agent","role_page_id":null,"environment_id":null,"disabled":false,"paused":false,"github_username":null},
   {"id":103,"runtime":{"status":"needs_credentials"},"display_name":"Saul","handle":"saul","email":"saul@example.test","title":"Support Engineer","role_page_id":null,"environment_id":null,"disabled":true,"disabled_at":"2026-09-01T00:00:00.000000Z","paused":false,"github_username":null}
-],"links":{"first":"http://example.test/agents?page=1","last":"http://example.test/agents?page=2","prev":"http://example.test/agents?page=1","next":null},"meta":{"current_page":2,"last_page":2,"per_page":2,"total":5}}`
+],"links":{"first":null,"last":null,"prev":"http://example.test/agents?cursor=` + agentsPrevCursor + `","next":null},"meta":{"path":"http://example.test/agents","per_page":2,"next_cursor":null,"prev_cursor":"` + agentsPrevCursor + `"}}`
 
 const usersPageOneJSON = `{"data":[
   {"id":201,"name":"Ada Lovelace","email":"ada@example.test","avatar_url":null,"github_username":"ada","role":"owner","joined_at":"2026-01-01T00:00:00.000000Z","removed_at":null}

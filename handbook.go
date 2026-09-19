@@ -686,9 +686,22 @@ func (a *handbookAPI) followUp(ref *handbookRef) map[string]interface{} {
 // lookup that has to be exhaustive rather than fast.
 const sweepUnbounded = -1
 
-// sweep walks a paginated list endpoint, handing every record to visit until it
-// returns false or the pages run out, and reports how far it got.
+// sweep walks an offset-paginated list endpoint, handing every record to visit
+// until it returns false or the pages run out, and reports how far it got.
+// Every listing the CLI sweeps is offset-paginated except the agents listing;
+// that one takes sweepCursor.
 func (a *handbookAPI) sweep(list func(url.Values) (map[string]interface{}, error), maxPages int, visit func(map[string]interface{}) bool) (map[string]interface{}, error) {
+	return a.sweepWith(&offsetPager{}, list, maxPages, visit)
+}
+
+// sweepCursor is sweep for a cursor-paginated endpoint. `GET /agents` is
+// cursor-paginated, and discards a `page=N` it is sent: paged that way it
+// answers with the first page forever, so the sweep never terminates.
+func (a *handbookAPI) sweepCursor(list func(url.Values) (map[string]interface{}, error), maxPages int, visit func(map[string]interface{}) bool) (map[string]interface{}, error) {
+	return a.sweepWith(&cursorPager{}, list, maxPages, visit)
+}
+
+func (a *handbookAPI) sweepWith(pages pager, list func(url.Values) (map[string]interface{}, error), maxPages int, visit func(map[string]interface{}) bool) (map[string]interface{}, error) {
 	switch {
 	case maxPages == sweepUnbounded:
 		maxPages = math.MaxInt32
@@ -700,12 +713,10 @@ func (a *handbookAPI) sweep(list func(url.Values) (map[string]interface{}, error
 	complete := false
 	var last map[string]interface{}
 
-	for page := 1; page <= maxPages; page++ {
+	for scanned < maxPages {
 		query := url.Values{}
 		query.Set("per_page", "100")
-		if page > 1 {
-			query.Set("page", strconv.Itoa(page))
-		}
+		pages.apply(query)
 
 		resp, err := list(query)
 		if err != nil {
@@ -726,7 +737,7 @@ func (a *handbookAPI) sweep(list func(url.Values) (map[string]interface{}, error
 			}
 		}
 
-		if !hasNextPage(resp) {
+		if !pages.advance(resp) {
 			complete = true
 			break
 		}
@@ -746,6 +757,77 @@ func (a *handbookAPI) sweep(list func(url.Values) (map[string]interface{}, error
 		}
 	}
 	return sweep, nil
+}
+
+// pager carries a sweep from one request to the next. apply writes whatever
+// identifies the page being asked for into the query, and advance reads the
+// response just received, keeping what the next apply needs and reporting
+// whether there is a next page at all.
+type pager interface {
+	apply(query url.Values)
+	advance(resp map[string]interface{}) bool
+}
+
+type offsetPager struct {
+	page int
+}
+
+func (p *offsetPager) apply(query url.Values) {
+	if p.page > 1 {
+		query.Set("page", strconv.Itoa(p.page))
+	}
+}
+
+func (p *offsetPager) advance(resp map[string]interface{}) bool {
+	if !hasNextPage(resp) {
+		return false
+	}
+	if p.page == 0 {
+		p.page = 1
+	}
+	p.page++
+	return true
+}
+
+type cursorPager struct {
+	cursor string
+}
+
+func (p *cursorPager) apply(query url.Values) {
+	if p.cursor != "" {
+		query.Set("cursor", p.cursor)
+	}
+}
+
+func (p *cursorPager) advance(resp map[string]interface{}) bool {
+	p.cursor = nextCursor(resp)
+	return p.cursor != ""
+}
+
+// nextCursor reads the cursor for the following page out of a cursor-paginated
+// response. Laravel reports it as `meta.next_cursor` and, redundantly, as the
+// `cursor` query value of `links.next`; either is accepted so a response that
+// carries only one of them still traverses.
+func nextCursor(resp map[string]interface{}) string {
+	if meta, ok := resp["meta"].(map[string]interface{}); ok {
+		if cursor, ok := meta["next_cursor"].(string); ok && cursor != "" {
+			return cursor
+		}
+	}
+
+	links, ok := resp["links"].(map[string]interface{})
+	if !ok {
+		return ""
+	}
+	next, ok := links["next"].(string)
+	if !ok || next == "" {
+		return ""
+	}
+	parsed, err := url.Parse(next)
+	if err != nil {
+		return ""
+	}
+	return parsed.Query().Get("cursor")
 }
 
 func hasNextPage(resp map[string]interface{}) bool {
