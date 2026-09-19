@@ -115,7 +115,7 @@ func handbookListCommand(accountID string) *cobra.Command {
 	}
 	addHandbookKindFlag(cmd)
 	cmd.Flags().Int("page", 0, "Page of results to read (1-based; default is the first page)")
-	cmd.Flags().Int("per-page", 0, "Results per page for each underlying endpoint")
+	cmd.Flags().Int("per-page", 0, "Results per page for each underlying endpoint (max 200)")
 	cmd.Flags().Bool("include-deleted", false, "Include deleted pages")
 	cmd.Flags().Bool("include-archived", false, "Include archived playbooks")
 	return cmd
@@ -191,7 +191,7 @@ func handbookRevisionsCommand(accountID string) *cobra.Command {
 		}),
 	}
 	cmd.Flags().Int("page", 0, "Page of results to read (1-based; default is the first page)")
-	cmd.Flags().Int("per-page", 0, "Results per page")
+	cmd.Flags().Int("per-page", 0, "Results per page (max 100)")
 	return cmd
 }
 
@@ -218,7 +218,7 @@ func handbookVersionsCommand(accountID string) *cobra.Command {
 		}),
 	}
 	cmd.Flags().Int("page", 0, "Page of results to read (1-based; default is the first page)")
-	cmd.Flags().Int("per-page", 0, "Results per page")
+	cmd.Flags().Int("per-page", 0, "Results per page (max 200)")
 	return cmd
 }
 

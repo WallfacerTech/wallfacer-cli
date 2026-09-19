@@ -645,6 +645,26 @@ func TestArchiveAndRestorePlaybook(t *testing.T) {
 	}
 }
 
+// An archive the server would silently no-op is refused here instead: it
+// short-circuits on an already-archived playbook and answers 204 without
+// writing, so nothing in the response says the archive did not happen.
+func TestArchivePlaybookRefusesAPlaybookThatIsAlreadyArchived(t *testing.T) {
+	fixture := newAuthoringFixture(t)
+
+	err := captureError(t, func() error {
+		return runPlaybookArchive(fixture.api(), playbookArchivedID)
+	})
+	if !strings.Contains(err.Error(), "is already archived") {
+		t.Errorf("the refusal should name the state it found: %v", err)
+	}
+
+	for _, request := range fixture.recorded() {
+		if request.method != http.MethodGet {
+			t.Errorf("a refused archive must not mutate anything: %s %s", request.method, request.path)
+		}
+	}
+}
+
 // A restore the server would silently no-op is refused here instead: its PATCH
 // is idempotent and answers 200 whether or not anything was written.
 func TestRestorePlaybookRefusesAPlaybookThatIsNotArchived(t *testing.T) {

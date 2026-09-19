@@ -196,7 +196,7 @@ func runPlaybook(api *directoryAPI, reference, message, agentReference string, o
 	// version. A disabled playbook stays runnable by hand — disabling clears the
 	// trigger routing so no event spawns a task, and a manual run is the
 	// deliberate way to fire one — so it goes through as any other playbook does.
-	if ref.State == "archived" || ref.State == "deleted" {
+	if ref.State == "archived" {
 		return errors.Errorf("playbook %s (%s) is %s and cannot be run", ref.Title, ref.ID, ref.State)
 	}
 	if ref.ActiveVersion == nil {
