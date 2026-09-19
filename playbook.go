@@ -220,7 +220,7 @@ func playbookDiffCommand(accountID string) *cobra.Command {
 	return &cobra.Command{
 		Use:   "diff <playbook-reference> <a> <b>",
 		Short: "Compare two published versions of a playbook",
-		Long:  cli.Markdown("Each side is a version number or a version UUID. The comparison is the API's own structural diff and is a read: no version is published, activated, or altered to produce it. To compare an unpublished draft against the active version, use `handbook diff-draft`."),
+		Long:  cli.Markdown("Each side is a version number or a version UUID. The API returns both versions' definitions side by side, not a change list, and the comparison is a read: no version is published, activated, or altered to produce it. To compare an unpublished draft against the active version and get a change list, use `handbook diff-draft`."),
 		Args:  cobra.ExactArgs(3),
 		Run: handbookRun(accountID, func(api *handbookAPI, cmd *cobra.Command, args []string) error {
 			return runPlaybookDiff(api, args[0], args[1], args[2])

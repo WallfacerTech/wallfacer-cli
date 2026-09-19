@@ -207,14 +207,19 @@ func handbookRevisionCommand(accountID string) *cobra.Command {
 }
 
 func handbookVersionsCommand(accountID string) *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "versions <playbook-reference>",
 		Short: "List a playbook's published versions, newest first",
 		Args:  cobra.ExactArgs(1),
 		Run: handbookRun(accountID, func(api *handbookAPI, cmd *cobra.Command, args []string) error {
-			return runHandbookVersions(api, args[0])
+			page, _ := cmd.Flags().GetInt("page")
+			perPage, _ := cmd.Flags().GetInt("per-page")
+			return runHandbookVersions(api, args[0], page, perPage)
 		}),
 	}
+	cmd.Flags().Int("page", 0, "Page of results to read (1-based; default is the first page)")
+	cmd.Flags().Int("per-page", 0, "Results per page")
+	return cmd
 }
 
 func handbookVersionCommand(accountID string) *cobra.Command {
@@ -507,13 +512,13 @@ func runHandbookRevision(api *handbookAPI, reference, revisionID string) error {
 	})
 }
 
-func runHandbookVersions(api *handbookAPI, reference string) error {
+func runHandbookVersions(api *handbookAPI, reference string, page, perPage int) error {
 	ref, err := api.resolveHandbookRef(reference, kindPlaybook)
 	if err != nil {
 		return err
 	}
 
-	resp, err := api.listPipelineVersions(ref.ID)
+	resp, err := api.listPipelineVersions(ref.ID, paginationQuery(page, perPage))
 	if err != nil {
 		return handbookReadError(err, ref)
 	}
@@ -523,8 +528,9 @@ func runHandbookVersions(api *handbookAPI, reference string) error {
 		"reference":  ref,
 		"pagination": paginationOf(resp),
 		"follow_up": map[string]interface{}{
-			"version": fmt.Sprintf("wallfacer handbook version %s <version>", ref.ID),
-			"active":  fmt.Sprintf("wallfacer handbook version %s", ref.ID),
+			"version":   fmt.Sprintf("wallfacer handbook version %s <version>", ref.ID),
+			"active":    fmt.Sprintf("wallfacer handbook version %s", ref.ID),
+			"next_page": fmt.Sprintf("wallfacer handbook versions %s --page <n>", ref.ID),
 		},
 	})
 }

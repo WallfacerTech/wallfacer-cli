@@ -33,8 +33,9 @@ const (
 	playbookBuildID    = "bbbbbbb1-1111-4111-8111-111111111111"
 	playbookArchivedID = "bbbbbbb9-1111-4111-8111-111111111111"
 
-	playbookVersionID = "ccccccc1-1111-4111-8111-111111111111"
-	revisionID        = "ddddddd1-1111-4111-8111-111111111111"
+	playbookVersionID      = "ccccccc1-1111-4111-8111-111111111111"
+	playbookVersionFirstID = "ccccccc1-1111-4111-8111-111111111112"
+	revisionID             = "ddddddd1-1111-4111-8111-111111111111"
 
 	unknownID = "eeeeeee1-1111-4111-8111-111111111111"
 )
@@ -162,6 +163,9 @@ func (f *handbookFixture) route(r *http.Request) (string, int) {
 	case base + "/pipelines/" + playbookArchivedID:
 		return wrapData(playbookArchivedRecordJSON), http.StatusOK
 	case base + "/pipelines/" + playbookBuildID + "/versions":
+		if r.URL.Query().Get("page") == "2" {
+			return playbookVersionsPageTwoJSON, http.StatusOK
+		}
 		return playbookVersionsJSON, http.StatusOK
 	case base + "/pipelines/" + playbookBuildID + "/versions/2":
 		return wrapData(playbookVersionRecordJSON), http.StatusOK
@@ -672,6 +676,39 @@ func TestListTraversesBeyondTheFirstPage(t *testing.T) {
 	}
 }
 
+func TestVersionsTraverseBeyondTheFirstPage(t *testing.T) {
+	fixture := newHandbookFixture(t)
+
+	first := capture(t, func() error {
+		return runHandbookVersions(fixture.api(), playbookBuildID, 0, 0)
+	})
+	links := first["pagination"].(map[string]interface{})["links"].(map[string]interface{})
+	if links["next"] == nil {
+		t.Error("pagination links must expose the next page")
+	}
+
+	second := capture(t, func() error {
+		return runHandbookVersions(fixture.api(), playbookBuildID, 2, 1)
+	})
+	entries := second["data"].([]interface{})
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 version on the second page, got %d", len(entries))
+	}
+	if entries[0].(map[string]interface{})["id"] != playbookVersionFirstID {
+		t.Errorf("second page should hold the older version, got %v", entries[0])
+	}
+
+	var sawPageQuery bool
+	for _, request := range fixture.recorded() {
+		if strings.HasSuffix(request.path, "/versions") && strings.Contains(request.query, "page=2") && strings.Contains(request.query, "per_page=1") {
+			sawPageQuery = true
+		}
+	}
+	if !sawPageQuery {
+		t.Error("--page and --per-page should reach the versions endpoint")
+	}
+}
+
 func TestListCarriesPathsAndArchivedState(t *testing.T) {
 	fixture := newHandbookFixture(t)
 
@@ -772,7 +809,7 @@ func TestDiscoveryCommandsOnlyRead(t *testing.T) {
 		func() error { return runHandbookResolve(fixture.api(), "Engineering/Build", kindPage) },
 		func() error { return runHandbookRevisions(fixture.api(), pageBuildID, 0, 0) },
 		func() error { return runHandbookRevision(fixture.api(), pageBuildID, revisionID) },
-		func() error { return runHandbookVersions(fixture.api(), playbookBuildID) },
+		func() error { return runHandbookVersions(fixture.api(), playbookBuildID, 0, 0) },
 		func() error { return runHandbookVersion(fixture.api(), playbookBuildID, "2") },
 		func() error { return runHandbookDraft(fixture.api(), playbookBuildID) },
 	}
@@ -872,7 +909,11 @@ const emptyListJSON = `{"data":[],"links":{"first":null,"last":null,"prev":null,
 
 const playbookVersionRecordJSON = `{"id":"` + playbookVersionID + `","pipeline_id":"` + playbookBuildID + `","version":2,"definition":{"format_version":1,"description":"Implement an assigned issue.","steps":[{"id":"implement","kind":"ai","title":"Implement the issue","content":"Read the issue and implement it."}],"triggers":[]},"notes":"Second cut.","created_at":"2026-09-01T00:00:00.000000Z","created_by":1}`
 
-const playbookVersionsJSON = `{"data":[` + playbookVersionRecordJSON + `]}`
+const playbookVersionFirstRecordJSON = `{"id":"` + playbookVersionFirstID + `","pipeline_id":"` + playbookBuildID + `","version":1,"definition":{"format_version":1,"description":"Implement an assigned issue.","steps":[{"id":"implement","kind":"ai","title":"Implement the issue"}],"triggers":[]},"notes":"First cut.","created_at":"2026-08-01T00:00:00.000000Z","created_by":1}`
+
+const playbookVersionsJSON = `{"data":[` + playbookVersionRecordJSON + `],"links":{"first":"http://example.test/versions?page=1","last":"http://example.test/versions?page=2","prev":null,"next":"http://example.test/versions?page=2"},"meta":{"current_page":1,"last_page":2,"per_page":1,"total":2}}`
+
+const playbookVersionsPageTwoJSON = `{"data":[` + playbookVersionFirstRecordJSON + `],"links":{"first":"http://example.test/versions?page=1","last":"http://example.test/versions?page=2","prev":"http://example.test/versions?page=1","next":null},"meta":{"current_page":2,"last_page":2,"per_page":1,"total":2}}`
 
 const revisionRecordJSON = `{"id":"` + revisionID + `","page_id":"` + pageBuildID + `","title":"Build","body":"The earlier wording of the build page.","description":"From issue to merge.","created_at":"2026-08-15T00:00:00.000000Z","created_by":1}`
 

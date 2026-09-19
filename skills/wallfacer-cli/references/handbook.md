@@ -65,7 +65,7 @@ Resolves without reading content: stable ID, type, account, path, and state. Thi
 ```bash
 wallfacer handbook revisions <page-reference> [--page N] [--per-page N]
 wallfacer handbook revision  <page-reference> <revision-id>
-wallfacer handbook versions  <playbook-reference>
+wallfacer handbook versions  <playbook-reference> [--page N] [--per-page N]
 wallfacer handbook version   <playbook-reference> [version]
 wallfacer handbook draft     <playbook-reference>
 ```
@@ -105,7 +105,7 @@ Definitions are read from `--definition-file` (JSON or YAML) or from stdin. The 
 
 - **Saving is not publishing.** `save-draft` stores a working copy and changes nothing about how the playbook runs; the response reports `published: false` and the unchanged active version. There is one draft per playbook and saving again overwrites it. Drafts are stored verbatim and are not validated until publication.
 - **`diff-draft` compares locally.** It reads the draft and the active version and compares them field by field, emitting one entry per differing path (`added`, `removed`, `changed`). It issues no writes: nothing is published to produce a comparison. With no published version yet, every field of the draft reads as added.
-- **`diff` is the API's structural diff** between two published versions, each named by version number or UUID.
+- **`diff` returns both definitions side by side**, for two published versions each named by version number or UUID. The API sends back each side's whole definition rather than a change list; `diff-draft` is the one that computes a change list.
 - **`publish` operates on the saved draft.** It reads the draft back and sends it to the version endpoint. With no draft, with a stored draft that holds no definition object, or on a server validation failure, it fails and says no version was created. On success it returns the new version's identifiers, enough to read it with `handbook version`.
 - **`--activate=false`** publishes without activating, and the result reports `published_version` and `active_version` separately with `activated: false`.
 - **Publishing never enables a disabled playbook.** A disabled playbook is still disabled afterwards; the result says so and names `update-playbook --enable`.

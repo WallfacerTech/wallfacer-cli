@@ -191,8 +191,8 @@ func (a *handbookAPI) getPipelineVersion(id, version string) (map[string]interfa
 	return responseObject(resp)
 }
 
-func (a *handbookAPI) listPipelineVersions(id string) (map[string]interface{}, error) {
-	return a.get(a.accountPath("/pipelines/%s/versions", url.PathEscape(id)), nil)
+func (a *handbookAPI) listPipelineVersions(id string, query url.Values) (map[string]interface{}, error) {
+	return a.get(a.accountPath("/pipelines/%s/versions", url.PathEscape(id)), query)
 }
 
 func (a *handbookAPI) listPageRevisions(id string, query url.Values) (map[string]interface{}, error) {
