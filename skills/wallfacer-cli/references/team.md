@@ -97,8 +97,10 @@ Refusals:
 
 - A page passed where a playbook belongs (`"..." is a page, but a playbook was requested`).
 - A playbook with a draft and nothing published. Publish it first; `wallfacer handbook draft <playbook-id>` reads the draft.
-- An archived or disabled playbook.
+- An archived playbook.
 - A URL from another account, refused before any request goes out.
+
+A disabled playbook runs. Disabling clears its triggers so no event spawns a task, which makes a manual run the deliberate way to fire one; the response carries `disabled_note` saying so alongside the created task.
 
 Running a playbook never edits it and never publishes its draft.
 

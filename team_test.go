@@ -103,6 +103,9 @@ func (f *teamFixture) route(r *http.Request) (string, int) {
 	case base + "/pipelines/" + playbookDraftOnlyID:
 		return wrapData(playbookDraftOnlyRecordJSON), http.StatusOK
 
+	case base + "/pipelines/" + playbookDisabledID:
+		return wrapData(playbookDisabledRecordJSON), http.StatusOK
+
 	case base + "/tasks":
 		if r.Method != http.MethodPost {
 			return emptyListJSON, http.StatusOK
@@ -567,6 +570,33 @@ func TestRunRefusesPagesDraftsAndOtherAccounts(t *testing.T) {
 		if request.method == http.MethodPost {
 			t.Errorf("a refused run still created something: %s %s", request.method, request.path)
 		}
+	}
+}
+
+// Disabling a playbook clears its triggers; it does not take it out of service.
+// The API accepts a manual run of one and the app offers it, so the CLI sends
+// the same request it sends for an enabled playbook.
+func TestRunFiresADisabledPlaybook(t *testing.T) {
+	fixture := newTeamFixture(t)
+
+	output := capture(t, func() error {
+		return runPlaybook(fixture.api(), playbookDisabledID, "Fire it by hand", "", taskOptions{})
+	})
+
+	body := fixture.lastBody()
+	if body["pipeline_id"] != playbookDisabledID {
+		t.Errorf("a disabled playbook did not reach the task endpoint: %v", body)
+	}
+	if body["message"] != "Fire it by hand" {
+		t.Errorf("run did not send the kickoff message: %v", body)
+	}
+
+	playbook := output["playbook"].(map[string]interface{})
+	if playbook["state"] != "disabled" {
+		t.Errorf("run should report the state it fired, got %v", playbook["state"])
+	}
+	if note, _ := output["disabled_note"].(string); !strings.Contains(note, "triggers") {
+		t.Errorf("run should note the cleared triggers, got %q", note)
 	}
 }
 
