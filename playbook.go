@@ -515,6 +515,13 @@ func runPlaybookArchive(api *handbookAPI, reference string) error {
 		return err
 	}
 
+	// The server short-circuits an already-archived playbook: it answers 204
+	// without writing, so the state is checked here rather than reporting an
+	// archive that did not happen.
+	if ref.State == "archived" {
+		return errors.Errorf("playbook %s is already archived", ref.ID)
+	}
+
 	if _, err := api.archivePipeline(ref.ID); err != nil {
 		return handbookReadError(err, ref)
 	}
