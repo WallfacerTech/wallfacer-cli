@@ -189,7 +189,7 @@ Default output is JSON. Also supports `-o yaml`.
 
 List endpoints serve 25 per page by default. The CLI does not follow pagination links automatically; you either page it yourself or use a command that sweeps.
 
-`--page` and `--per-page` are registered on `wallfacer handbook list`, `wallfacer handbook revisions`, and `wallfacer handbook versions`, and `pagination` passes through each underlying endpoint's own `meta` and `links`, so `--page` traverses with the API's numbers. `--per-page` caps at 200 on `handbook list` (both the pages and the playbooks listing) and on `handbook versions`, and at 100 on `handbook revisions`. Every other generated list command takes `--per-page` too; its `--help` states that endpoint's cap.
+`--page` and `--per-page` are registered on `wallfacer handbook list`, `wallfacer handbook revisions`, and `wallfacer handbook versions`, and `pagination` passes through each underlying endpoint's own `meta` and `links`, so `--page` traverses with the API's numbers. `--per-page` caps at 200 on `handbook list` (both the pages and the playbooks listing) and on `handbook versions`, and at 100 on `handbook revisions`. Generated list commands that expose `--per-page` state that endpoint's cap in `--help`.
 
 `wallfacer handbook search` and `wallfacer team list` take neither flag. They sweep their listings themselves at a fixed 100 records per request, bounded by `--max-pages` (default 20), and report `pages_read` and `complete` per source under `pagination`. Resolving a team reference (`team get`, `chat`, and `run --agent`) sweeps both listings in full, with no page ceiling.
 
