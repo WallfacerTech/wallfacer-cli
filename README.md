@@ -186,7 +186,7 @@ wallfacer run https://app.wallfacer.ai/accounts/<account-id>/handbook/<playbook-
 
 `chat` is agent-directed: a human member, and an agent that is disabled or paused, are refused by name rather than quietly becoming the identity on the task. `run` takes any playbook reference `handbook` accepts, uses the version the server has active, and refuses a page, an archived playbook, and one with a draft and nothing published. Its `--agent` sets the task's identity and default environment; the playbook's steps still run as the actors its published version names.
 
-Both return the created task with its identifiers intact and a `follow_up` object naming the `tasks get`, `sessions list`, `messages list`, and `handbook version` commands for what they started.
+Both return the created task with its identifiers intact and a `follow_up` object naming the `tasks get`, `sessions list`, and `messages list` commands for what they started, plus a `messages create` reply. A run adds `handbook read` for the playbook and `handbook version` for the version it is executing; a chat has neither.
 
 ## Configuration
 
