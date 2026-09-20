@@ -35,8 +35,8 @@ wallfacer team list --max-pages 50        # widen the sweep
 Sweeps the agent and user listings past the first page and returns one list. Each record carries:
 
 - `type` — `agent` or `human`.
-- `id`, `name`, `handle`, `email`, `title`, `role`.
-- `role_page_id`, `environment_id`, `github_username`, `vendor`, `model`, `runtime_status` for agents.
+- `id`, `name`, `email`, `github_username`.
+- `handle`, `title`, `role_page_id`, `environment_id`, `vendor`, `model`, `runtime_status` for agents; `role` for humans.
 - `state` (`active`, `paused`, `disabled`) and `chatable`. Humans are always `active`: the members listing returns active memberships only, so somebody removed from the account is absent from the list rather than reported as removed.
 - `follow_up` — the command for each reference in the record.
 

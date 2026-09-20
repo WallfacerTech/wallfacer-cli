@@ -139,7 +139,7 @@ wallfacer run "Implement Assigned GitHub Issues" --message "Start with #66" # se
 - **Chat is agent-directed.** A human member, and a disabled or paused agent, are refused by name rather than quietly becoming the identity on the task.
 - **Run uses the version the server has active.** No version is pinned, a draft-only playbook is refused, and `--agent` is the task's identity and default environment rather than an override of the playbook's step actors.
 - **Neither falls back to the other.** Chat never sends `pipeline_id`; run never sends `prompt`.
-- **Both return the created task plus `follow_up`** naming the `tasks get`, `sessions list`, `messages list`, and `handbook version` commands for what they started.
+- **Both return the created task plus `follow_up`** naming the `tasks get`, `sessions list`, and `messages list` commands for what they started, and a `messages create` reply. A run adds `handbook read` for the playbook and `handbook version` for the version it is executing; a chat has neither.
 
 Reading the directory never creates a task, and running a playbook never edits or publishes it. Read the full detail in [references/team.md](references/team.md).
 
