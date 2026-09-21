@@ -5,6 +5,9 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/spf13/cobra"
 )
 
 // The write half of the handbook surface. Every test here asserts on the
@@ -517,6 +520,68 @@ func TestARequestBodyOfNullIsRejected(t *testing.T) {
 			t.Fatal("expected a literal null body to be rejected, not to become an empty edit")
 		}
 	})
+}
+
+// withOpenStdin runs fn with stdin a pipe nobody ever writes to or closes,
+// which is what a CI step, a wrapper script, or an agent harness hands the
+// command. Reading it to the end never returns.
+func withOpenStdin(t *testing.T, fn func()) {
+	t.Helper()
+
+	reader, writer, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("pipe: %v", err)
+	}
+
+	previous := os.Stdin
+	os.Stdin = reader
+	defer func() {
+		os.Stdin = previous
+		writer.Close()
+		reader.Close()
+	}()
+
+	fn()
+}
+
+func TestABodyFlagIsNotReadFromStdin(t *testing.T) {
+	cases := map[string]struct {
+		cmd   *cobra.Command
+		flags map[string]string
+	}{
+		"create --body":       {handbookCreateCommand(testAccountID), map[string]string{"body": "y"}},
+		"update --body":       {handbookUpdateCommand(testAccountID), map[string]string{"body": "y"}},
+		"update --clear-body": {handbookUpdateCommand(testAccountID), map[string]string{"clear-body": "true"}},
+	}
+
+	for name, tc := range cases {
+		for flag, value := range tc.flags {
+			if err := tc.cmd.Flags().Set(flag, value); err != nil {
+				t.Fatalf("%s: setting --%s: %v", name, flag, err)
+			}
+		}
+
+		done := make(chan handbookEdit, 1)
+		withOpenStdin(t, func() {
+			go func() {
+				edit, err := handbookEditFromFlags(tc.cmd)
+				if err != nil {
+					t.Errorf("%s: %v", name, err)
+					return
+				}
+				done <- edit
+			}()
+
+			select {
+			case edit := <-done:
+				if _, present := edit.body["body"]; !present {
+					t.Errorf("%s: built %v, want the body the flag supplied", name, edit.body)
+				}
+			case <-time.After(5 * time.Second):
+				t.Errorf("%s: blocked on stdin though the body came from a flag", name)
+			}
+		})
+	}
 }
 
 func TestMoveReportsThePathTheEntryNowHas(t *testing.T) {

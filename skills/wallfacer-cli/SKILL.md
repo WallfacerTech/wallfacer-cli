@@ -168,7 +168,7 @@ cat wf-dev-manifest.json | jq '{name: "my-env", manifest: .}' | wallfacer enviro
 cat vm.json | wallfacer vms create
 ```
 
-`handbook create` and `handbook update` are the exception: they read the same JSON body from stdin and also accept `--title`, `--body`, `--body-file`, `--position`, `--under`, and `--top-level`. A flag wins over the same field in a piped body.
+`handbook create` and `handbook update` are the exception: they read the same JSON body from stdin and also accept `--title`, `--body`, `--body-file`, `--position`, `--under`, and `--top-level`. A flag wins over the same field in a piped body, and a body flag (`--body`, `--body-file`, `--clear-body`) skips the stdin read entirely.
 
 ## Output format
 

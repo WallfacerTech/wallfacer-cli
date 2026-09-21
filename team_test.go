@@ -45,6 +45,11 @@ type teamFixture struct {
 	mu       sync.Mutex
 	requests []recordedRequest
 	bodies   []map[string]interface{}
+
+	// taskRefusal, when set, is the body the task endpoint answers a create
+	// with, as a 422. The server-side guards behind those refusals are not
+	// reachable from the directory fixtures.
+	taskRefusal string
 }
 
 func newTeamFixture(t *testing.T) *teamFixture {
@@ -109,6 +114,9 @@ func (f *teamFixture) route(r *http.Request) (string, int) {
 	case base + "/tasks":
 		if r.Method != http.MethodPost {
 			return emptyListJSON, http.StatusOK
+		}
+		if f.taskRefusal != "" {
+			return f.taskRefusal, http.StatusUnprocessableEntity
 		}
 		return f.createdTask(), http.StatusCreated
 	}
@@ -317,6 +325,33 @@ func TestTeamListCarriesTypeIdentityAndRoleData(t *testing.T) {
 	}
 	if human["chatable"] != false {
 		t.Errorf("a human is never a chat identity: %v", human)
+	}
+}
+
+// github_username is documented as carried by every record, so it is present
+// on all of them: the linked account as a string, and no linked account as
+// null. Dropping the key would make "not linked" indistinguishable from a CLI
+// that does not report the field, and `-q 'data[].github_username'` return
+// nothing at all.
+func TestTeamListCarriesGithubUsernamePresentOrNull(t *testing.T) {
+	fixture := newTeamFixture(t)
+
+	output := capture(t, func() error { return runTeamList(fixture.api(), "", false, 20) })
+
+	for _, record := range members(t, output) {
+		if _, present := record["github_username"]; !present {
+			t.Errorf("member %v does not carry github_username: %v", record["id"], record)
+		}
+	}
+
+	if got := memberByID(t, output, agentJinID)["github_username"]; got != "wallfacer-jin" {
+		t.Errorf("linked agent reports github_username %v", got)
+	}
+	if got := memberByID(t, output, humanAdaID)["github_username"]; got != "ada" {
+		t.Errorf("linked human reports github_username %v", got)
+	}
+	if got := memberByID(t, output, agentAdaID)["github_username"]; got != nil {
+		t.Errorf("agent with no linked GitHub account reports github_username %v, want null", got)
 	}
 }
 
@@ -573,6 +608,42 @@ func TestRunRefusesPagesDraftsAndOtherAccounts(t *testing.T) {
 	}
 }
 
+// The environment guard lives on the server: it refuses a run whose playbook
+// has a step the performing agent has no computer for. The CLI's other run
+// refusals name the command that clears them, and this one reads the same.
+func TestRunPhrasesTheEnvironmentRefusal(t *testing.T) {
+	fixture := newTeamFixture(t)
+	fixture.taskRefusal = environmentRequiredJSON
+
+	message := expectError(t, func() error {
+		return runPlaybook(fixture.api(), playbookBuildID, "", "", taskOptions{})
+	})
+
+	for _, want := range []string{"needs an environment", playbookBuildID, "--environment-id"} {
+		if !strings.Contains(message, want) {
+			t.Errorf("the environment refusal %q does not report %q", message, want)
+		}
+	}
+	if strings.Contains(message, "HTTP 422") || strings.Contains(message, "\"code\"") {
+		t.Errorf("the environment refusal dumped the API's error body: %q", message)
+	}
+}
+
+// Every other rejected create is still the API's own error text: only the
+// refusals the CLI has words for are rephrased.
+func TestRunKeepsUnrecognizedRefusalsRaw(t *testing.T) {
+	fixture := newTeamFixture(t)
+	fixture.taskRefusal = `{"message":"The given data was invalid.","errors":{"title":["The title field is required."]}}`
+
+	message := expectError(t, func() error {
+		return runPlaybook(fixture.api(), playbookBuildID, "", "", taskOptions{})
+	})
+
+	if !strings.Contains(message, "HTTP 422") || !strings.Contains(message, "The title field is required.") {
+		t.Errorf("an unrecognized refusal was not passed through: %q", message)
+	}
+}
+
 // Disabling a playbook clears its triggers; it does not take it out of service.
 // The API accepts a manual run of one and the app offers it, so the CLI sends
 // the same request it sends for an enabled playbook.
@@ -720,6 +791,10 @@ func TestTeamOutputStaysProjectableWithQuery(t *testing.T) {
 		t.Errorf("query projection returned %s, want the agent ID", got)
 	}
 }
+
+// The task endpoint's own refusal for a playbook step whose performer has no
+// computer, copied from the API.
+const environmentRequiredJSON = `{"errors":[{"message":"This handbook has a step that needs a computer before it can be run.","code":"environment_required"}]}`
 
 // The cursors the agents fixture hands out, opaque as the API's own are.
 const (

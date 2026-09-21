@@ -226,7 +226,7 @@ func runPlaybook(api *directoryAPI, reference, message, agentReference string, o
 
 	task, err := api.createTask(body)
 	if err != nil {
-		return err
+		return runCreateError(err, ref)
 	}
 
 	payload := map[string]interface{}{
@@ -249,6 +249,16 @@ func runPlaybook(api *directoryAPI, reference, message, agentReference string, o
 		payload["agent"] = agent
 	}
 	return emitHandbook(payload)
+}
+
+// runCreateError phrases the refusals `run` can be handed the way the ones it
+// makes itself are phrased: what was refused, and the command that clears it.
+// Anything else is the API's own error text, unchanged.
+func runCreateError(err error, ref *handbookRef) error {
+	if err == errEnvironmentRequired {
+		return errors.Errorf("playbook %s (%s) has a step that needs an environment, and the agent performing it has none; give that agent a computer, or name one for this run with `wallfacer environments list` and `wallfacer run %s --environment-id <environment-id>`", ref.Title, ref.ID, ref.ID)
+	}
+	return err
 }
 
 // taskFollowUp names the command for each reference the created task hands

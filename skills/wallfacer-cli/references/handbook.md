@@ -89,7 +89,7 @@ wallfacer handbook restore-playbook <playbook-id>
 
 **`update-playbook` is metadata only.** Name, description, linked pages, and the enabled state, all of which take effect immediately. Steps and triggers change only through `publish`. Moving the playbook in the tree and ordering it among siblings are hierarchy edits and are not in this command.
 
-**A restore comes back disabled.** `restore-playbook` takes the same reference forms as every other command, which in practice means an ID or detail URL, since names resolve against active entries only. Its triggers stay cleared until `update-playbook --enable`, and the server renames it with a numeric suffix if another playbook claimed its name. A playbook that is not archived is refused before the request.
+**A restore comes back disabled.** `restore-playbook` takes the same reference forms as every other command, which in practice means an ID or detail URL, since names resolve against active entries only. Its triggers stay cleared until `update-playbook --enable`, and the server renames it with a numeric suffix if another playbook claimed its name. A playbook that is not archived is refused before the request, and so is `update-playbook --enable` on one that is still archived: restore it first.
 
 ## Drafts and publication
 
@@ -122,7 +122,7 @@ wallfacer handbook update <page-reference> [--title T] [--body M | --body-file P
                           [--clear-body] [--under <page-reference> | --top-level] [--position N]
 ```
 
-Both accept a JSON object on stdin, the same body the `pages` group takes, and layer the flags over it: a flag wins over the same field in a piped body.
+Both accept a JSON object on stdin, the same body the `pages` group takes, and layer the flags over it: a flag wins over the same field in a piped body. A body flag (`--body`, `--body-file`, `--clear-body`) means stdin is not read at all, so the command never blocks on a pipe that stays open; pipe the whole JSON object when you want other fields to come from it too.
 
 - **A page write is live.** The new content is what agents read from the next task onward.
 - **History is retained.** Each editing session is snapshotted. `follow_up.revisions` in the result names the command that reads the earlier wording back, and that listing's own `follow_up.revision` names the command for its newest snapshot.

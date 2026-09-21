@@ -87,9 +87,11 @@ Steps and triggers are the versioned definition and change only through
 ` + "`handbook publish`" + `. Linked pages are metadata: adding or removing one changes
 what later runs receive without publishing a version, and does not touch the definition.
 
-` + "`--disable`" + ` clears the playbook's triggers so it spawns no new tasks while staying
-visible and editable; ` + "`--enable`" + ` puts them back. Tasks already running continue
-either way. Moving the playbook in the tree is not here: that is a hierarchy edit.`),
+` + "`--disable`" + ` clears the playbook's triggers, so no event spawns a task from it while
+it stays visible, editable, and runnable: a manual ` + "`wallfacer run`" + ` still starts it and
+the response carries ` + "`disabled_note`" + ` saying so. ` + "`--enable`" + ` re-materializes the
+triggers, so events spawn tasks again. Tasks already running continue either way.
+Moving the playbook in the tree is not here: that is a hierarchy edit.`),
 		Args: cobra.ExactArgs(1),
 		Run: handbookRun(accountID, func(api *handbookAPI, cmd *cobra.Command, args []string) error {
 			update, err := playbookMetadataUpdate(cmd)
@@ -102,8 +104,8 @@ either way. Moving the playbook in the tree is not here: that is a hierarchy edi
 	cmd.Flags().String("name", "", "New display name")
 	cmd.Flags().String("description", "", "New description")
 	cmd.Flags().Bool("clear-description", false, "Clear the description")
-	cmd.Flags().Bool("disable", false, "Stop the playbook spawning new tasks")
-	cmd.Flags().Bool("enable", false, "Resume spawning tasks from the playbook's triggers")
+	cmd.Flags().Bool("disable", false, "Clear the playbook's triggers so no event starts it; a manual run still does")
+	cmd.Flags().Bool("enable", false, "Put the playbook's triggers back so events start it again")
 	cmd.Flags().StringArray("link-page", nil, "Replace the linked pages with these, repeatable (ID, name, path, or URL)")
 	cmd.Flags().Bool("clear-linked-pages", false, "Remove every linked page")
 	return cmd
@@ -459,9 +461,18 @@ func runPlaybookCreate(api *handbookAPI, name, description, parent string, linke
 	}
 
 	if alsoDraft {
-		if _, err := api.savePipelineDraft(ref.ID, definition); err != nil {
+		saved, err := api.savePipelineDraft(ref.ID, definition)
+		if err != nil {
 			return errors.Wrapf(err, "the playbook was created as %s, but saving its draft", ref.ID)
 		}
+		// The created record predates the draft, so its own draft field and
+		// the reference both still say there is none. Both are brought up to
+		// the state the save produced, so one payload cannot contradict
+		// itself.
+		draft := draftRecordOf(saved, definition)
+		created["draft"] = draft
+		hasDraft := true
+		ref.HasDraft = &hasDraft
 		data["draft"] = map[string]interface{}{"present": true, "definition": definition}
 	}
 
@@ -480,6 +491,14 @@ func runPlaybookUpdate(api *handbookAPI, reference string, update *playbookUpdat
 	ref, err := api.resolveHandbookRef(reference, kindPlaybook)
 	if err != nil {
 		return err
+	}
+
+	// Enabling an archived playbook is the one metadata change the server
+	// refuses outright, and its 422 names the `archived: false` request field
+	// rather than the command that restores one. Say it in the CLI's own
+	// vocabulary, before anything is sent.
+	if enabled, ok := update.body["disabled"].(bool); ok && !enabled && ref.State == "archived" {
+		return errors.Errorf("playbook %s is archived, so enabling it is refused; restore it first with: wallfacer handbook restore-playbook %s", ref.ID, ref.ID)
 	}
 
 	if len(update.linkedPageRefs) > 0 {
@@ -584,6 +603,12 @@ func runPlaybookSaveDraft(api *handbookAPI, reference string, definition map[str
 	if err != nil {
 		return handbookReadError(err, ref)
 	}
+
+	// The reference was resolved before the write, so its has_draft is the
+	// state the save just replaced. A save that returned without error is
+	// what makes the draft present, and that is what is reported.
+	hasDraft := true
+	ref.HasDraft = &hasDraft
 
 	data := map[string]interface{}{
 		"saved":     true,
@@ -731,6 +756,19 @@ func runPlaybookPublish(api *handbookAPI, reference, notes string, activate bool
 		// The server validates at publish time. Nothing was versioned, so
 		// nothing is reported as one.
 		return errors.Wrapf(err, "publishing the draft of playbook %s failed; no version was created", ref.ID)
+	}
+
+	// The version endpoint answers out of the row it just inserted, and
+	// created_at is a database default that insert does not read back, so the
+	// timestamp can arrive null on a record that has one. Read the version to
+	// report the real timestamp rather than a null the next command
+	// contradicts.
+	if published["created_at"] == nil {
+		if version := versionArgument(published["version"]); version != "" {
+			if stored, err := api.getPipelineVersion(ref.ID, version); err == nil && stored["created_at"] != nil {
+				published["created_at"] = stored["created_at"]
+			}
+		}
 	}
 
 	// Read the playbook back: which version is active, whether the draft was
