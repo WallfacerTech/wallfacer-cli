@@ -463,9 +463,37 @@ func TestReadPageReturnsBodyAndFollowUps(t *testing.T) {
 	}
 
 	followUp := output["follow_up"].(map[string]interface{})
-	for _, key := range []string{"revisions", "revision", "parent"} {
+	for _, key := range []string{"revisions", "parent"} {
 		if _, ok := followUp[key]; !ok {
 			t.Errorf("follow_up is missing %q: %v", key, followUp)
+		}
+	}
+	assertFollowUpRuns(t, followUp)
+}
+
+// Every follow_up entry that names a record in the result runs as printed: a
+// read holds no revision id, so it names `revisions` rather than a `revision`
+// command with a placeholder in it. `next_page` is exempt, since which page to
+// ask for is the caller's choice rather than an id the command is holding.
+func assertFollowUpRuns(t *testing.T, followUp map[string]interface{}) {
+	t.Helper()
+	for key, value := range followUp {
+		if key == "next_page" {
+			continue
+		}
+		commands := []interface{}{value}
+		if list, ok := value.([]interface{}); ok {
+			commands = list
+		}
+		for _, command := range commands {
+			text, ok := command.(string)
+			if !ok {
+				t.Errorf("follow_up %q is not a command: %v", key, command)
+				continue
+			}
+			if strings.Contains(text, "<") {
+				t.Errorf("follow_up %q is a template, not a runnable command: %s", key, text)
+			}
 		}
 	}
 }
@@ -574,6 +602,7 @@ func TestReadPlaybookExpandsActiveVersionAndHidesDraftContent(t *testing.T) {
 	if !ok || len(linked) != 1 {
 		t.Errorf("follow_up should name a command per linked page: %v", followUp["linked_pages"])
 	}
+	assertFollowUpRuns(t, followUp)
 }
 
 func TestDraftIsReadSeparately(t *testing.T) {
@@ -624,6 +653,13 @@ func TestRevisionsAndRevisionRead(t *testing.T) {
 	if len(items) != 1 {
 		t.Fatalf("expected 1 revision, got %d", len(items))
 	}
+
+	followUp := list["follow_up"].(map[string]interface{})
+	want := "wallfacer handbook revision " + pageBuildID + " " + revisionID
+	if followUp["revision"] != want {
+		t.Errorf("follow_up.revision = %v, want %s", followUp["revision"], want)
+	}
+	assertFollowUpRuns(t, followUp)
 
 	one := capture(t, func() error {
 		return runHandbookRevision(fixture.api(), pageBuildID, revisionID)
@@ -686,6 +722,11 @@ func TestVersionsTraverseBeyondTheFirstPage(t *testing.T) {
 	if links["next"] == nil {
 		t.Error("pagination links must expose the next page")
 	}
+	firstFollowUp := first["follow_up"].(map[string]interface{})
+	if want := "wallfacer handbook version " + playbookBuildID + " 2"; firstFollowUp["version"] != want {
+		t.Errorf("follow_up.version = %v, want %s", firstFollowUp["version"], want)
+	}
+	assertFollowUpRuns(t, firstFollowUp)
 
 	second := capture(t, func() error {
 		return runHandbookVersions(fixture.api(), playbookBuildID, 2, 1)

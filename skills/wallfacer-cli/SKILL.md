@@ -64,7 +64,7 @@ All commands are flat top-level groups (not nested). Write operations take JSON 
 | Group | Read | Write |
 |---|---|---|
 | team | `list`, `get <reference>` | — |
-| handbook | `tree`, `list`, `search <query>`, `read <ref>`, `resolve <ref>`, `revisions <page-ref>`, `revision <page-ref> <rev-id>`, `versions <playbook-ref>`, `version <playbook-ref> [version]`, `draft <playbook-ref>`, `diff <playbook-ref> <a> <b>`, `diff-draft <playbook-ref>` | `create [title]`, `update <page-ref>`, `delete <page-ref>`, `restore <page-id>`, `move <ref>`, `reorder <ref>...`, `create-playbook`, `update-playbook <playbook-ref>`, `archive-playbook <playbook-ref>`, `restore-playbook <playbook-id>`, `save-draft <playbook-ref>`, `discard-draft <playbook-ref>`, `publish <playbook-ref>` |
+| handbook | `tree`, `list`, `search <query>`, `read <ref>`, `resolve <ref>`, `revisions <page-ref>`, `revision <page-ref> <rev-id>`, `versions <playbook-ref>`, `version <playbook-ref> [version]`, `draft <playbook-ref>`, `diff <playbook-ref> <a> <b>`, `diff-draft <playbook-ref>` | `create [title]`, `update <page-ref>`, `delete <page-ref>`, `restore <page-ref>`, `move <ref>`, `reorder <ref>...`, `create-playbook`, `update-playbook <playbook-ref>`, `archive-playbook <playbook-ref>`, `restore-playbook <playbook-ref>`, `save-draft <playbook-ref>`, `discard-draft <playbook-ref>`, `publish <playbook-ref>` |
 | accounts | `list`, `get`, `handbook` | — |
 | pages | `list`, `get <page-id>` | `create`, `update <page-id>`, `delete <page-id>` |
 | revisions | `list <page-id>`, `get <page-id> <revision-id>` | — |
@@ -104,7 +104,7 @@ wallfacer handbook update "Engineering/Build" --body-file build.md
 wallfacer handbook move <playbook-id> --under "Engineering" --position 0
 wallfacer handbook reorder --under "Engineering" "Build" <playbook-id> "Review"
 wallfacer handbook delete <page-ref>          # children move up; history is kept
-wallfacer handbook restore <page-id>          # deleted pages are reached by ID
+wallfacer handbook restore <page-ref>         # refused unless the page is deleted
 ```
 
 A page write is live knowledge immediately, and every editing session is snapshotted, so the previous wording stays readable through `handbook revisions`. `reorder` is one atomic write of a parent's complete, mixed child list. Moving a playbook changes only its parent and position: no draft save, no publish, no trigger change, no task.
