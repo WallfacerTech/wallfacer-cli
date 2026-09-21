@@ -107,7 +107,7 @@ wallfacer handbook delete <page-ref>          # children move up; history is kep
 wallfacer handbook restore <page-id>          # deleted pages are reached by ID
 ```
 
-A page write is live knowledge immediately, and every editing session is snapshotted, so the previous wording stays readable through `handbook revisions`. `reorder` is one atomic write of a parent's complete, mixed child list. Moving a playbook changes only its parent and position: no draft save, no publish, no trigger change, no task.
+A page write is live knowledge immediately, and `handbook revisions` holds one row per editing session, not per edit: same-author saves within ten minutes of the session's first save update that row in place with the latest body, so the wording you just overwrote in the same sitting is not recoverable. `reorder` is one atomic write of a parent's complete, mixed child list. Moving a playbook changes only its parent and position: no draft save, no publish, no trigger change, no task.
 
 Playbook authoring splits saving from publishing. `save-draft` stores a working copy and changes nothing about how the playbook runs; `publish` sends that saved draft to the version endpoint and is the only command besides `create-playbook` that changes the versioned definition.
 
