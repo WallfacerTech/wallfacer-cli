@@ -118,6 +118,8 @@ func (f *authoringFixture) route(r *http.Request) (string, int) {
 		return versionDiffJSON, http.StatusOK
 
 	// Published, with no draft saved.
+	case r.URL.Path == base+"/pipelines/"+playbookPublishedOnlyID+"/draft" && r.Method == http.MethodPut:
+		return "", http.StatusNoContent
 	case r.URL.Path == base+"/pipelines/"+playbookPublishedOnlyID:
 		return wrapData(playbookPublishedOnlyRecordJSON), http.StatusOK
 
@@ -257,6 +259,28 @@ func TestSaveDraftStoresTheDraftWithoutPublishing(t *testing.T) {
 	}
 	if published, discarded := fixture.counts(); published != 0 || discarded != 0 {
 		t.Errorf("saving a draft published %d versions and discarded %d drafts", published, discarded)
+	}
+}
+
+func TestSaveFirstDraftReportsHasDraftFromAfterTheWrite(t *testing.T) {
+	fixture := newAuthoringFixture(t)
+
+	definition := map[string]interface{}{
+		"format_version": float64(1),
+		"steps":          []interface{}{map[string]interface{}{"id": "implement", "kind": "ai"}},
+	}
+
+	// This playbook has no draft before the call, so a reference built from
+	// the pre-write state reports the draft the call just created as absent.
+	output := capture(t, func() error {
+		return runPlaybookSaveDraft(fixture.api(), playbookPublishedOnlyID, definition)
+	})
+
+	if hasDraft := output["reference"].(map[string]interface{})["has_draft"]; hasDraft != true {
+		t.Errorf("a first draft must be reported as present on the save itself: %v", output["reference"])
+	}
+	if data := output["data"].(map[string]interface{}); data["saved"] != true {
+		t.Errorf("the save must report itself as saved: %v", data)
 	}
 }
 
@@ -750,12 +774,27 @@ func TestCreateWithDraftSavesTheDraftToo(t *testing.T) {
 	fixture := newAuthoringFixture(t)
 
 	definition := map[string]interface{}{"steps": []interface{}{}}
-	capture(t, func() error {
+	output := capture(t, func() error {
 		return runPlaybookCreate(fixture.api(), "New Playbook", "", "", nil, definition, true)
 	})
 
 	if got := fixture.methodsFor("/draft"); len(got) != 1 || !strings.HasPrefix(got[0], http.MethodPut) {
 		t.Errorf("--draft should save exactly one draft, got %v", got)
+	}
+
+	// The created record is read before the draft is saved, so it must be
+	// brought up to date rather than reporting the draft as absent in the
+	// same payload that reports it present.
+	data := output["data"].(map[string]interface{})
+	playbook := data["playbook"].(map[string]interface{})
+	if playbook["draft"] == nil {
+		t.Errorf("the created playbook must carry the draft the same call saved: %v", playbook)
+	}
+	if present := data["draft"].(map[string]interface{})["present"]; present != true {
+		t.Errorf("the draft block must report the draft as present: %v", data["draft"])
+	}
+	if hasDraft := output["reference"].(map[string]interface{})["has_draft"]; hasDraft != true {
+		t.Errorf("the reference must report has_draft after a create that saved one: %v", output["reference"])
 	}
 }
 
