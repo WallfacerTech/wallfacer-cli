@@ -175,9 +175,15 @@ func runChat(api *directoryAPI, reference, prompt string, opts taskOptions) erro
 }
 
 func runPlaybook(api *directoryAPI, reference, message, agentReference string, opts taskOptions) error {
-	// --agent is resolved first: it is the cheaper lookup and an unusable one
-	// refuses the run outright, so a bad agent should not cost the handbook
-	// read before it is reported.
+	// Order is by cost. The playbook reference's local guard is free, so it
+	// keeps its place at the front and a reference from another account is
+	// still refused without a single request. --agent is resolved next: it is
+	// the cheaper of the two lookups and an unusable one refuses the run
+	// outright, so a bad agent should not cost the handbook read first.
+	if _, err := api.guardHandbookRef(reference, kindPlaybook); err != nil {
+		return err
+	}
+
 	var agent *teamMember
 	var createdBy int64
 	if strings.TrimSpace(agentReference) != "" {

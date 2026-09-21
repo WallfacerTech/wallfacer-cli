@@ -864,3 +864,20 @@ func TestRunResolvesTheAgentBeforeThePlaybook(t *testing.T) {
 		}
 	}
 }
+
+// Resolving --agent before the playbook must not cost the reference's local
+// guard its place: a playbook URL from another account is refused with no
+// request at all, however usable --agent is.
+func TestRunRefusesAnotherAccountsPlaybookBeforeResolvingTheAgent(t *testing.T) {
+	fixture := newTeamFixture(t)
+
+	foreign := "https://app.wallfacer.ai/accounts/" + otherAccountID + "/handbook/" + playbookBuildID
+	message := expectError(t, func() error { return runPlaybook(fixture.api(), foreign, "", "jin", taskOptions{}) })
+	if !strings.Contains(message, "belongs to account "+otherAccountID) {
+		t.Errorf("a reference from another account failed with %q", message)
+	}
+
+	if got := fixture.recorded(); len(got) != 0 {
+		t.Errorf("expected the mismatch to be caught before any request, got %d: %s %s", len(got), got[0].method, got[0].path)
+	}
+}

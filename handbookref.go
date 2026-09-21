@@ -478,22 +478,13 @@ func (a *handbookAPI) resolveHandbookRef(reference, want string) (*handbookRef, 
 		return nil, errors.New("a handbook reference is required")
 	}
 
-	locator, err := parseHandbookLocator(trimmed)
+	locator, err := a.guardHandbookRef(reference, want)
 	if err != nil {
 		return nil, err
 	}
 
 	if locator == nil {
 		return a.resolveByName(trimmed, want)
-	}
-
-	// Account mismatch is rejected before any read, so a reference from
-	// another account can never reach a mutation or a run.
-	if locator.accountID != "" && !strings.EqualFold(locator.accountID, a.accountID) {
-		return nil, errors.Errorf("reference %q belongs to account %s, but the configured account is %s", reference, locator.accountID, a.accountID)
-	}
-	if locator.kind != "" && want != "" && locator.kind != want {
-		return nil, errors.Errorf("reference %q names a %s, but a %s was requested", reference, locator.kind, want)
 	}
 
 	kind := locator.kind
@@ -507,6 +498,37 @@ func (a *handbookAPI) resolveHandbookRef(reference, want string) (*handbookRef, 
 	}
 	ref.versionHint = locator.versionID
 	return ref, nil
+}
+
+// guardHandbookRef runs every check on a reference that needs no request: the
+// reference is present, it parses, and where it carries an account or a type
+// they match what was asked for. It returns the parsed locator, or nil for a
+// name or path, which can only be resolved by reading the tree.
+//
+// resolveHandbookRef runs it before any read. A caller with other work to do
+// first can run it on its own, so the local refusal still comes before that
+// work rather than after it.
+func (a *handbookAPI) guardHandbookRef(reference, want string) (*handbookLocator, error) {
+	trimmed := strings.TrimSpace(reference)
+	if trimmed == "" {
+		return nil, errors.New("a handbook reference is required")
+	}
+
+	locator, err := parseHandbookLocator(trimmed)
+	if err != nil || locator == nil {
+		return nil, err
+	}
+
+	// Account mismatch is rejected before any read, so a reference from
+	// another account can never reach a mutation or a run.
+	if locator.accountID != "" && !strings.EqualFold(locator.accountID, a.accountID) {
+		return nil, errors.Errorf("reference %q belongs to account %s, but the configured account is %s", reference, locator.accountID, a.accountID)
+	}
+	if locator.kind != "" && want != "" && locator.kind != want {
+		return nil, errors.Errorf("reference %q names a %s, but a %s was requested", reference, locator.kind, want)
+	}
+
+	return locator, nil
 }
 
 func (a *handbookAPI) resolveByID(reference, id, kind, form string) (*handbookRef, error) {
