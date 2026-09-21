@@ -471,10 +471,12 @@ func TestReadPageReturnsBodyAndFollowUps(t *testing.T) {
 	assertFollowUpRuns(t, followUp)
 }
 
-// Every follow_up entry that names a record in the result runs as printed: a
-// read holds no revision id, so it names `revisions` rather than a `revision`
-// command with a placeholder in it. `next_page` is exempt, since which page to
-// ask for is the caller's choice rather than an id the command is holding.
+// A result that names one record has follow_up entries that all run as
+// printed: a read holds no revision id, so it names `revisions` rather than a
+// `revision` command with a placeholder in it. `next_page` is exempt, since
+// which page to ask for is the caller's choice rather than an id the command
+// is holding. The many-record listings are a different shape and are covered
+// by TestManyRecordListingsFollowUpIsAShape.
 func assertFollowUpRuns(t *testing.T, followUp map[string]interface{}) {
 	t.Helper()
 	for key, value := range followUp {
@@ -772,6 +774,35 @@ func TestListCarriesPathsAndArchivedState(t *testing.T) {
 	}
 	if paths[playbookBuildID] != "Engineering/Build" {
 		t.Errorf("active playbook path is %q, want Engineering/Build", paths[playbookBuildID])
+	}
+}
+
+// `tree`, `list` and `search` name many records at once, so their follow_up
+// entries give the command's shape and the caller fills the reference in from
+// the record they picked. That is the documented exception to entries running
+// as printed, so pin it rather than leave it to drift either way.
+func TestManyRecordListingsFollowUpIsAShape(t *testing.T) {
+	fixture := newHandbookFixture(t)
+
+	listings := map[string]func() error{
+		"tree": func() error { return runHandbookTree(fixture.api()) },
+		"list": func() error { return runHandbookList(fixture.api(), "", 0, 0, false, false) },
+		"search": func() error {
+			return runHandbookSearch(fixture.api(), "build", "", 20, 20)
+		},
+	}
+
+	for name, run := range listings {
+		t.Run(name, func(t *testing.T) {
+			followUp := capture(t, run)["follow_up"].(map[string]interface{})
+			if _, ok := followUp["read"]; !ok {
+				t.Fatalf("%s follow_up is missing a read entry: %v", name, followUp)
+			}
+			read := followUp["read"].(string)
+			if !strings.Contains(read, "<") {
+				t.Errorf("%s follow_up.read names a concrete record (%s); the docs say these are shapes", name, read)
+			}
+		})
 	}
 }
 

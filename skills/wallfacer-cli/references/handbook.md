@@ -165,7 +165,9 @@ A task pins the playbook version that was active when it was created and keeps r
 
 ## Following a result
 
-Every command returns a `follow_up` object naming the exact command for each reference in the result: the parent page, each child, each linked page of a playbook, its versions, its draft, a page's revisions. Every entry runs as printed, with no placeholder left to fill in: that is why a read names `revisions` rather than a `revision` command it holds no id for, and why the `revisions` listing names a concrete `revision` command and `versions` a concrete `version` one. One result plus `--help` is enough to reach everything else. A write returns the updated resource plus the reads that show what it did, including the revisions command for the page it touched.
+Every command returns a `follow_up` object naming the next command. When the result names one record — a read, a resolve, a write, a `revisions` or `versions` listing — each entry names the exact command for a reference in it: the parent page, each child, each linked page of a playbook, its versions, its draft, a page's revisions. Those run as printed, with no placeholder left to fill in: that is why a read names `revisions` rather than a `revision` command it holds no id for, and why the `revisions` listing names a concrete `revision` command and `versions` a concrete `version` one.
+
+`tree`, `list` and `search` name many records at once, so their entries carry a `<id>`, `<query>` or `<n>` placeholder you fill from the record you picked rather than an id the command is holding. `next_page` is a placeholder for the same reason: which page to ask for is the caller's choice. One result plus `--help` is enough to reach everything else. A write returns the updated resource plus the reads that show what it did, including the revisions command for the page it touched.
 
 `--query` projection and `-o yaml` work as they do everywhere else:
 

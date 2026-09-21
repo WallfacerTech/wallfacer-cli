@@ -697,9 +697,9 @@ func (a *handbookAPI) followUp(ref *handbookRef) map[string]interface{} {
 
 	switch ref.Type {
 	case kindPage:
-		// No revision id is in hand here, and every follow_up entry is a
-		// command that runs as printed: `revisions` is the one that names a
-		// concrete `revision` command.
+		// This result names one record, so every entry here runs as printed.
+		// No revision id is in hand, which is why the entry is `revisions`:
+		// that listing is what names a concrete `revision` command.
 		out["revisions"] = fmt.Sprintf("wallfacer handbook revisions %s", ref.ID)
 	case kindPlaybook:
 		out["versions"] = fmt.Sprintf("wallfacer handbook versions %s", ref.ID)

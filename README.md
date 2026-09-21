@@ -116,7 +116,7 @@ wallfacer handbook draft <playbook-id>             # the unpublished draft, on i
 wallfacer handbook revisions <page-id>
 ```
 
-Reads never substitute an unpublished draft for a playbook's active definition: `handbook read` reports only that a draft exists, and `handbook draft` returns its content. Every result carries a `follow_up` object naming the command for each reference in it, each one runnable as printed, so the next read is available from one result plus `--help`.
+Reads never substitute an unpublished draft for a playbook's active definition: `handbook read` reports only that a draft exists, and `handbook draft` returns its content. Every result carries a `follow_up` object naming the next command. Where the result names one record — a read, a resolve, a write, a `revisions` or `versions` listing — every entry runs as printed, with the ids already filled in. Where it names many (`tree`, `list`, `search`), the entries give the command's shape and you fill the reference in from the record you picked; `next_page` is the same, since which page to ask for is the caller's choice. Either way the next read is available from one result plus `--help`.
 
 Page edits and hierarchy changes use the same references:
 
