@@ -116,6 +116,9 @@ func TestUpdateSendsOnlyTheFieldsGivenAndNamesTheRevisionReads(t *testing.T) {
 	if !strings.Contains(revisions, pageBuildID) {
 		t.Errorf("follow_up.revisions is %q, want the command that reads this page's history", revisions)
 	}
+	if _, templated := followUp["revision"]; templated {
+		t.Errorf("a write holds no revision id, so it must not name a revision command: %v", followUp)
+	}
 	if note, _ := out["note"].(string); !strings.Contains(note, "revision") {
 		t.Errorf("update should say history is retained, got %q", note)
 	}
@@ -247,6 +250,19 @@ func TestRestoreRefusesALivePage(t *testing.T) {
 	fixture := newHandbookFixture(t)
 
 	err := runHandbookRestore(fixture.api(), pageBuildID)
+	if err == nil || !strings.Contains(err.Error(), "not deleted") {
+		t.Fatalf("expected a not-deleted error, got %v", err)
+	}
+	assertNoMutations(t, fixture)
+}
+
+// Restore takes the same reference forms as every other command; the guard is
+// on state, not on how the target was named. A name only ever resolves to an
+// active page, so it lands on the same refusal.
+func TestRestoreResolvesANameAndRefusesItOnState(t *testing.T) {
+	fixture := newHandbookFixture(t)
+
+	err := runHandbookRestore(fixture.api(), "Engineering/Build")
 	if err == nil || !strings.Contains(err.Error(), "not deleted") {
 		t.Fatalf("expected a not-deleted error, got %v", err)
 	}

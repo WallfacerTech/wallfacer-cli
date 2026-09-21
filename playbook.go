@@ -125,9 +125,9 @@ func playbookArchiveCommand(accountID string) *cobra.Command {
 
 func playbookRestoreCommand(accountID string) *cobra.Command {
 	return &cobra.Command{
-		Use:   "restore-playbook <playbook-id>",
-		Short: "Restore an archived playbook by ID",
-		Long:  cli.Markdown("Takes the ID (or detail URL) of an archived playbook: names resolve against active entries only, so an archived playbook is reachable by ID alone. It comes back disabled, with its triggers still cleared until `handbook update-playbook --enable`, and renamed with a numeric suffix if another playbook claimed its name in the meantime."),
+		Use:   "restore-playbook <playbook-reference>",
+		Short: "Restore an archived playbook",
+		Long:  cli.Markdown("Takes the same reference forms as every other command and refuses a playbook that is not archived. In practice the target is an ID (or a detail URL carrying one), because names resolve against active entries only and so can never name an archived playbook. It comes back disabled, with its triggers still cleared until `handbook update-playbook --enable`, and renamed with a numeric suffix if another playbook claimed its name in the meantime."),
 		Args:  cobra.ExactArgs(1),
 		Run: handbookRun(accountID, func(api *handbookAPI, cmd *cobra.Command, args []string) error {
 			return runPlaybookRestore(api, args[0])
