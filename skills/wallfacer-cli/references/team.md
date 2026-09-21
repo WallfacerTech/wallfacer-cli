@@ -35,7 +35,7 @@ wallfacer team list --max-pages 50        # widen the sweep
 Sweeps the agent and user listings past the first page and returns one list. Each record carries:
 
 - `type` — `agent` or `human`.
-- `id`, `name`, `email`, `github_username`.
+- `id`, `name`, `email`, `github_username` (null when no GitHub account is linked).
 - `handle`, `title`, `role_page_id`, `environment_id`, `vendor`, `model`, `runtime_status` for agents; `role` for humans.
 - `state` (`active`, `paused`, `disabled`) and `chatable`. Humans are always `active`: the members listing returns active memberships only, so somebody removed from the account is absent from the list rather than reported as removed.
 - `follow_up` — the command for each reference in the record.
@@ -99,6 +99,7 @@ Refusals:
 - A playbook with a draft and nothing published. Publish it first; `wallfacer handbook draft <playbook-id>` reads the draft.
 - An archived playbook.
 - A URL from another account, refused before any request goes out.
+- A playbook with a step the performing agent has no environment for. Give that agent a computer, or name one for the run with `--environment-id`.
 
 A disabled playbook runs. Disabling clears its triggers so no event spawns a task, which makes a manual run the deliberate way to fire one; the response carries `disabled_note` saying so alongside the created task.
 
