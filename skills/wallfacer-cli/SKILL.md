@@ -64,14 +64,15 @@ All commands are flat top-level groups (not nested). Write operations take JSON 
 | Group | Read | Write |
 |---|---|---|
 | team | `list`, `get <reference>` | — |
-| handbook | `tree`, `list`, `search <query>`, `read <ref>`, `resolve <ref>`, `revisions <page-ref>`, `revision <page-ref> <rev-id>`, `versions <playbook-ref>`, `version <playbook-ref> [version]`, `draft <playbook-ref>`, `diff <playbook-ref> <a> <b>`, `diff-draft <playbook-ref>` | `create [title]`, `update <page-ref>`, `delete <page-ref>`, `restore <page-id>`, `move <ref>`, `reorder <ref>...`, `create-playbook`, `update-playbook <playbook-ref>`, `archive-playbook <playbook-ref>`, `restore-playbook <playbook-id>`, `save-draft <playbook-ref>`, `discard-draft <playbook-ref>`, `publish <playbook-ref>` |
+| handbook | `tree`, `list`, `search <query>`, `read <reference>`, `resolve <reference>`, `revisions <page-reference>`, `revision <page-reference> <revision-id>`, `versions <playbook-reference>`, `version <playbook-reference> [version]`, `draft <playbook-reference>`, `diff <playbook-reference> <a> <b>`, `diff-draft <playbook-reference>` | `create [<title>]`, `update <page-reference>`, `delete <page-reference>`, `restore <page-id>`, `move <reference>`, `reorder <reference>...`, `create-playbook`, `update-playbook <playbook-reference>`, `archive-playbook <playbook-reference>`, `restore-playbook <playbook-id>`, `save-draft <playbook-reference>`, `discard-draft <playbook-reference>`, `publish <playbook-reference>` |
 | accounts | `list`, `get`, `handbook` | — |
 | pages | `list`, `get <page-id>` | `create`, `update <page-id>`, `delete <page-id>` |
 | revisions | `list <page-id>`, `get <page-id> <revision-id>` | — |
 | environments | `list`, `get <env-id>` | `create`, `update <env-id>`, `delete <env-id>` |
 | snapshots | `list <env-id>`, `get <env-id> <snap-id>`, `logs <env-id> <snap-id>`, `log <env-id> <snap-id> <source>` | `create <env-id>`, `delete <env-id> <snap-id>` |
 | vms | `list`, `get <vm-id>`, `logs <vm-id>`, `log <vm-id> <source>` | `create`, `delete <vm-id>`, `commands <vm-id>` |
-| tasks | `list`, `get <task-id>` | `create`, `update <task-id>`, `delete <task-id>`, and the two entry points `chat <agent> [prompt]` and `run <playbook>` |
+| tasks | `list`, `get <task-id>` | `create`, `update <task-id>`, `delete <task-id>` |
+| (top level, no group) | — | `chat <agent> [prompt]`, `run <playbook>` — the two entry points that create a task; they are not subcommands of `tasks` |
 | attachments | `list <task-id>`, `contents <task-id> <att-id>` | `create <task-id>`, `delete <task-id> <att-id>`, `refresh <task-id> <att-id>` |
 | sessions | `list <task-id>`, `get <task-id> <sess-id>` | `create <task-id>`, `update <task-id> <sess-id>`, `abort <task-id> <sess-id>` |
 | messages | `list <task-id> <sess-id>`, `get <task-id> <sess-id> <msg-id>` | `create <task-id> <sess-id>`, `delete <task-id> <sess-id> <msg-id>` |
@@ -92,7 +93,7 @@ wallfacer handbook tree                       # pages and playbooks as one neste
 wallfacer handbook list --type playbook       # flat, with each entry's path and state
 wallfacer handbook search "pull request"      # both types, title + description + page body
 wallfacer handbook read "Engineering/Build"   # page body, or a playbook's active definition
-wallfacer handbook resolve <ref>              # a name, path, or URL -> stable ID, type, state
+wallfacer handbook resolve <reference>        # a name, path, or URL -> stable ID, type, state
 ```
 
 Page authoring and tree organization take the same references:
@@ -103,7 +104,7 @@ echo '{"title":"PR bodies","body":"..."}' | wallfacer handbook create
 wallfacer handbook update "Engineering/Build" --body-file build.md
 wallfacer handbook move <playbook-id> --under "Engineering" --position 0
 wallfacer handbook reorder --under "Engineering" "Build" <playbook-id> "Review"
-wallfacer handbook delete <page-ref>          # children move up; history is kept
+wallfacer handbook delete <page-reference>    # children move up; history is kept
 wallfacer handbook restore <page-id>          # deleted pages are reached by ID
 ```
 
@@ -112,10 +113,10 @@ A page write is live knowledge immediately, and every editing session is snapsho
 Playbook authoring splits saving from publishing. `save-draft` stores a working copy and changes nothing about how the playbook runs; `publish` sends that saved draft to the version endpoint and is the only command besides `create-playbook` that changes the versioned definition.
 
 ```bash
-wallfacer handbook save-draft <playbook-ref> --definition-file draft.yaml
-wallfacer handbook diff-draft <playbook-ref>  # local comparison against the active version
-wallfacer handbook publish <playbook-ref> --notes "Added the smoke-test step"
-wallfacer handbook discard-draft <playbook-ref>
+wallfacer handbook save-draft <playbook-reference> --definition-file draft.yaml
+wallfacer handbook diff-draft <playbook-reference>  # local comparison against the active version
+wallfacer handbook publish <playbook-reference> --notes "Added the smoke-test step"
+wallfacer handbook discard-draft <playbook-reference>
 ```
 
 Publishing fails without creating a version when there is no saved draft or the server rejects it, never enables a disabled playbook, and with `--activate=false` reports the new version separately from the active one. A page's content and a playbook's linked pages reach later runs as soon as they are saved, with no publish; a task already running stays pinned to the playbook version it was created against.
