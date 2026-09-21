@@ -482,6 +482,14 @@ func runPlaybookUpdate(api *handbookAPI, reference string, update *playbookUpdat
 		return err
 	}
 
+	// Enabling an archived playbook is the one metadata change the server
+	// refuses outright, and its 422 names the `archived: false` request field
+	// rather than the command that restores one. Say it in the CLI's own
+	// vocabulary, before anything is sent.
+	if enabled, ok := update.body["disabled"].(bool); ok && !enabled && ref.State == "archived" {
+		return errors.Errorf("playbook %s is archived, so enabling it is refused; restore it first with: wallfacer handbook restore-playbook %s", ref.ID, ref.ID)
+	}
+
 	if len(update.linkedPageRefs) > 0 {
 		linkedIDs, err := api.resolvePageIDs(update.linkedPageRefs)
 		if err != nil {
@@ -731,6 +739,19 @@ func runPlaybookPublish(api *handbookAPI, reference, notes string, activate bool
 		// The server validates at publish time. Nothing was versioned, so
 		// nothing is reported as one.
 		return errors.Wrapf(err, "publishing the draft of playbook %s failed; no version was created", ref.ID)
+	}
+
+	// The version endpoint answers out of the row it just inserted, and
+	// created_at is a database default that insert does not read back, so the
+	// timestamp can arrive null on a record that has one. Read the version to
+	// report the real timestamp rather than a null the next command
+	// contradicts.
+	if published["created_at"] == nil {
+		if version := versionArgument(published["version"]); version != "" {
+			if stored, err := api.getPipelineVersion(ref.ID, version); err == nil && stored["created_at"] != nil {
+				published["created_at"] = stored["created_at"]
+			}
+		}
 	}
 
 	// Read the playbook back: which version is active, whether the draft was

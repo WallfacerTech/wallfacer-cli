@@ -111,9 +111,11 @@ func (f *authoringFixture) route(r *http.Request) (string, int) {
 		f.mu.Lock()
 		f.published++
 		f.mu.Unlock()
-		return wrapData(newVersionRecordJSON), http.StatusCreated
+		return wrapData(newVersionPublishedJSON), http.StatusCreated
 	case r.URL.Path == base+"/pipelines/"+playbookBuildID+"/versions/2":
 		return wrapData(playbookVersionRecordJSON), http.StatusOK
+	case r.URL.Path == base+"/pipelines/"+playbookBuildID+"/versions/3":
+		return wrapData(newVersionRecordJSON), http.StatusOK
 	case r.URL.Path == base+"/pipelines/"+playbookBuildID+"/versions/2/diff/3":
 		return versionDiffJSON, http.StatusOK
 
@@ -351,6 +353,46 @@ func TestPublishSendsTheSavedDraftToTheVersionEndpoint(t *testing.T) {
 	for _, request := range fixture.recorded() {
 		if request.method == http.MethodDelete {
 			t.Errorf("publish must not delete anything: %s", request.path)
+		}
+	}
+}
+
+// The publish response carries a null created_at on a version that has one,
+// so the timestamp is read back rather than reported as missing.
+func TestPublishReportsTheVersionsRealCreatedAt(t *testing.T) {
+	fixture := newAuthoringFixture(t)
+
+	output := capture(t, func() error {
+		return runPlaybookPublish(fixture.api(), playbookBuildID, "", true)
+	})
+
+	version := output["data"].(map[string]interface{})["published_version"].(map[string]interface{})
+	if version["created_at"] != "2026-09-18T00:00:00.000000Z" {
+		t.Errorf("published_version.created_at is %v, want the stored timestamp", version["created_at"])
+	}
+
+	if published, _ := fixture.counts(); published != 1 {
+		t.Errorf("the read-back published %d versions, want 1", published)
+	}
+}
+
+// A publish response that already carries its timestamp is reported as it
+// came back, with no second call to the version endpoint.
+func TestPublishDoesNotReReadAVersionThatCarriesItsTimestamp(t *testing.T) {
+	fixture := newAuthoringFixture(t)
+
+	output := capture(t, func() error {
+		return runPlaybookPublish(fixture.api(), playbookUnpublishedID, "", true)
+	})
+
+	version := output["data"].(map[string]interface{})["published_version"].(map[string]interface{})
+	if version["created_at"] != "2026-09-18T00:00:00.000000Z" {
+		t.Errorf("published_version.created_at is %v, want the publish response's own: %v", version["created_at"], version)
+	}
+
+	for _, request := range fixture.recorded() {
+		if request.method == http.MethodGet && strings.Contains(request.path, "/versions/") {
+			t.Errorf("nothing should be read back: %s", request.path)
 		}
 	}
 }
@@ -684,6 +726,46 @@ func TestRestorePlaybookRefusesAPlaybookThatIsNotArchived(t *testing.T) {
 	}
 }
 
+// The server refuses to enable an archived playbook with a 422 naming the
+// `archived: false` request field. The CLI has no such flag, so the refusal is
+// made here and names the command that restores one.
+func TestUpdatePlaybookRefusesEnablingAnArchivedPlaybook(t *testing.T) {
+	fixture := newAuthoringFixture(t)
+
+	err := captureError(t, func() error {
+		update := &playbookUpdate{body: map[string]interface{}{"disabled": false}}
+		return runPlaybookUpdate(fixture.api(), playbookArchivedID, update)
+	})
+	if !strings.Contains(err.Error(), "wallfacer handbook restore-playbook "+playbookArchivedID) {
+		t.Errorf("the refusal should name the command to run: %v", err)
+	}
+	if strings.Contains(err.Error(), "archived: false") || strings.Contains(err.Error(), "pipeline") {
+		t.Errorf("the refusal should not carry the API's own vocabulary: %v", err)
+	}
+
+	for _, request := range fixture.recorded() {
+		if request.method != http.MethodGet {
+			t.Errorf("a refused update must not mutate anything: %s %s", request.method, request.path)
+		}
+	}
+}
+
+// Disabling an archived playbook is not the refused transition, and neither is
+// any other metadata change: only enabling one is.
+func TestUpdatePlaybookStillPatchesOtherFieldsOnAnArchivedPlaybook(t *testing.T) {
+	fixture := newAuthoringFixture(t)
+
+	update := &playbookUpdate{body: map[string]interface{}{"disabled": true}}
+	capture(t, func() error {
+		return runPlaybookUpdate(fixture.api(), playbookArchivedID, update)
+	})
+
+	body := fixture.bodyOf(t, http.MethodPatch, "/pipelines/"+playbookArchivedID)
+	if body["disabled"] != true {
+		t.Errorf("the disabled flag was not sent: %v", body)
+	}
+}
+
 func TestAuthoringRefusesWrongTypesAndOtherAccountsWithoutMutating(t *testing.T) {
 	fixture := newAuthoringFixture(t)
 
@@ -829,6 +911,12 @@ const playbookRejectedRecordJSON = `{"id":"` + playbookRejectedID + `","account_
 const playbookCreatedRecordJSON = `{"id":"` + playbookCreatedID + `","account_id":"` + testAccountID + `","name":"New Playbook","description":"A description.","active_version":{"id":"` + newVersionID + `","version":1,"created_at":"2026-09-18T00:00:00.000000Z","steps":[{"id":"implement","title":"Implement the issue","kind":"ai"}]},"version_count":1,"draft":null,"parent_page_id":"` + pageBuildID + `","position":8,"linked_page_ids":["` + pageBuildID + `"],"disabled_at":null,"archived_at":null,"created_at":"2026-09-18T00:00:00.000000Z","created_by":1}`
 
 const newVersionRecordJSON = `{"id":"` + newVersionID + `","pipeline_id":"` + playbookBuildID + `","version":3,"definition":{"format_version":1,"steps":[{"id":"implement","kind":"ai","title":"Implement the issue, revised"}],"triggers":[]},"notes":"Revised the implement step.","created_at":"2026-09-18T00:00:00.000000Z","created_by":1}`
+
+// The version endpoint answers out of the row it just inserted, and created_at
+// is a database default that insert does not read back, so a publish response
+// carries a null timestamp on a record that has one. Reading the version back
+// is what turns it into the stored timestamp.
+const newVersionPublishedJSON = `{"id":"` + newVersionID + `","pipeline_id":"` + playbookBuildID + `","version":3,"definition":{"format_version":1,"steps":[{"id":"implement","kind":"ai","title":"Implement the issue, revised"}],"triggers":[]},"notes":"Revised the implement step.","created_at":null,"created_by":1}`
 
 const firstVersionRecordJSON = `{"id":"` + newVersionID + `","pipeline_id":"` + playbookUnpublishedID + `","version":1,"definition":{"format_version":1,"steps":[{"id":"implement","kind":"ai","title":"Implement the issue"}],"triggers":[]},"notes":null,"created_at":"2026-09-18T00:00:00.000000Z","created_by":1}`
 
