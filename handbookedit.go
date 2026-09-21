@@ -173,6 +173,22 @@ func addHandbookParentFlags(cmd *cobra.Command) {
 	cmd.Flags().Bool("top-level", false, "File at the top level of the handbook")
 }
 
+// handbookPositionFlag reads `--position` for a move, returning -1 when it was
+// not passed. -1 is also the sentinel the payload reads as "leave the position
+// alone", so a negative position is refused here rather than dropped: the
+// server rejects one too, and a request that never carried the field would
+// otherwise be reported as a move that placed the entry.
+func handbookPositionFlag(cmd *cobra.Command) (int, error) {
+	if !cmd.Flags().Changed("position") {
+		return -1, nil
+	}
+	position, _ := cmd.Flags().GetInt("position")
+	if position < 0 {
+		return 0, errors.Errorf("--position must be 0 or greater, got %d", position)
+	}
+	return position, nil
+}
+
 func handbookParentFlags(cmd *cobra.Command) (string, bool, error) {
 	under, _ := cmd.Flags().GetString("under")
 	topLevel, _ := cmd.Flags().GetBool("top-level")
@@ -390,9 +406,9 @@ sub-pages, and a reference from another account never reaches a request.`),
 			if under == "" && !topLevel {
 				return errors.New("a destination is required: pass --under <page-reference> or --top-level")
 			}
-			position := -1
-			if cmd.Flags().Changed("position") {
-				position, _ = cmd.Flags().GetInt("position")
+			position, err := handbookPositionFlag(cmd)
+			if err != nil {
+				return err
 			}
 			return runHandbookMove(api, args[0], kind, handbookEdit{parentRef: under, topLevel: topLevel}, position)
 		}),
@@ -510,9 +526,17 @@ func runHandbookDelete(api *handbookAPI, reference string) error {
 		return handbookWriteError(err, ref)
 	}
 
+	// Only a delete that actually moved children names a destination. With no
+	// children, naming the old parent would report a re-parenting that never
+	// happened.
 	var reparentedTo interface{}
-	if ref.ParentPageID != "" {
+	if len(reparented) > 0 && ref.ParentPageID != "" {
 		reparentedTo = ref.ParentPageID
+	}
+
+	note := "Sub-pages and playbooks filed under this page were not deleted: they moved up to `reparented_to` (null means the top level). The page keeps its content and revision history and can be restored by ID."
+	if len(reparented) == 0 {
+		note = "Nothing was filed under this page, so nothing moved. The page keeps its content and revision history and can be restored by ID."
 	}
 
 	return emitHandbook(map[string]interface{}{
@@ -526,7 +550,7 @@ func runHandbookDelete(api *handbookAPI, reference string) error {
 			"restorable_with_id": ref.ID,
 		},
 		"reference": ref,
-		"note":      "Sub-pages and playbooks filed under this page were not deleted: they moved up to `reparented_to` (null means the top level). The page keeps its content and revision history and can be restored by ID.",
+		"note":      note,
 		"follow_up": map[string]interface{}{
 			"restore":   fmt.Sprintf("wallfacer handbook restore %s", ref.ID),
 			"revisions": fmt.Sprintf("wallfacer handbook revisions %s", ref.ID),

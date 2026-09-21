@@ -581,7 +581,7 @@ func TestRunRefusesPagesDraftsAndOtherAccounts(t *testing.T) {
 	}
 
 	draft := expectError(t, func() error { return runPlaybook(fixture.api(), playbookDraftOnlyID, "", "", taskOptions{}) })
-	if !strings.Contains(draft, "no published version") {
+	if !strings.Contains(draft, "is draft-only") || !strings.Contains(draft, "wallfacer handbook publish") {
 		t.Errorf("running a draft-only playbook failed with %q", draft)
 	}
 
@@ -835,3 +835,32 @@ const playbookDraftOnlyRecordJSON = `{"id":"` + playbookDraftOnlyID + `","accoun
 const chatTaskRecordJSON = `{"id":"` + chatTaskID + `","account_id":"` + testAccountID + `","environment_id":"eeee1111-1111-4111-8111-111111111111","title":"Failing build","prompt":"Look at the failing build","status":"active","pipeline_id":null,"pipeline_version_id":null,"pipeline_version":null,"origin":{"kind":"manual"},"owner_user_id":201,"performer_user_id":null,"created_by":101,"created_at":"2026-09-18T00:00:00.000000Z"}`
 
 const runTaskRecordJSON = `{"id":"` + runTaskID + `","account_id":"` + testAccountID + `","environment_id":"eeee1111-1111-4111-8111-111111111111","title":"Build","prompt":null,"status":"active","pipeline_id":"` + playbookBuildID + `","pipeline_version_id":"` + playbookVersionID + `","pipeline_version":2,"current_step_id":"implement","current_step_index":0,"steps_total":1,"origin":{"kind":"playbook","playbook_name":"Build"},"owner_user_id":201,"performer_user_id":null,"created_by":101,"created_at":"2026-09-18T00:00:00.000000Z"}`
+
+func TestTheHumanRefusalNamesTheMemberOnce(t *testing.T) {
+	fixture := newTeamFixture(t)
+
+	byName := expectError(t, func() error { return runChat(fixture.api(), "Grace Hopper", "hello", taskOptions{}) })
+	if strings.Count(byName, "Grace Hopper") != 1 {
+		t.Errorf("the refusal repeats the name: %q", byName)
+	}
+
+	byEmail := expectError(t, func() error { return runChat(fixture.api(), "grace@example.test", "hello", taskOptions{}) })
+	if !strings.Contains(byEmail, "Grace Hopper") || !strings.Contains(byEmail, "human member") {
+		t.Errorf("a reference by email should still name the member: %q", byEmail)
+	}
+}
+
+func TestRunResolvesTheAgentBeforeThePlaybook(t *testing.T) {
+	fixture := newTeamFixture(t)
+
+	message := expectError(t, func() error { return runPlaybook(fixture.api(), playbookBuildID, "", "nobody", taskOptions{}) })
+	if !strings.Contains(message, "no agent or member") {
+		t.Errorf("an unresolvable agent failed with %q", message)
+	}
+
+	for _, request := range fixture.recorded() {
+		if strings.Contains(request.path, "/pipelines") || strings.Contains(request.path, "/pages") {
+			t.Errorf("the playbook was read though --agent could not resolve: %s %s", request.method, request.path)
+		}
+	}
+}
