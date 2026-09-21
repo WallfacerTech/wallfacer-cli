@@ -188,18 +188,24 @@ func handbookParentFlags(cmd *cobra.Command) (string, bool, error) {
 func handbookEditFromFlags(cmd *cobra.Command) (handbookEdit, error) {
 	edit := handbookEdit{body: map[string]interface{}{}}
 
-	raw, err := cli.GetBody("application/json", nil)
-	if err != nil {
-		return edit, errors.Wrap(err, "reading the request body")
-	}
-	if strings.TrimSpace(raw) != "" {
-		if err := json.Unmarshal([]byte(raw), &edit.body); err != nil {
-			return edit, errors.Wrap(err, "the request body is not a JSON object")
+	// cli.GetBody reads stdin to the end whenever stdin is not a terminal, so a
+	// pipe or fifo that stays open — a CI step, a wrapper script, an agent
+	// harness — blocks the command forever. A body flag says where the body
+	// comes from, so there is nothing left to read.
+	if !handbookBodySuppliedByFlags(cmd) {
+		raw, err := cli.GetBody("application/json", nil)
+		if err != nil {
+			return edit, errors.Wrap(err, "reading the request body")
 		}
-		// A literal `null` unmarshals into a nil map rather than failing, and
-		// the flags below would panic writing into it.
-		if edit.body == nil {
-			return edit, errors.New("the request body is not a JSON object")
+		if strings.TrimSpace(raw) != "" {
+			if err := json.Unmarshal([]byte(raw), &edit.body); err != nil {
+				return edit, errors.Wrap(err, "the request body is not a JSON object")
+			}
+			// A literal `null` unmarshals into a nil map rather than failing, and
+			// the flags below would panic writing into it.
+			if edit.body == nil {
+				return edit, errors.New("the request body is not a JSON object")
+			}
 		}
 	}
 
@@ -238,6 +244,18 @@ func handbookEditFromFlags(cmd *cobra.Command) (handbookEdit, error) {
 	return edit, nil
 }
 
+// handbookBodySuppliedByFlags reports whether the markdown body already came
+// from a flag. `clear-body` is only defined on update, and Changed is false for
+// a flag a command does not have.
+func handbookBodySuppliedByFlags(cmd *cobra.Command) bool {
+	for _, name := range []string{"body", "body-file", "clear-body"} {
+		if cmd.Flags().Changed(name) {
+			return true
+		}
+	}
+	return false
+}
+
 func addHandbookContentFlags(cmd *cobra.Command) {
 	cmd.Flags().String("title", "", "Page title")
 	cmd.Flags().String("body", "", "Markdown body")
@@ -254,8 +272,9 @@ func handbookCreateCommand(accountID string) *cobra.Command {
 
 A page is live knowledge the moment it exists: agents running playbooks read it from then on.
 
-The body comes from ` + "`--body`" + `, ` + "`--body-file`" + `, or a JSON object on stdin, and a
-flag wins over the same field in a piped body. File the page with
+The body comes from ` + "`--body`" + `, ` + "`--body-file`" + `, or a JSON object on stdin. Passing a
+body flag means stdin is not read at all, so pipe the whole JSON object when you want
+other fields to come from it too. File the page with
 ` + "`--under <page-reference>`" + ` or leave it at the top level.`),
 		Example: `  wallfacer handbook create "Writing Great PRs" --body-file pr.md --under "R&D/Engineering"
   echo '{"title":"Release","body":"..."}' | wallfacer handbook create`,
@@ -287,7 +306,8 @@ wording stays readable with ` + "`wallfacer handbook revisions <page>`" + ` and
 ` + "`wallfacer handbook revision <page> <revision-id>`" + `; the result names both commands.
 
 Fields left out are left alone. ` + "`--clear-body`" + ` empties the body, which is not the same
-as leaving ` + "`--body`" + ` off.`),
+as leaving ` + "`--body`" + ` off. Passing a body flag means stdin is not read at all, so pipe
+the whole JSON object when you want other fields to come from it too.`),
 		Example: `  wallfacer handbook update "Engineering/Build" --body-file build.md
   echo '{"title":"Build"}' | wallfacer handbook update <page-id>`,
 		Args: cobra.ExactArgs(1),

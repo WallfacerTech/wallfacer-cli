@@ -122,7 +122,7 @@ wallfacer handbook update <page-reference> [--title T] [--body M | --body-file P
                           [--clear-body] [--under <page-reference> | --top-level] [--position N]
 ```
 
-Both accept a JSON object on stdin, the same body the `pages` group takes, and layer the flags over it: a flag wins over the same field in a piped body.
+Both accept a JSON object on stdin, the same body the `pages` group takes, and layer the flags over it: a flag wins over the same field in a piped body. A body flag (`--body`, `--body-file`, `--clear-body`) means stdin is not read at all, so the command never blocks on a pipe that stays open; pipe the whole JSON object when you want other fields to come from it too.
 
 - **A page write is live.** The new content is what agents read from the next task onward.
 - **History is retained.** Each editing session is snapshotted. `follow_up.revisions` in the result names the command that reads the earlier wording back, and `follow_up.revision` the one that reads a single snapshot.
