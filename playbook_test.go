@@ -111,13 +111,17 @@ func (f *authoringFixture) route(r *http.Request) (string, int) {
 		f.mu.Lock()
 		f.published++
 		f.mu.Unlock()
-		return wrapData(newVersionRecordJSON), http.StatusCreated
+		return wrapData(newVersionPublishedJSON), http.StatusCreated
 	case r.URL.Path == base+"/pipelines/"+playbookBuildID+"/versions/2":
 		return wrapData(playbookVersionRecordJSON), http.StatusOK
+	case r.URL.Path == base+"/pipelines/"+playbookBuildID+"/versions/3":
+		return wrapData(newVersionRecordJSON), http.StatusOK
 	case r.URL.Path == base+"/pipelines/"+playbookBuildID+"/versions/2/diff/3":
 		return versionDiffJSON, http.StatusOK
 
 	// Published, with no draft saved.
+	case r.URL.Path == base+"/pipelines/"+playbookPublishedOnlyID+"/draft" && r.Method == http.MethodPut:
+		return "", http.StatusNoContent
 	case r.URL.Path == base+"/pipelines/"+playbookPublishedOnlyID:
 		return wrapData(playbookPublishedOnlyRecordJSON), http.StatusOK
 
@@ -260,6 +264,28 @@ func TestSaveDraftStoresTheDraftWithoutPublishing(t *testing.T) {
 	}
 }
 
+func TestSaveFirstDraftReportsHasDraftFromAfterTheWrite(t *testing.T) {
+	fixture := newAuthoringFixture(t)
+
+	definition := map[string]interface{}{
+		"format_version": float64(1),
+		"steps":          []interface{}{map[string]interface{}{"id": "implement", "kind": "ai"}},
+	}
+
+	// This playbook has no draft before the call, so a reference built from
+	// the pre-write state reports the draft the call just created as absent.
+	output := capture(t, func() error {
+		return runPlaybookSaveDraft(fixture.api(), playbookPublishedOnlyID, definition)
+	})
+
+	if hasDraft := output["reference"].(map[string]interface{})["has_draft"]; hasDraft != true {
+		t.Errorf("a first draft must be reported as present on the save itself: %v", output["reference"])
+	}
+	if data := output["data"].(map[string]interface{}); data["saved"] != true {
+		t.Errorf("the save must report itself as saved: %v", data)
+	}
+}
+
 func TestDiffDraftOnlyReadsAndReportsChanges(t *testing.T) {
 	fixture := newAuthoringFixture(t)
 
@@ -351,6 +377,46 @@ func TestPublishSendsTheSavedDraftToTheVersionEndpoint(t *testing.T) {
 	for _, request := range fixture.recorded() {
 		if request.method == http.MethodDelete {
 			t.Errorf("publish must not delete anything: %s", request.path)
+		}
+	}
+}
+
+// The publish response carries a null created_at on a version that has one,
+// so the timestamp is read back rather than reported as missing.
+func TestPublishReportsTheVersionsRealCreatedAt(t *testing.T) {
+	fixture := newAuthoringFixture(t)
+
+	output := capture(t, func() error {
+		return runPlaybookPublish(fixture.api(), playbookBuildID, "", true)
+	})
+
+	version := output["data"].(map[string]interface{})["published_version"].(map[string]interface{})
+	if version["created_at"] != "2026-09-18T00:00:00.000000Z" {
+		t.Errorf("published_version.created_at is %v, want the stored timestamp", version["created_at"])
+	}
+
+	if published, _ := fixture.counts(); published != 1 {
+		t.Errorf("the read-back published %d versions, want 1", published)
+	}
+}
+
+// A publish response that already carries its timestamp is reported as it
+// came back, with no second call to the version endpoint.
+func TestPublishDoesNotReReadAVersionThatCarriesItsTimestamp(t *testing.T) {
+	fixture := newAuthoringFixture(t)
+
+	output := capture(t, func() error {
+		return runPlaybookPublish(fixture.api(), playbookUnpublishedID, "", true)
+	})
+
+	version := output["data"].(map[string]interface{})["published_version"].(map[string]interface{})
+	if version["created_at"] != "2026-09-18T00:00:00.000000Z" {
+		t.Errorf("published_version.created_at is %v, want the publish response's own: %v", version["created_at"], version)
+	}
+
+	for _, request := range fixture.recorded() {
+		if request.method == http.MethodGet && strings.Contains(request.path, "/versions/") {
+			t.Errorf("nothing should be read back: %s", request.path)
 		}
 	}
 }
@@ -620,6 +686,40 @@ func TestUpdatePlaybookChangesOnlyTheNamedMetadata(t *testing.T) {
 	}
 }
 
+func TestUpdatePlaybookHelpKeepsTheManualRunCarveOut(t *testing.T) {
+	cmd := playbookUpdateCommand(testAccountID)
+
+	surfaces := map[string]string{
+		"long description": cmd.Long,
+		"--disable help":   cmd.Flags().Lookup("disable").Usage,
+		"--enable help":    cmd.Flags().Lookup("enable").Usage,
+	}
+
+	for where, text := range surfaces {
+		lower := strings.ToLower(text)
+		if !strings.Contains(lower, "trigger") {
+			t.Errorf("the %s should say disabling is about the triggers: %s", where, text)
+		}
+		for _, stale := range []string{"spawns no new tasks", "stop the playbook spawning", "resume spawning"} {
+			if strings.Contains(lower, stale) {
+				t.Errorf("the %s still frames disabling as stopping task spawning (%q): %s", where, stale, text)
+			}
+		}
+	}
+
+	long := strings.ToLower(cmd.Long)
+	for _, phrase := range []string{"no event", "manual", "disabled_note"} {
+		if !strings.Contains(long, phrase) {
+			t.Errorf("the long description should name %q so the manual-run carve-out is visible: %s", phrase, cmd.Long)
+		}
+	}
+
+	disable := cmd.Flags().Lookup("disable").Usage
+	if !strings.Contains(strings.ToLower(disable), "manual run") {
+		t.Errorf("--disable should say a manual run still starts the playbook: %s", disable)
+	}
+}
+
 func TestArchiveAndRestorePlaybook(t *testing.T) {
 	fixture := newAuthoringFixture(t)
 
@@ -681,6 +781,46 @@ func TestRestorePlaybookRefusesAPlaybookThatIsNotArchived(t *testing.T) {
 		if request.method != http.MethodGet {
 			t.Errorf("a refused restore must not mutate anything: %s %s", request.method, request.path)
 		}
+	}
+}
+
+// The server refuses to enable an archived playbook with a 422 naming the
+// `archived: false` request field. The CLI has no such flag, so the refusal is
+// made here and names the command that restores one.
+func TestUpdatePlaybookRefusesEnablingAnArchivedPlaybook(t *testing.T) {
+	fixture := newAuthoringFixture(t)
+
+	err := captureError(t, func() error {
+		update := &playbookUpdate{body: map[string]interface{}{"disabled": false}}
+		return runPlaybookUpdate(fixture.api(), playbookArchivedID, update)
+	})
+	if !strings.Contains(err.Error(), "wallfacer handbook restore-playbook "+playbookArchivedID) {
+		t.Errorf("the refusal should name the command to run: %v", err)
+	}
+	if strings.Contains(err.Error(), "archived: false") || strings.Contains(err.Error(), "pipeline") {
+		t.Errorf("the refusal should not carry the API's own vocabulary: %v", err)
+	}
+
+	for _, request := range fixture.recorded() {
+		if request.method != http.MethodGet {
+			t.Errorf("a refused update must not mutate anything: %s %s", request.method, request.path)
+		}
+	}
+}
+
+// Disabling an archived playbook is not the refused transition, and neither is
+// any other metadata change: only enabling one is.
+func TestUpdatePlaybookStillPatchesOtherFieldsOnAnArchivedPlaybook(t *testing.T) {
+	fixture := newAuthoringFixture(t)
+
+	update := &playbookUpdate{body: map[string]interface{}{"disabled": true}}
+	capture(t, func() error {
+		return runPlaybookUpdate(fixture.api(), playbookArchivedID, update)
+	})
+
+	body := fixture.bodyOf(t, http.MethodPatch, "/pipelines/"+playbookArchivedID)
+	if body["disabled"] != true {
+		t.Errorf("the disabled flag was not sent: %v", body)
 	}
 }
 
@@ -750,12 +890,27 @@ func TestCreateWithDraftSavesTheDraftToo(t *testing.T) {
 	fixture := newAuthoringFixture(t)
 
 	definition := map[string]interface{}{"steps": []interface{}{}}
-	capture(t, func() error {
+	output := capture(t, func() error {
 		return runPlaybookCreate(fixture.api(), "New Playbook", "", "", nil, definition, true)
 	})
 
 	if got := fixture.methodsFor("/draft"); len(got) != 1 || !strings.HasPrefix(got[0], http.MethodPut) {
 		t.Errorf("--draft should save exactly one draft, got %v", got)
+	}
+
+	// The created record is read before the draft is saved, so it must be
+	// brought up to date rather than reporting the draft as absent in the
+	// same payload that reports it present.
+	data := output["data"].(map[string]interface{})
+	playbook := data["playbook"].(map[string]interface{})
+	if playbook["draft"] == nil {
+		t.Errorf("the created playbook must carry the draft the same call saved: %v", playbook)
+	}
+	if present := data["draft"].(map[string]interface{})["present"]; present != true {
+		t.Errorf("the draft block must report the draft as present: %v", data["draft"])
+	}
+	if hasDraft := output["reference"].(map[string]interface{})["has_draft"]; hasDraft != true {
+		t.Errorf("the reference must report has_draft after a create that saved one: %v", output["reference"])
 	}
 }
 
@@ -829,6 +984,12 @@ const playbookRejectedRecordJSON = `{"id":"` + playbookRejectedID + `","account_
 const playbookCreatedRecordJSON = `{"id":"` + playbookCreatedID + `","account_id":"` + testAccountID + `","name":"New Playbook","description":"A description.","active_version":{"id":"` + newVersionID + `","version":1,"created_at":"2026-09-18T00:00:00.000000Z","steps":[{"id":"implement","title":"Implement the issue","kind":"ai"}]},"version_count":1,"draft":null,"parent_page_id":"` + pageBuildID + `","position":8,"linked_page_ids":["` + pageBuildID + `"],"disabled_at":null,"archived_at":null,"created_at":"2026-09-18T00:00:00.000000Z","created_by":1}`
 
 const newVersionRecordJSON = `{"id":"` + newVersionID + `","pipeline_id":"` + playbookBuildID + `","version":3,"definition":{"format_version":1,"steps":[{"id":"implement","kind":"ai","title":"Implement the issue, revised"}],"triggers":[]},"notes":"Revised the implement step.","created_at":"2026-09-18T00:00:00.000000Z","created_by":1}`
+
+// The version endpoint answers out of the row it just inserted, and created_at
+// is a database default that insert does not read back, so a publish response
+// carries a null timestamp on a record that has one. Reading the version back
+// is what turns it into the stored timestamp.
+const newVersionPublishedJSON = `{"id":"` + newVersionID + `","pipeline_id":"` + playbookBuildID + `","version":3,"definition":{"format_version":1,"steps":[{"id":"implement","kind":"ai","title":"Implement the issue, revised"}],"triggers":[]},"notes":"Revised the implement step.","created_at":null,"created_by":1}`
 
 const firstVersionRecordJSON = `{"id":"` + newVersionID + `","pipeline_id":"` + playbookUnpublishedID + `","version":1,"definition":{"format_version":1,"steps":[{"id":"implement","kind":"ai","title":"Implement the issue"}],"triggers":[]},"notes":null,"created_at":"2026-09-18T00:00:00.000000Z","created_by":1}`
 
