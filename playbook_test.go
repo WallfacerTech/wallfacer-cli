@@ -644,6 +644,40 @@ func TestUpdatePlaybookChangesOnlyTheNamedMetadata(t *testing.T) {
 	}
 }
 
+func TestUpdatePlaybookHelpKeepsTheManualRunCarveOut(t *testing.T) {
+	cmd := playbookUpdateCommand(testAccountID)
+
+	surfaces := map[string]string{
+		"long description": cmd.Long,
+		"--disable help":   cmd.Flags().Lookup("disable").Usage,
+		"--enable help":    cmd.Flags().Lookup("enable").Usage,
+	}
+
+	for where, text := range surfaces {
+		lower := strings.ToLower(text)
+		if !strings.Contains(lower, "trigger") {
+			t.Errorf("the %s should say disabling is about the triggers: %s", where, text)
+		}
+		for _, stale := range []string{"spawns no new tasks", "stop the playbook spawning", "resume spawning"} {
+			if strings.Contains(lower, stale) {
+				t.Errorf("the %s still frames disabling as stopping task spawning (%q): %s", where, stale, text)
+			}
+		}
+	}
+
+	long := strings.ToLower(cmd.Long)
+	for _, phrase := range []string{"no event", "manual", "disabled_note"} {
+		if !strings.Contains(long, phrase) {
+			t.Errorf("the long description should name %q so the manual-run carve-out is visible: %s", phrase, cmd.Long)
+		}
+	}
+
+	disable := cmd.Flags().Lookup("disable").Usage
+	if !strings.Contains(strings.ToLower(disable), "manual run") {
+		t.Errorf("--disable should say a manual run still starts the playbook: %s", disable)
+	}
+}
+
 func TestArchiveAndRestorePlaybook(t *testing.T) {
 	fixture := newAuthoringFixture(t)
 
