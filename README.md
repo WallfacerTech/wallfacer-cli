@@ -131,7 +131,7 @@ wallfacer handbook delete <page-id>
 wallfacer handbook restore <page-ref>           # refused unless the page is deleted
 ```
 
-A page write is live knowledge immediately: agents running playbooks read the new content from the next task onward. Nothing is lost by editing, though. Each editing session is snapshotted, and the result names the `revisions` command that reads the earlier wording back.
+A page write is live knowledge immediately: agents running playbooks read the new content from the next task onward. History is per editing session, not per edit: consecutive saves by the same author within ten minutes of that session's first save collapse into one revision holding the session's latest body, and a different author or a later save starts a new one. So the result's `revisions` command reads back the wording as of an earlier session, not whatever the page said before your last save, and intermediate wordings from inside one session are not recoverable.
 
 Deleting a page keeps its revision history and does not delete what is filed under it: sub-pages and playbooks move up to the deleted page's parent, or to the top level, and the result names each one. `restore` brings the page back with its content and history intact; it takes the same reference forms as every other command and refuses a page that is not deleted, which in practice means an ID, since names and paths resolve against active entries only.
 

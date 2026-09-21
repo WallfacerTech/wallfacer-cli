@@ -37,8 +37,9 @@ more than one matches; a deleted page is reached by ID, which is what a restore 
 
 ` + "`create`, `update`, `delete`, `restore`, `move`, and `reorder`" + ` act on the handbook
 tree, and a page write is live knowledge immediately: what agents read from the next task
-onward. Page edits are snapshotted, so the previous wording stays readable through the
-page's revisions.
+onward. Page edits are snapshotted per editing session rather than per save, so the page's
+revisions read back an earlier session's wording, not whatever the page said before your
+last save.
 
 Of the playbook authoring commands, only ` + "`create-playbook` and `publish`" + ` change a
 playbook's versioned definition. Two histories run alongside each other and are not the

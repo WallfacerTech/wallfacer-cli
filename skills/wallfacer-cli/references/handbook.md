@@ -70,6 +70,8 @@ wallfacer handbook version   <playbook-reference> [version]
 wallfacer handbook draft     <playbook-reference>
 ```
 
+`revisions` lists one row per editing session rather than one per save: the granularity is the coalescing window, so the newest revision holds the current session's latest body and the one before it holds the previous session's. See "History is per editing session, not per edit" under Writing pages.
+
 `version` takes a version number or a version UUID. Omit it to read the active version, or pass a playbook version URL as the reference and the version in it is used.
 
 ## Authoring a playbook
@@ -125,9 +127,9 @@ wallfacer handbook update <page-reference> [--title T] [--body M | --body-file P
 Both accept a JSON object on stdin, the same body the `pages` group takes, and layer the flags over it: a flag wins over the same field in a piped body. A body flag (`--body`, `--body-file`, `--clear-body`) means stdin is not read at all, so the command never blocks on a pipe that stays open; pipe the whole JSON object when you want other fields to come from it too.
 
 - **A page write is live.** The new content is what agents read from the next task onward.
-- **History is retained.** Each editing session is snapshotted. `follow_up.revisions` in the result names the command that reads the earlier wording back, and that listing's own `follow_up.revision` names the command for its newest snapshot.
+- **History is per editing session, not per edit.** Saves by the same author within ten minutes of that session's first save update the same revision in place, so the row holds the session's latest body; a different author, or a save after the window, starts a new revision. `follow_up.revisions` in the result names the command that lists them, and that listing names a concrete `revision` command for a single snapshot, but what they read back is the wording as of an earlier session. Recovering an intermediate wording from within a session you are still in is not possible.
 - **Fields left out are left alone.** `--clear-body` empties the body, which is not the same as leaving `--body` off.
-- **A missing title is refused before the request.** So is an update with no field to change.
+- **A missing title is refused before the write.** So is an update with no field to change. Both refusals happen client-side, so nothing is written; a reference that still needs resolving (`--under` on `create`, the page reference on `update`) may issue the normal reference-resolution GETs first.
 
 ```bash
 wallfacer handbook delete <page-reference>

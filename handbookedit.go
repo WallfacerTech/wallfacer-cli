@@ -317,10 +317,13 @@ func handbookUpdateCommand(accountID string) *cobra.Command {
 		Long: cli.Markdown(`Updates a page and returns the updated record.
 
 The change is live immediately: the page's new content is what agents read from the next
-task onward. Nothing is lost, though. Each editing session is snapshotted, so the previous
-wording stays readable with ` + "`wallfacer handbook revisions <page>`" + `, which the result
-names and which in turn names the ` + "`wallfacer handbook revision`" + ` command for the
-newest snapshot.
+task onward. History is per editing session, not per save: saves by the same author within
+ten minutes of that session's first save update the same revision in place with the latest
+body, and a different author or a later save starts a new one. The result names
+` + "`wallfacer handbook revisions <page>`" + `, which lists those session snapshots and then
+names the ` + "`wallfacer handbook revision <page> <revision-id>`" + ` command for a concrete
+revision. Use earlier-session rows for recovery; same-session intermediate wording is not
+retained.
 
 Fields left out are left alone. ` + "`--clear-body`" + ` empties the body, which is not the same
 as leaving ` + "`--body`" + ` off. Passing a body flag means stdin is not read at all, so pipe
@@ -471,7 +474,7 @@ func runHandbookCreate(api *handbookAPI, edit handbookEdit) error {
 	return emitHandbook(map[string]interface{}{
 		"data":      record,
 		"reference": ref,
-		"note":      "The page is live handbook knowledge from now on: agents running playbooks read it as written. Every editing session is snapshotted, so earlier wording stays readable through the page's revisions.",
+		"note":      "The page is live handbook knowledge from now on: agents running playbooks read it as written. Revisions are snapshotted per editing session, not per save, so `follow_up.revisions` reads back an earlier session's wording rather than each intermediate one.",
 		"follow_up": handbookWriteFollowUp(ref),
 	})
 }
@@ -499,7 +502,7 @@ func runHandbookUpdate(api *handbookAPI, reference string, edit handbookEdit) er
 	return emitHandbook(map[string]interface{}{
 		"data":      record,
 		"reference": updated,
-		"note":      "The page's new content is live immediately. The previous wording is retained as a revision; `follow_up.revisions` lists them.",
+		"note":      "The page's new content is live immediately. Revisions coalesce per author per editing session, so a save that continues the session you are already in updates that revision in place rather than retaining the wording it replaced; `follow_up.revisions` lists them.",
 		"follow_up": handbookWriteFollowUp(updated),
 	})
 }
