@@ -340,14 +340,15 @@ func TestResolveSupportedDetailURLs(t *testing.T) {
 		reference string
 		wantID    string
 		wantKind  string
+		wantFrom  string
 	}{
-		{"https://app.wallfacer.ai/accounts/" + testAccountID + "/handbook/pages/" + pageBuildID, pageBuildID, kindPage},
-		{"https://app.wallfacer.ai/accounts/" + testAccountID + "/handbook/" + playbookBuildID, playbookBuildID, kindPlaybook},
-		{"https://app.wallfacer.ai/accounts/" + testAccountID + "/handbook/" + playbookBuildID + "/versions/2", playbookBuildID, kindPlaybook},
-		{"https://app.wallfacer.ai/handbook/" + testAccountID + "/pages/" + pageBuildID, pageBuildID, kindPage},
-		{"https://app.wallfacer.ai/handbook/" + testAccountID + "/" + playbookBuildID, playbookBuildID, kindPlaybook},
-		{"wallfacer://handbook/pages/" + pageBuildID, pageBuildID, kindPage},
-		{pageBuildID, pageBuildID, kindPage},
+		{"https://app.wallfacer.ai/accounts/" + testAccountID + "/handbook/pages/" + pageBuildID, pageBuildID, kindPage, "url"},
+		{"https://app.wallfacer.ai/accounts/" + testAccountID + "/handbook/" + playbookBuildID, playbookBuildID, kindPlaybook, "url"},
+		{"https://app.wallfacer.ai/accounts/" + testAccountID + "/handbook/" + playbookBuildID + "/versions/2", playbookBuildID, kindPlaybook, "url"},
+		{"https://app.wallfacer.ai/handbook/" + testAccountID + "/pages/" + pageBuildID, pageBuildID, kindPage, "url"},
+		{"https://app.wallfacer.ai/handbook/" + testAccountID + "/" + playbookBuildID, playbookBuildID, kindPlaybook, "url"},
+		{"wallfacer://handbook/pages/" + pageBuildID, pageBuildID, kindPage, "url"},
+		{pageBuildID, pageBuildID, kindPage, "id"},
 	}
 
 	for _, tc := range cases {
@@ -358,6 +359,11 @@ func TestResolveSupportedDetailURLs(t *testing.T) {
 		}
 		if ref.ID != tc.wantID || ref.Type != tc.wantKind {
 			t.Errorf("%q: got %s %s, want %s %s", tc.reference, ref.Type, ref.ID, tc.wantKind, tc.wantID)
+		}
+		// resolved_from reports which reference form was accepted, so a URL
+		// must not come back as an ID.
+		if ref.ResolvedFrom != tc.wantFrom {
+			t.Errorf("%q: resolved_from is %q, want %s", tc.reference, ref.ResolvedFrom, tc.wantFrom)
 		}
 	}
 }

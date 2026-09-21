@@ -478,13 +478,45 @@ func (a *handbookAPI) resolveHandbookRef(reference, want string) (*handbookRef, 
 		return nil, errors.New("a handbook reference is required")
 	}
 
-	locator, err := parseHandbookLocator(trimmed)
+	locator, err := a.guardHandbookRef(reference, want)
 	if err != nil {
 		return nil, err
 	}
 
 	if locator == nil {
 		return a.resolveByName(trimmed, want)
+	}
+
+	kind := locator.kind
+	if kind == "" {
+		kind = want
+	}
+
+	ref, err := a.resolveByID(reference, locator.id, kind, locator.form)
+	if err != nil {
+		return nil, err
+	}
+	ref.versionHint = locator.versionID
+	return ref, nil
+}
+
+// guardHandbookRef runs every check on a reference that needs no request: the
+// reference is present, it parses, and where it carries an account or a type
+// they match what was asked for. It returns the parsed locator, or nil for a
+// name or path, which can only be resolved by reading the tree.
+//
+// resolveHandbookRef runs it before any read. A caller with other work to do
+// first can run it on its own, so the local refusal still comes before that
+// work rather than after it.
+func (a *handbookAPI) guardHandbookRef(reference, want string) (*handbookLocator, error) {
+	trimmed := strings.TrimSpace(reference)
+	if trimmed == "" {
+		return nil, errors.New("a handbook reference is required")
+	}
+
+	locator, err := parseHandbookLocator(trimmed)
+	if err != nil || locator == nil {
+		return nil, err
 	}
 
 	// Account mismatch is rejected before any read, so a reference from
@@ -496,20 +528,10 @@ func (a *handbookAPI) resolveHandbookRef(reference, want string) (*handbookRef, 
 		return nil, errors.Errorf("reference %q names a %s, but a %s was requested", reference, locator.kind, want)
 	}
 
-	kind := locator.kind
-	if kind == "" {
-		kind = want
-	}
-
-	ref, err := a.resolveByID(reference, locator.id, kind)
-	if err != nil {
-		return nil, err
-	}
-	ref.versionHint = locator.versionID
-	return ref, nil
+	return locator, nil
 }
 
-func (a *handbookAPI) resolveByID(reference, id, kind string) (*handbookRef, error) {
+func (a *handbookAPI) resolveByID(reference, id, kind, form string) (*handbookRef, error) {
 	idx, err := a.loadIndex()
 	if err != nil {
 		return nil, err
@@ -520,7 +542,7 @@ func (a *handbookAPI) resolveByID(reference, id, kind string) (*handbookRef, err
 			return nil, errors.Errorf("%q is a %s, but a %s was requested", reference, ref.Type, kind)
 		}
 		clone := *ref
-		clone.ResolvedFrom = "id"
+		clone.ResolvedFrom = form
 		return &clone, nil
 	}
 
@@ -529,14 +551,14 @@ func (a *handbookAPI) resolveByID(reference, id, kind string) (*handbookRef, err
 	if kind == "" || kind == kindPage {
 		record, err := a.getPage(id)
 		if err == nil {
-			return refFromPageRecord(record, a.accountID, "id"), nil
+			return refFromPageRecord(record, a.accountID, form), nil
 		}
 		if err != errHandbookNotFound {
 			return nil, err
 		}
 		record, err = a.findDeletedPage(id)
 		if err == nil {
-			return refFromPageRecord(record, a.accountID, "id"), nil
+			return refFromPageRecord(record, a.accountID, form), nil
 		}
 		if err != errHandbookNotFound {
 			return nil, err
@@ -545,7 +567,7 @@ func (a *handbookAPI) resolveByID(reference, id, kind string) (*handbookRef, err
 	if kind == "" || kind == kindPlaybook {
 		record, err := a.getPipeline(id)
 		if err == nil {
-			return refFromPipelineRecord(record, a.accountID, "id"), nil
+			return refFromPipelineRecord(record, a.accountID, form), nil
 		}
 		if err != errHandbookNotFound {
 			return nil, err
@@ -616,11 +638,14 @@ type handbookLocator struct {
 	kind      string
 	accountID string
 	versionID string
+	// form is the reference shape the caller used, reported back as
+	// `resolved_from` so they can tell which form was accepted.
+	form string
 }
 
 func parseHandbookLocator(reference string) (*handbookLocator, error) {
 	if uuidPattern.MatchString(reference) {
-		return &handbookLocator{id: reference}, nil
+		return &handbookLocator{id: reference, form: "id"}, nil
 	}
 
 	lower := strings.ToLower(reference)
@@ -632,7 +657,7 @@ func parseHandbookLocator(reference string) (*handbookLocator, error) {
 		}
 		segments := pathSegments(parsed.Host + "/" + parsed.Path)
 		if len(segments) == 3 && segments[0] == "handbook" && segments[1] == "pages" && uuidPattern.MatchString(segments[2]) {
-			return &handbookLocator{id: segments[2], kind: kindPage}, nil
+			return &handbookLocator{id: segments[2], kind: kindPage, form: "url"}, nil
 		}
 		return nil, errors.Errorf("%q is not a wallfacer:// handbook page reference", reference)
 
@@ -645,6 +670,7 @@ func parseHandbookLocator(reference string) (*handbookLocator, error) {
 		if locator == nil {
 			return nil, errors.Errorf("%q is not a Wallfacer handbook page or playbook URL", reference)
 		}
+		locator.form = "url"
 		return locator, nil
 	}
 

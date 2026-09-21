@@ -175,6 +175,29 @@ func runChat(api *directoryAPI, reference, prompt string, opts taskOptions) erro
 }
 
 func runPlaybook(api *directoryAPI, reference, message, agentReference string, opts taskOptions) error {
+	// Order is by cost. The playbook reference's local guard is free, so it
+	// keeps its place at the front and a reference from another account is
+	// still refused without a single request. --agent is resolved next: it is
+	// the cheaper of the two lookups and an unusable one refuses the run
+	// outright, so a bad agent should not cost the handbook read first.
+	if _, err := api.guardHandbookRef(reference, kindPlaybook); err != nil {
+		return err
+	}
+
+	var agent *teamMember
+	var createdBy int64
+	if strings.TrimSpace(agentReference) != "" {
+		resolved, err := api.resolveChatAgent(agentReference)
+		if err != nil {
+			return err
+		}
+		identity, err := agentTaskIdentity(resolved)
+		if err != nil {
+			return err
+		}
+		agent, createdBy = resolved, identity
+	}
+
 	ref, err := api.resolveHandbookRef(reference, kindPlaybook)
 	if err != nil {
 		return err
@@ -200,7 +223,7 @@ func runPlaybook(api *directoryAPI, reference, message, agentReference string, o
 		return errors.Errorf("playbook %s (%s) is %s and cannot be run", ref.Title, ref.ID, ref.State)
 	}
 	if ref.ActiveVersion == nil {
-		return errors.Errorf("playbook %s (%s) has no published version, and a draft is not runnable; read it with `wallfacer handbook draft %s` and publish it first", ref.Title, ref.ID, ref.ID)
+		return errors.Errorf("playbook %s (%s) is draft-only and cannot be run; read the draft with `wallfacer handbook draft %s`, then publish it with `wallfacer handbook publish %s`", ref.Title, ref.ID, ref.ID, ref.ID)
 	}
 
 	// No version is named in the request: the server runs the version it has
@@ -210,17 +233,8 @@ func runPlaybook(api *directoryAPI, reference, message, agentReference string, o
 		body["message"] = message
 	}
 
-	var agent *teamMember
-	if strings.TrimSpace(agentReference) != "" {
-		agent, err = api.resolveChatAgent(agentReference)
-		if err != nil {
-			return err
-		}
-		identity, err := agentTaskIdentity(agent)
-		if err != nil {
-			return err
-		}
-		body["created_by"] = identity
+	if agent != nil {
+		body["created_by"] = createdBy
 	}
 	applyTaskOptions(body, opts)
 

@@ -134,7 +134,7 @@ wallfacer handbook delete <page-reference>
 wallfacer handbook restore <page-reference>
 ```
 
-Deleting keeps the page's revision history and does not delete what is filed under it: sub-pages and playbooks move up to the deleted page's parent, or to the top level when the deleted page was top-level. The result lists the children that moved (`data.reparented`) and where they went (`data.reparented_to`, null for the top level).
+Deleting keeps the page's revision history and does not delete what is filed under it: sub-pages and playbooks move up to the deleted page's parent, or to the top level when the deleted page was top-level. The result lists the children that moved (`data.reparented`) and where they went (`data.reparented_to`, null for the top level). With no children to move, `reparented` is empty and `reparented_to` is null rather than naming a page that received nothing.
 
 Restore takes the same reference forms as every other command and is guarded by state: a page that is not deleted is refused. Names and paths resolve against active entries only, so in practice the target is an ID, and `wallfacer handbook list --include-deleted` is where a deleted page's ID comes from. Content and history come back intact; if the page's parent was deleted in the meantime it returns at the top level, and `data.parent_page_id` says where it landed.
 
@@ -145,7 +145,7 @@ wallfacer handbook move <reference> (--under <page-reference> | --top-level) [--
 wallfacer handbook reorder (--under <page-reference> | --top-level) <reference>...
 ```
 
-`move` refiles one entry of either type. Leave `--position` off and the entry keeps the position it had. Moving a playbook changes only its parent and position: its definition is not saved, published, or discarded, its triggers are untouched, and no task is created.
+`move` refiles one entry of either type. Leave `--position` off and the entry keeps the position it had; a negative `--position` is refused before the request, so a move is never reported for a field that was not sent. Moving a playbook changes only its parent and position: its definition is not saved, published, or discarded, its triggers are untouched, and no task is created.
 
 `reorder` writes one parent's child order in a single atomic request, and positions are assigned from the order given. Pages and playbooks share one ordering under a parent, so the list is mixed and must be that parent's complete set of children. A list that omits a current sibling, repeats one, or names an entry filed elsewhere is rejected and nothing is written, naming the entry that is wrong. To bring in an entry from another parent, `move` it first.
 

@@ -623,3 +623,48 @@ func TestUpdateToTheTopLevelReportsTheNewPath(t *testing.T) {
 		t.Errorf("update reported path %v, want the post-move path Build", reference["path"])
 	}
 }
+
+func TestDeleteReportsNoDestinationWhenNothingWasReparented(t *testing.T) {
+	fixture := newHandbookFixture(t)
+
+	out := capture(t, func() error {
+		return runHandbookDelete(fixture.api(), "Engineering/Build")
+	})
+
+	data, _ := out["data"].(map[string]interface{})
+	reparented, _ := data["reparented"].([]interface{})
+	if len(reparented) != 0 {
+		t.Fatalf("expected a childless page, got %v", reparented)
+	}
+	if data["reparented_to"] != nil {
+		t.Errorf("reparented_to is %v, want null when nothing moved", data["reparented_to"])
+	}
+	if note, _ := out["note"].(string); !strings.Contains(note, "nothing moved") {
+		t.Errorf("note is %q, want it to say nothing was filed under the page", note)
+	}
+}
+
+func TestANegativePositionIsRefusedBeforeTheMove(t *testing.T) {
+	cmd := handbookMoveCommand(testAccountID)
+	if err := cmd.Flags().Set("position", "-5"); err != nil {
+		t.Fatalf("setting --position: %v", err)
+	}
+
+	position, err := handbookPositionFlag(cmd)
+	if err == nil {
+		t.Fatalf("a negative position resolved to %d instead of being refused", position)
+	}
+	if !strings.Contains(err.Error(), "--position") {
+		t.Errorf("the refusal should name the flag: %v", err)
+	}
+}
+
+func TestAnUnsetPositionLeavesTheEntryWhereItIs(t *testing.T) {
+	position, err := handbookPositionFlag(handbookMoveCommand(testAccountID))
+	if err != nil {
+		t.Fatalf("no --position: %v", err)
+	}
+	if position != -1 {
+		t.Errorf("position is %d, want the -1 sentinel that omits the field", position)
+	}
+}

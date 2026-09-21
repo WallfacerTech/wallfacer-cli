@@ -453,7 +453,7 @@ func (a *directoryAPI) resolveChatAgent(reference string) (*teamMember, error) {
 	}
 
 	if member.Type != memberAgent {
-		return nil, errors.Errorf("%q is %s, a human member of this account, and cannot be the agent on a task; pick one with `wallfacer team list --type agent`", reference, member.Name)
+		return nil, errors.Errorf("%s is a human member of this account and cannot be the agent on a task; pick an agent with `wallfacer team list --type agent`", member.Name)
 	}
 	if !member.Chatable {
 		return nil, errors.Errorf("agent %s (%s) is %s and cannot take work; pick an enabled agent with `wallfacer team list --type agent`", member.Name, member.ID, member.State)
