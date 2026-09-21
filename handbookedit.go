@@ -303,10 +303,11 @@ func handbookUpdateCommand(accountID string) *cobra.Command {
 The change is live immediately: the page's new content is what agents read from the next
 task onward. History is per editing session, not per save: saves by the same author within
 ten minutes of that session's first save update the same revision in place with the latest
-body, and a different author or a later save starts a new one. So
-` + "`wallfacer handbook revisions <page>`" + ` and
-` + "`wallfacer handbook revision <page> <revision-id>`" + ` read back an earlier session's
-wording, not the wording you just overwrote in this one; the result names both commands.
+body, and a different author or a later save starts a new one. The result names
+` + "`wallfacer handbook revisions <page>`" + `, which lists those session snapshots and then
+names the ` + "`wallfacer handbook revision <page> <revision-id>`" + ` command for a concrete
+revision. Use earlier-session rows for recovery; same-session intermediate wording is not
+retained.
 
 Fields left out are left alone. ` + "`--clear-body`" + ` empties the body, which is not the same
 as leaving ` + "`--body`" + ` off. Passing a body flag means stdin is not read at all, so pipe
