@@ -129,7 +129,7 @@ Both accept a JSON object on stdin, the same body the `pages` group takes, and l
 - **A page write is live.** The new content is what agents read from the next task onward.
 - **History is per editing session, not per edit.** Saves by the same author within ten minutes of that session's first save update the same revision in place, so the row holds the session's latest body; a different author, or a save after the window, starts a new revision. `follow_up.revisions` in the result names the command that lists them and `follow_up.revision` the one that reads a single snapshot, but what they read back is the wording as of an earlier session. Recovering an intermediate wording from within a session you are still in is not possible.
 - **Fields left out are left alone.** `--clear-body` empties the body, which is not the same as leaving `--body` off.
-- **A missing title is refused before the write.** So is an update with no field to change. Both refusals happen client-side, so nothing is written; a reference that still needs resolving (`--under` on `create`, the page reference on `update`) costs one GET first, and that is the only request either case makes.
+- **A missing title is refused before the write.** So is an update with no field to change. Both refusals happen client-side, so nothing is written; a reference that still needs resolving (`--under` on `create`, the page reference on `update`) may issue the normal reference-resolution GETs first.
 
 ```bash
 wallfacer handbook delete <page-reference>
