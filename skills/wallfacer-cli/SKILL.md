@@ -79,7 +79,7 @@ All commands are flat top-level groups (not nested). Write operations take JSON 
 | users | `list`, `get <user-id>` | `create`, `update <user-id>`, `delete <user-id>` |
 | invitations | `list`, `get <token>` | `create`, `update <token>` |
 
-All positional args shown above assume `account_id` is set in config. If not, prepend the account UUID as the first positional arg to every command that takes `account-id` first — which is all of them except `accounts list`, `invitations get <token>` and `invitations update <token>`. `accounts list` is not scoped to an account, and those two invitation commands are keyed by token instead. `invitations list` and `invitations create` are registered as `list account-id` / `create account-id`, so they do take the UUID.
+All positional args shown above assume `account_id` is set in config. If not, prepend the account UUID only to commands whose implementation `Use:` string takes `account-id` first. The `team`, `handbook`, `chat` and `run` commands are hand-written and take no `account-id` positional at all — they read the account from config or from `WALLFACER_ACCOUNT_ID` / `WF_ACCOUNT_ID`. Among the generated groups in this table, the exceptions are `accounts list`, `invitations get <token>` and `invitations update <token>`: `accounts list` is not scoped to an account, and those two invitation commands are keyed by token instead. `invitations list` and `invitations create` are registered as `list account-id` / `create account-id`, so they do take the UUID.
 
 References: [config](references/config.md) · [environments](references/environments.md) · [vms](references/vms.md) · [tasks](references/tasks.md) · [handbook](references/handbook.md) · [team](references/team.md).
 
