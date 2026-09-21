@@ -459,9 +459,18 @@ func runPlaybookCreate(api *handbookAPI, name, description, parent string, linke
 	}
 
 	if alsoDraft {
-		if _, err := api.savePipelineDraft(ref.ID, definition); err != nil {
+		saved, err := api.savePipelineDraft(ref.ID, definition)
+		if err != nil {
 			return errors.Wrapf(err, "the playbook was created as %s, but saving its draft", ref.ID)
 		}
+		// The created record predates the draft, so its own draft field and
+		// the reference both still say there is none. Both are brought up to
+		// the state the save produced, so one payload cannot contradict
+		// itself.
+		draft := draftRecordOf(saved, definition)
+		created["draft"] = draft
+		hasDraft := true
+		ref.HasDraft = &hasDraft
 		data["draft"] = map[string]interface{}{"present": true, "definition": definition}
 	}
 
@@ -584,6 +593,12 @@ func runPlaybookSaveDraft(api *handbookAPI, reference string, definition map[str
 	if err != nil {
 		return handbookReadError(err, ref)
 	}
+
+	// The reference was resolved before the write, so its has_draft is the
+	// state the save just replaced. A save that returned without error is
+	// what makes the draft present, and that is what is reported.
+	hasDraft := true
+	ref.HasDraft = &hasDraft
 
 	data := map[string]interface{}{
 		"saved":     true,
