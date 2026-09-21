@@ -169,7 +169,7 @@ func (a *directoryAPI) createTask(body map[string]interface{}) (map[string]inter
 		return nil, errors.Wrap(err, "Request failed")
 	}
 	if resp.StatusCode >= http.StatusBadRequest {
-		return nil, errors.Errorf("HTTP %d: %s", resp.StatusCode, resp.String())
+		return nil, taskCreateError(resp.StatusCode, resp.String())
 	}
 
 	var decoded map[string]interface{}
@@ -177,6 +177,42 @@ func (a *directoryAPI) createTask(body map[string]interface{}) (map[string]inter
 		return nil, errors.Wrap(err, "Unmarshalling response failed")
 	}
 	return responseObject(decoded)
+}
+
+// errEnvironmentRequired is the task endpoint's `environment_required` refusal:
+// the run's playbook has a step whose performer has no computer of its own, and
+// the request named no environment either. It is a sentinel rather than a
+// message because only the caller knows which playbook was being run.
+var errEnvironmentRequired = errors.New("environment_required")
+
+// taskCreateError turns a rejected create into the refusal the caller can act
+// on, and otherwise keeps the API's own error text.
+func taskCreateError(status int, body string) error {
+	if status == http.StatusUnprocessableEntity && errorCodePresent(body, "environment_required") {
+		return errEnvironmentRequired
+	}
+	return errors.Errorf("HTTP %d: %s", status, body)
+}
+
+// errorCodePresent reports whether an error body carries the given code. The
+// API answers a refusal with a list of `{message, code}` objects; a plain
+// validation failure answers with a map of field messages instead, which
+// carries no code and is left to the raw text.
+func errorCodePresent(body, code string) bool {
+	var decoded struct {
+		Errors []struct {
+			Code string `json:"code"`
+		} `json:"errors"`
+	}
+	if err := json.Unmarshal([]byte(body), &decoded); err != nil {
+		return false
+	}
+	for _, item := range decoded.Errors {
+		if item.Code == code {
+			return true
+		}
+	}
+	return false
 }
 
 // teamMember is one directory record of either kind, flattened to the fields a
@@ -187,15 +223,17 @@ type teamMember struct {
 	Name   string `json:"name"`
 	Handle string `json:"handle,omitempty"`
 	Email  string `json:"email,omitempty"`
+	// Carried on every record, null when no GitHub account is linked: a caller
+	// reading the key can tell "not linked" from a CLI that does not report it.
+	GithubUsername *string `json:"github_username"`
 
-	Title          string `json:"title,omitempty"`
-	Role           string `json:"role,omitempty"`
-	RolePageID     string `json:"role_page_id,omitempty"`
-	EnvironmentID  string `json:"environment_id,omitempty"`
-	GithubUsername string `json:"github_username,omitempty"`
-	Vendor         string `json:"vendor,omitempty"`
-	Model          string `json:"model,omitempty"`
-	RuntimeStatus  string `json:"runtime_status,omitempty"`
+	Title         string `json:"title,omitempty"`
+	Role          string `json:"role,omitempty"`
+	RolePageID    string `json:"role_page_id,omitempty"`
+	EnvironmentID string `json:"environment_id,omitempty"`
+	Vendor        string `json:"vendor,omitempty"`
+	Model         string `json:"model,omitempty"`
+	RuntimeStatus string `json:"runtime_status,omitempty"`
 
 	State        string            `json:"state"`
 	Chatable     bool              `json:"chatable"`
@@ -213,7 +251,7 @@ func memberFromAgentRecord(record map[string]interface{}) *teamMember {
 		Title:          stringField(record, "title"),
 		RolePageID:     stringField(record, "role_page_id"),
 		EnvironmentID:  stringField(record, "environment_id"),
-		GithubUsername: stringField(record, "github_username"),
+		GithubUsername: nullableStringField(record, "github_username"),
 		Vendor:         stringField(record, "vendor"),
 		Model:          stringField(record, "model"),
 		State:          "active",
@@ -246,7 +284,7 @@ func memberFromUserRecord(record map[string]interface{}) *teamMember {
 		Name:           stringField(record, "name"),
 		Email:          stringField(record, "email"),
 		Role:           stringField(record, "role"),
-		GithubUsername: stringField(record, "github_username"),
+		GithubUsername: nullableStringField(record, "github_username"),
 		// The members listing returns active memberships only: a removed human
 		// is absent from it rather than reported with a state of their own.
 		State: "active",
@@ -476,6 +514,16 @@ func identifierField(record map[string]interface{}, key string) string {
 		return strconv.FormatInt(int64(value), 10)
 	}
 	return ""
+}
+
+// nullableStringField keeps the API's own distinction between a string it did
+// not send and one it sent as null, for a field the record always carries.
+func nullableStringField(record map[string]interface{}, key string) *string {
+	value, ok := record[key].(string)
+	if !ok {
+		return nil
+	}
+	return &value
 }
 
 func boolField(record map[string]interface{}, key string) bool {
