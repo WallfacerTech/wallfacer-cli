@@ -68,17 +68,16 @@ All commands are flat top-level groups (not nested). Write operations take JSON 
 | accounts | `list`, `get`, `handbook` | — |
 | pages | `list`, `get <page-id>` | `create`, `update <page-id>`, `delete <page-id>` |
 | revisions | `list <page-id>`, `get <page-id> <revision-id>` | — |
-| environments | `list`, `get <env-id>` | `create`, `update <env-id>`, `delete <env-id>` |
-| snapshots | `list <env-id>`, `get <env-id> <snap-id>`, `logs <env-id> <snap-id>`, `log <env-id> <snap-id> <source>` | `create <env-id>`, `delete <env-id> <snap-id>` |
-| vms | `list`, `get <vm-id>`, `logs <vm-id>`, `log <vm-id> <source>` | `create`, `delete <vm-id>`, `commands <vm-id>` |
+| environments | `list`, `get <environment-id>` | `create`, `update <environment-id>`, `delete <environment-id>` |
+| snapshots | `list <environment-id>`, `get <environment-id> <snapshot-id>`, `logs <environment-id> <snapshot-id>`, `log <environment-id> <snapshot-id> <source>` | `create <environment-id>`, `delete <environment-id> <snapshot-id>` |
+| vms | `list`, `get <vm-id>`, `logs <vm-id>`, `log <vm-id> <source>`, `simulator <vm-id>`, `simulator-screenshot <vm-id>`, `simulator-logs <vm-id>`, `simulator-builds <vm-id>` | `create`, `delete <vm-id>`, `commands <vm-id>` |
 | tasks | `list`, `get <task-id>` | `create`, `update <task-id>`, `delete <task-id>` |
 | (top level, no group) | — | `chat <agent> [prompt]`, `run <playbook>` — the two entry points that create a task; they are not subcommands of `tasks` |
-| attachments | `list <task-id>`, `contents <task-id> <att-id>` | `create <task-id>`, `delete <task-id> <att-id>`, `refresh <task-id> <att-id>` |
-| sessions | `list <task-id>`, `get <task-id> <sess-id>` | `create <task-id>`, `update <task-id> <sess-id>`, `abort <task-id> <sess-id>` |
-| messages | `list <task-id> <sess-id>`, `get <task-id> <sess-id> <msg-id>` | `create <task-id> <sess-id>`, `delete <task-id> <sess-id> <msg-id>` |
+| attachments | `list <task-id>`, `contents <task-id> <attachment-id>` | `create <task-id>`, `delete <task-id> <attachment-id>` |
+| sessions | `list <task-id>`, `get <task-id> <session-id>`, `logs <task-id> <session-id>`, `log <task-id> <session-id> <source>` | `create <task-id>`, `update <task-id> <session-id>` |
+| messages | `list <task-id> <session-id>`, `get <task-id> <session-id> <message-id>` | `create <task-id> <session-id>`, `delete <task-id> <session-id> <message-id>` |
 | users | `list`, `get <user-id>` | `create`, `update <user-id>`, `delete <user-id>` |
 | invitations | `list`, `get <token>` | `create`, `update <token>` |
-| simulator | `simulator <vm-id>`, `simulator-screenshot <vm-id>`, `simulator-logs <vm-id>`, `simulator-builds <vm-id>` | — |
 
 All positional args shown above assume `account_id` is set in config. If not, prepend the account UUID as the first positional arg to every command.
 
@@ -176,7 +175,7 @@ cat vm.json | wallfacer vms create
 Use `--output-format json` or `-o json` (not `--output json`):
 
 ```bash
-wallfacer environments get <env-id> -o json
+wallfacer environments get <environment-id> -o json
 wallfacer vms list -o json
 ```
 
@@ -184,7 +183,7 @@ Default output is JSON. Also supports `-o yaml`.
 
 ## Destructive ops
 
-`vms delete`, `environments delete`, `tasks delete`, `sessions abort` are irreversible. Confirm the target id with the user before running.
+`vms delete`, `environments delete`, `tasks delete` are irreversible. Confirm the target id with the user before running.
 
 ## Rate limits & pagination
 
