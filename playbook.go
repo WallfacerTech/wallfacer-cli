@@ -87,9 +87,11 @@ Steps and triggers are the versioned definition and change only through
 ` + "`handbook publish`" + `. Linked pages are metadata: adding or removing one changes
 what later runs receive without publishing a version, and does not touch the definition.
 
-` + "`--disable`" + ` clears the playbook's triggers so it spawns no new tasks while staying
-visible and editable; ` + "`--enable`" + ` puts them back. Tasks already running continue
-either way. Moving the playbook in the tree is not here: that is a hierarchy edit.`),
+` + "`--disable`" + ` clears the playbook's triggers, so no event spawns a task from it while
+it stays visible, editable, and runnable: a manual ` + "`wallfacer run`" + ` still starts it and
+the response carries ` + "`disabled_note`" + ` saying so. ` + "`--enable`" + ` re-materializes the
+triggers, so events spawn tasks again. Tasks already running continue either way.
+Moving the playbook in the tree is not here: that is a hierarchy edit.`),
 		Args: cobra.ExactArgs(1),
 		Run: handbookRun(accountID, func(api *handbookAPI, cmd *cobra.Command, args []string) error {
 			update, err := playbookMetadataUpdate(cmd)
@@ -102,8 +104,8 @@ either way. Moving the playbook in the tree is not here: that is a hierarchy edi
 	cmd.Flags().String("name", "", "New display name")
 	cmd.Flags().String("description", "", "New description")
 	cmd.Flags().Bool("clear-description", false, "Clear the description")
-	cmd.Flags().Bool("disable", false, "Stop the playbook spawning new tasks")
-	cmd.Flags().Bool("enable", false, "Resume spawning tasks from the playbook's triggers")
+	cmd.Flags().Bool("disable", false, "Clear the playbook's triggers so no event starts it; a manual run still does")
+	cmd.Flags().Bool("enable", false, "Put the playbook's triggers back so events start it again")
 	cmd.Flags().StringArray("link-page", nil, "Replace the linked pages with these, repeatable (ID, name, path, or URL)")
 	cmd.Flags().Bool("clear-linked-pages", false, "Remove every linked page")
 	return cmd
@@ -123,9 +125,9 @@ func playbookArchiveCommand(accountID string) *cobra.Command {
 
 func playbookRestoreCommand(accountID string) *cobra.Command {
 	return &cobra.Command{
-		Use:   "restore-playbook <playbook-id>",
-		Short: "Restore an archived playbook by ID",
-		Long:  cli.Markdown("Takes the ID (or detail URL) of an archived playbook: names resolve against active entries only, so an archived playbook is reachable by ID alone. It comes back disabled, with its triggers still cleared until `handbook update-playbook --enable`, and renamed with a numeric suffix if another playbook claimed its name in the meantime."),
+		Use:   "restore-playbook <playbook-reference>",
+		Short: "Restore an archived playbook",
+		Long:  cli.Markdown("Takes the same reference forms as every other command and refuses a playbook that is not archived. In practice the target is an ID (or a detail URL carrying one), because names resolve against active entries only and so can never name an archived playbook. It comes back disabled, with its triggers still cleared until `handbook update-playbook --enable`, and renamed with a numeric suffix if another playbook claimed its name in the meantime."),
 		Args:  cobra.ExactArgs(1),
 		Run: handbookRun(accountID, func(api *handbookAPI, cmd *cobra.Command, args []string) error {
 			return runPlaybookRestore(api, args[0])
@@ -491,6 +493,14 @@ func runPlaybookUpdate(api *handbookAPI, reference string, update *playbookUpdat
 		return err
 	}
 
+	// Enabling an archived playbook is the one metadata change the server
+	// refuses outright, and its 422 names the `archived: false` request field
+	// rather than the command that restores one. Say it in the CLI's own
+	// vocabulary, before anything is sent.
+	if enabled, ok := update.body["disabled"].(bool); ok && !enabled && ref.State == "archived" {
+		return errors.Errorf("playbook %s is archived, so enabling it is refused; restore it first with: wallfacer handbook restore-playbook %s", ref.ID, ref.ID)
+	}
+
 	if len(update.linkedPageRefs) > 0 {
 		linkedIDs, err := api.resolvePageIDs(update.linkedPageRefs)
 		if err != nil {
@@ -746,6 +756,19 @@ func runPlaybookPublish(api *handbookAPI, reference, notes string, activate bool
 		// The server validates at publish time. Nothing was versioned, so
 		// nothing is reported as one.
 		return errors.Wrapf(err, "publishing the draft of playbook %s failed; no version was created", ref.ID)
+	}
+
+	// The version endpoint answers out of the row it just inserted, and
+	// created_at is a database default that insert does not read back, so the
+	// timestamp can arrive null on a record that has one. Read the version to
+	// report the real timestamp rather than a null the next command
+	// contradicts.
+	if published["created_at"] == nil {
+		if version := versionArgument(published["version"]); version != "" {
+			if stored, err := api.getPipelineVersion(ref.ID, version); err == nil && stored["created_at"] != nil {
+				published["created_at"] = stored["created_at"]
+			}
+		}
 	}
 
 	// Read the playbook back: which version is active, whether the draft was

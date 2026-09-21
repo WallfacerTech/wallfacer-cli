@@ -116,7 +116,7 @@ wallfacer handbook draft <playbook-id>             # the unpublished draft, on i
 wallfacer handbook revisions <page-id>
 ```
 
-Reads never substitute an unpublished draft for a playbook's active definition: `handbook read` reports only that a draft exists, and `handbook draft` returns its content. Every result carries a `follow_up` object naming the command for each reference in it, so the next read is available from one result plus `--help`.
+Reads never substitute an unpublished draft for a playbook's active definition: `handbook read` reports only that a draft exists, and `handbook draft` returns its content. Every result carries a `follow_up` object naming the next command. Where the result names one record — a read, a resolve, a write, a `revisions` or `versions` listing — every entry runs as printed, with the ids already filled in. Where it names many (`tree`, `list`, `search`), the entries give the command's shape and you fill the reference in from the record you picked; `next_page` is the same, since which page to ask for is the caller's choice. Either way the next read is available from one result plus `--help`.
 
 Page edits and hierarchy changes use the same references:
 
@@ -128,12 +128,12 @@ wallfacer handbook move <playbook-id> --under "R&D/Engineering" --position 0
 wallfacer handbook move <page-id> --top-level
 wallfacer handbook reorder --under "R&D/Engineering" "Build" <playbook-id> "Review"
 wallfacer handbook delete <page-id>
-wallfacer handbook restore <page-id>            # deleted pages are reached by ID
+wallfacer handbook restore <page-ref>           # refused unless the page is deleted
 ```
 
 A page write is live knowledge immediately: agents running playbooks read the new content from the next task onward. Nothing is lost by editing, though. Each editing session is snapshotted, and the result names the `revisions` command that reads the earlier wording back.
 
-Deleting a page keeps its revision history and does not delete what is filed under it: sub-pages and playbooks move up to the deleted page's parent, or to the top level, and the result names each one. `restore` brings the page back with its content and history intact.
+Deleting a page keeps its revision history and does not delete what is filed under it: sub-pages and playbooks move up to the deleted page's parent, or to the top level, and the result names each one. `restore` brings the page back with its content and history intact; it takes the same reference forms as every other command and refuses a page that is not deleted, which in practice means an ID, since names and paths resolve against active entries only.
 
 `reorder` writes one parent's child order in a single atomic request. Pages and playbooks share one ordering under a parent, so the list is mixed and must be that parent's complete set of children; a list that omits, repeats, or imports a sibling is rejected before anything is written. `move` a playbook and only its parent and position change: no draft save, no publish, no trigger change, and no task.
 
@@ -151,7 +151,7 @@ wallfacer handbook publish <playbook-id> --activate=false                  # ver
 wallfacer handbook discard-draft <playbook-id>                             # active version untouched
 wallfacer handbook update-playbook <playbook-id> --disable
 wallfacer handbook archive-playbook <playbook-id>
-wallfacer handbook restore-playbook <playbook-id>                          # comes back disabled
+wallfacer handbook restore-playbook <playbook-id>                          # comes back disabled; refused unless archived
 ```
 
 Creation publishes: the definition given to `create-playbook` is validated, stored as version 1, and made active in the same call. Publishing operates on the saved draft and fails without creating a version when there is no draft, when the stored draft holds no definition, or when the server's validation rejects it. Publishing never enables a disabled playbook, and `--activate=false` reports the new version separately from the still-active one.

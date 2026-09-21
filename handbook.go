@@ -477,14 +477,21 @@ func runHandbookRevisions(api *handbookAPI, reference string, page, perPage int)
 		return handbookReadError(err, ref)
 	}
 
+	items := responseList(resp)
+	followUp := map[string]interface{}{
+		"next_page": fmt.Sprintf("wallfacer handbook revisions %s --page <n>", ref.ID),
+	}
+	// Name the newest revision on this page of results, so the command runs as
+	// printed rather than leaving the caller to paste an id into it.
+	if id := firstRevisionID(items); id != "" {
+		followUp["revision"] = fmt.Sprintf("wallfacer handbook revision %s %s", ref.ID, id)
+	}
+
 	return emitHandbook(map[string]interface{}{
-		"data":       responseList(resp),
+		"data":       items,
 		"reference":  ref,
 		"pagination": paginationOf(resp),
-		"follow_up": map[string]interface{}{
-			"revision":  fmt.Sprintf("wallfacer handbook revision %s <revision-id>", ref.ID),
-			"next_page": fmt.Sprintf("wallfacer handbook revisions %s --page <n>", ref.ID),
-		},
+		"follow_up":  followUp,
 	})
 }
 
@@ -523,15 +530,22 @@ func runHandbookVersions(api *handbookAPI, reference string, page, perPage int) 
 		return handbookReadError(err, ref)
 	}
 
+	items := responseList(resp)
+	followUp := map[string]interface{}{
+		"active":    fmt.Sprintf("wallfacer handbook version %s", ref.ID),
+		"next_page": fmt.Sprintf("wallfacer handbook versions %s --page <n>", ref.ID),
+	}
+	// Same as revisions: name the newest version on this page of results rather
+	// than printing a command with a placeholder still in it.
+	if version := firstVersionArgument(items); version != "" {
+		followUp["version"] = fmt.Sprintf("wallfacer handbook version %s %s", ref.ID, version)
+	}
+
 	return emitHandbook(map[string]interface{}{
-		"data":       responseList(resp),
+		"data":       items,
 		"reference":  ref,
 		"pagination": paginationOf(resp),
-		"follow_up": map[string]interface{}{
-			"version":   fmt.Sprintf("wallfacer handbook version %s <version>", ref.ID),
-			"active":    fmt.Sprintf("wallfacer handbook version %s", ref.ID),
-			"next_page": fmt.Sprintf("wallfacer handbook versions %s --page <n>", ref.ID),
-		},
+		"follow_up":  followUp,
 	})
 }
 
@@ -629,6 +643,36 @@ func expandActiveVersion(api *handbookAPI, record map[string]interface{}, pipeli
 	return nil
 }
 
+// firstRevisionID takes the id of the newest revision in a revisions listing,
+// which the endpoint returns most-recent first. Empty when the page has no
+// revisions on it, in which case no `revision` command is named at all.
+func firstRevisionID(items []interface{}) string {
+	if len(items) == 0 {
+		return ""
+	}
+	record, ok := items[0].(map[string]interface{})
+	if !ok {
+		return ""
+	}
+	return stringField(record, "id")
+}
+
+// firstVersionArgument is firstRevisionID for a playbook versions listing,
+// where the path takes either the integer version number or the version's UUID.
+func firstVersionArgument(items []interface{}) string {
+	if len(items) == 0 {
+		return ""
+	}
+	record, ok := items[0].(map[string]interface{})
+	if !ok {
+		return ""
+	}
+	if version := versionArgument(record["version"]); version != "" {
+		return version
+	}
+	return versionArgument(record["id"])
+}
+
 func draftSummary(draft interface{}, pipelineID string) map[string]interface{} {
 	summary := map[string]interface{}{
 		"present": false,
@@ -653,11 +697,15 @@ func (a *handbookAPI) followUp(ref *handbookRef) map[string]interface{} {
 
 	switch ref.Type {
 	case kindPage:
+		// This result names one record, so every entry here runs as printed.
+		// No revision id is in hand, which is why the entry is `revisions`:
+		// that listing is what names a concrete `revision` command.
 		out["revisions"] = fmt.Sprintf("wallfacer handbook revisions %s", ref.ID)
-		out["revision"] = fmt.Sprintf("wallfacer handbook revision %s <revision-id>", ref.ID)
 	case kindPlaybook:
 		out["versions"] = fmt.Sprintf("wallfacer handbook versions %s", ref.ID)
-		out["version"] = fmt.Sprintf("wallfacer handbook version %s <version>", ref.ID)
+		// With no version argument the command reads the active version, which
+		// is the one entry here that runs as printed; `versions` names the rest.
+		out["version"] = fmt.Sprintf("wallfacer handbook version %s", ref.ID)
 		if ref.HasDraft != nil && *ref.HasDraft {
 			out["draft"] = fmt.Sprintf("wallfacer handbook draft %s", ref.ID)
 		}

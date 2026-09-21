@@ -302,8 +302,9 @@ func handbookUpdateCommand(accountID string) *cobra.Command {
 
 The change is live immediately: the page's new content is what agents read from the next
 task onward. Nothing is lost, though. Each editing session is snapshotted, so the previous
-wording stays readable with ` + "`wallfacer handbook revisions <page>`" + ` and
-` + "`wallfacer handbook revision <page> <revision-id>`" + `; the result names both commands.
+wording stays readable with ` + "`wallfacer handbook revisions <page>`" + `, which the result
+names and which in turn names the ` + "`wallfacer handbook revision`" + ` command for the
+newest snapshot.
 
 Fields left out are left alone. ` + "`--clear-body`" + ` empties the body, which is not the same
 as leaving ` + "`--body`" + ` off. Passing a body flag means stdin is not read at all, so pipe
@@ -345,13 +346,15 @@ The result names the children that moved and where they moved to.`),
 
 func handbookRestoreCommand(accountID string) *cobra.Command {
 	return &cobra.Command{
-		Use:   "restore <page-id>",
-		Short: "Restore a deleted page by ID",
+		Use:   "restore <page-reference>",
+		Short: "Restore a deleted page",
 		Long: cli.Markdown(`Restores a deleted page: its content and revision history come back intact.
 
-Names and paths resolve against active entries only, so a deleted page is reached by its
-stable ID (or a page detail URL carrying it). ` + "`wallfacer handbook list --include-deleted`" + `
-is where that ID comes from.
+The target takes the same reference forms as every other command, and the guard is on state:
+a page that is not deleted is refused. In practice that means an ID (or a page detail URL
+carrying one), because names and paths resolve against active entries only and so can never
+name a deleted page. ` + "`wallfacer handbook list --include-deleted`" + ` is where that ID
+comes from.
 
 If the page's parent was deleted in the meantime the page comes back at the top level; the
 returned record's ` + "`parent_page_id`" + ` says where it actually landed.`),
@@ -755,8 +758,10 @@ func handbookWriteFollowUp(ref *handbookRef) map[string]interface{} {
 	}
 	switch ref.Type {
 	case kindPage:
+		// The write response carries no revision id, so `revisions` is the
+		// entry that reaches the previous wording: it names a concrete
+		// `revision` command of its own.
 		out["revisions"] = fmt.Sprintf("wallfacer handbook revisions %s", ref.ID)
-		out["revision"] = fmt.Sprintf("wallfacer handbook revision %s <revision-id>", ref.ID)
 	case kindPlaybook:
 		out["versions"] = fmt.Sprintf("wallfacer handbook versions %s", ref.ID)
 	}
