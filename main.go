@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -224,8 +225,10 @@ func main() {
 		injectAccountID(cli.Root, accountID)
 	}
 
+	hardenUnknownArgs(cli.Root)
+
 	updateCh := startUpdateCheck(version)
-	cli.Root.Execute()
+	execErr := cli.Root.Execute()
 	select {
 	case result := <-updateCh:
 		if result != nil {
@@ -233,6 +236,58 @@ func main() {
 		}
 	default:
 	}
+	if execErr != nil {
+		fmt.Fprintln(os.Stderr, "Error:", execErr)
+		os.Exit(1)
+	}
+}
+
+// hardenUnknownArgs makes a mistyped subcommand or flag fail the way a caller
+// can detect: the unrecognized token is named on stderr and the process exits
+// non-zero, instead of a help screen on stdout and a success exit.
+//
+// Two cobra behaviors produce the silent exit 0. Its own error and usage
+// printing goes to the root's output, which cli.Init points at stdout, so
+// silencing both leaves main as the only writer and stderr as the only
+// destination. And a group command — subcommands, no Run — has no error path
+// for an unrecognized token at all: cobra prints the group's help and reports
+// success, so the group needs a RunE that rejects the token itself.
+func hardenUnknownArgs(cmd *cobra.Command) {
+	cmd.SilenceErrors = true
+	cmd.SilenceUsage = true
+
+	for _, sub := range cmd.Commands() {
+		hardenUnknownArgs(sub)
+	}
+
+	if cmd.Runnable() || !cmd.HasSubCommands() {
+		return
+	}
+	cmd.RunE = func(c *cobra.Command, args []string) error {
+		if len(args) == 0 {
+			return c.Help()
+		}
+		return unknownCommandError(c, args[0])
+	}
+}
+
+// unknownCommandError repeats the wording and the spelling suggestions cobra
+// produces for an unknown command at the root, so the message reads the same
+// at every level of the tree.
+func unknownCommandError(cmd *cobra.Command, token string) error {
+	message := fmt.Sprintf("unknown command %q for %q", token, cmd.CommandPath())
+	// SuggestionsFor reads the distance rather than defaulting it; cobra fills
+	// it in on the same path before asking.
+	if cmd.SuggestionsMinimumDistance <= 0 {
+		cmd.SuggestionsMinimumDistance = 2
+	}
+	if suggestions := cmd.SuggestionsFor(token); len(suggestions) > 0 {
+		message += "\n\nDid you mean this?\n"
+		for _, suggestion := range suggestions {
+			message += fmt.Sprintf("\t%v\n", suggestion)
+		}
+	}
+	return errors.New(message)
 }
 
 func injectAccountID(parent *cobra.Command, accountID string) {
