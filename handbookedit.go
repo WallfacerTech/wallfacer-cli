@@ -272,13 +272,22 @@ func handbookBodySuppliedByFlags(cmd *cobra.Command) bool {
 	return false
 }
 
-func addHandbookContentFlags(cmd *cobra.Command) {
+// addHandbookContentFlags registers the fields create and update share. The
+// two commands describe `--position` differently: create writes the position
+// verbatim, update inserts at it. See handbookPositionInsertHelp.
+func addHandbookContentFlags(cmd *cobra.Command, positionHelp string) {
 	cmd.Flags().String("title", "", "Page title")
 	cmd.Flags().String("body", "", "Markdown body")
 	cmd.Flags().String("body-file", "", "Read the markdown body from a file")
-	cmd.Flags().Int("position", 0, "Sort position among siblings (lower sorts first)")
+	cmd.Flags().Int("position", 0, positionHelp)
 	addHandbookParentFlags(cmd)
 }
+
+// handbookPositionInsertHelp describes `--position` on the commands that
+// insert at it — update and move. The server shifts the sibling holding that
+// position and everything after it down, renormalizes the parent to dense
+// 0..n-1 positions, and clamps a value past the last sibling so it appends.
+const handbookPositionInsertHelp = "Insert at this position among the siblings (later siblings shift down; past the end appends)"
 
 func handbookCreateCommand(accountID string) *cobra.Command {
 	cmd := &cobra.Command{
@@ -306,7 +315,7 @@ other fields to come from it too. File the page with
 			return runHandbookCreate(api, edit)
 		}),
 	}
-	addHandbookContentFlags(cmd)
+	addHandbookContentFlags(cmd, "Sort position among siblings (lower sorts first)")
 	return cmd
 }
 
@@ -325,9 +334,14 @@ names the ` + "`wallfacer handbook revision <page> <revision-id>`" + ` command f
 revision. Use earlier-session rows for recovery; same-session intermediate wording is not
 retained.
 
-Fields left out are left alone. ` + "`--clear-body`" + ` empties the body, which is not the same
-as leaving ` + "`--body`" + ` off. Passing a body flag means stdin is not read at all, so pipe
-the whole JSON object when you want other fields to come from it too.`),
+Fields left out are left alone, with one exception: moving the page with ` + "`--under`" + ` or
+` + "`--top-level`" + ` and no ` + "`--position`" + ` appends it to the end of its new parent. ` + "`--position`" + `
+here inserts rather than overwrites, the way ` + "`handbook move`" + ` does; on
+` + "`handbook create`" + ` it is written verbatim.
+
+` + "`--clear-body`" + ` empties the body, which is not the same as leaving ` + "`--body`" + ` off. Passing a
+body flag means stdin is not read at all, so pipe the whole JSON object when you want
+other fields to come from it too.`),
 		Example: `  wallfacer handbook update "Engineering/Build" --body-file build.md
   echo '{"title":"Build"}' | wallfacer handbook update <page-id>`,
 		Args: cobra.ExactArgs(1),
@@ -339,7 +353,7 @@ the whole JSON object when you want other fields to come from it too.`),
 			return runHandbookUpdate(api, args[0], edit)
 		}),
 	}
-	addHandbookContentFlags(cmd)
+	addHandbookContentFlags(cmd, handbookPositionInsertHelp)
 	cmd.Flags().Bool("clear-body", false, "Clear the page's body")
 	return cmd
 }
@@ -389,8 +403,12 @@ func handbookMoveCommand(accountID string) *cobra.Command {
 		Use:   "move <reference>",
 		Short: "Move a page or playbook under another page, or to the top level",
 		Long: cli.Markdown(`Refiles one entry. Pass ` + "`--under <page-reference>`" + ` to file it under a page, or
-` + "`--top-level`" + ` to take it out of every page. ` + "`--position`" + ` sets its slot among its new
-siblings; leave it off and the entry keeps the position it had.
+` + "`--top-level`" + ` to take it out of every page. ` + "`--position`" + ` inserts it at that slot among
+its new siblings: the sibling holding that position and everything after it shift down,
+the parent renormalizes to dense 0..n-1 positions, and a value past the last sibling
+appends. The position the entry lands on is the server's, not necessarily the integer
+sent. Leave ` + "`--position`" + ` off and the entry goes to the end of its new parent; a move
+whose destination is the parent it already has leaves its position alone.
 
 Moving a playbook changes where it sits and nothing else: its definition is not saved,
 published, or discarded, its triggers are untouched, and no task is created.
@@ -421,7 +439,7 @@ sub-pages, and a reference from another account never reaches a request.`),
 	}
 	addHandbookParentFlags(cmd)
 	addHandbookKindFlag(cmd)
-	cmd.Flags().Int("position", 0, "Sort position among the new siblings (lower sorts first)")
+	cmd.Flags().Int("position", 0, handbookPositionInsertHelp)
 	return cmd
 }
 

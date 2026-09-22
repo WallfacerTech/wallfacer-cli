@@ -20815,7 +20815,7 @@ paths:
     patch:
       summary: 'Update a page'
       operationId: updateAPage
-      description: "Updates a page's title, body, parent, or position. Moving a page (changing `parent_page_id` and `position`) reorganizes the handbook tree; moving a page under itself or one of its own sub-pages is rejected. Passing `deleted: false` restores a deleted page (its content and history come back intact; if its parent was deleted in the meantime it restores to the top level)."
+      description: "Updates a page's title, body, parent, or position. Moving a page (changing `parent_page_id` and `position`) reorganizes the handbook tree; moving a page under itself or one of its own sub-pages is rejected. `position` inserts rather than overwrites: the sibling holding that position and everything after it shift down, and the parent is renormalized to dense 0..n-1 positions, so no two siblings ever share one. A position past the last sibling appends. Passing `deleted: false` restores a deleted page (its content and history come back intact; if its parent was deleted in the meantime it restores to the top level)."
       parameters: []
       responses: {  }
       tags:
@@ -20843,7 +20843,7 @@ paths:
                   nullable: true
                 position:
                   type: integer
-                  description: 'New sort position among siblings. Must be at least 0.'
+                  description: 'Where to insert the page among its siblings (pages and playbooks share one ordering). The item at that position and everything after it shift down, and the parent renormalizes to dense 0..n-1 positions; a value past the last sibling appends. Omitted on a move to a new parent, the page appends there. Must be at least 0.'
                   example: 0
                 deleted:
                   type: boolean
@@ -21764,7 +21764,7 @@ paths:
     patch:
       summary: 'Update pipeline metadata'
       operationId: updatePipelineMetadata
-      description: "Updates the pipeline's display name, description, or routing on/off state. These settings take effect immediately. The pipeline's steps and triggers themselves change through publishing a new version, not through this endpoint. Passing `archived: false` restores an archived pipeline: it comes back disabled (triggers stay cleared until enabled), renamed with a numeric suffix if another pipeline claimed its name in the meantime."
+      description: "Updates the pipeline's display name, description, or routing on/off state. These settings take effect immediately. The pipeline's steps and triggers themselves change through publishing a new version, not through this endpoint. `position` inserts rather than overwrites: the sibling holding that position and everything after it shift down, and the parent is renormalized to dense 0..n-1 positions, so no two siblings ever share one. A position past the last sibling appends. Passing `archived: false` restores an archived pipeline: it comes back disabled (triggers stay cleared until enabled), renamed with a numeric suffix if another pipeline claimed its name in the meantime."
       parameters: []
       responses:
         422:
@@ -21827,7 +21827,7 @@ paths:
                   nullable: true
                 position:
                   type: integer
-                  description: 'New sort position among siblings in the handbook tree. Must be at least 0.'
+                  description: 'Where to insert the playbook among its siblings in the handbook tree (pages and playbooks share one ordering). The item at that position and everything after it shift down, and the parent renormalizes to dense 0..n-1 positions; a value past the last sibling appends. Omitted on a move to a new parent, the playbook appends there. Must be at least 0.'
                   example: 0
                 linked_page_ids:
                   type: array

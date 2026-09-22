@@ -107,7 +107,7 @@ wallfacer handbook delete <page-reference>    # children move up; history is kep
 wallfacer handbook restore <page-reference>   # refused unless the page is deleted
 ```
 
-A page write is live knowledge immediately, and `handbook revisions` holds one row per editing session, not per edit: same-author saves within ten minutes of the session's first save update that row in place with the latest body, so the wording you just overwrote in the same sitting is not recoverable. `reorder` is one atomic write of a parent's complete, mixed child list. Moving a playbook changes only its parent and position: no draft save, no publish, no trigger change, no task.
+A page write is live knowledge immediately, and `handbook revisions` holds one row per editing session, not per edit: same-author saves within ten minutes of the session's first save update that row in place with the latest body, so the wording you just overwrote in the same sitting is not recoverable. `reorder` is one atomic write of a parent's complete, mixed child list. Moving a playbook changes only its parent and position: no draft save, no publish, no trigger change, no task. `--position` on `move` and `update` inserts at that slot (later siblings shift down, the parent renormalizes, past the end appends); omit it on a `move` and the entry goes to the end of its new parent. On `create` it is the position written.
 
 Playbook authoring splits saving from publishing. `save-draft` stores a working copy and changes nothing about how the playbook runs; `publish` sends that saved draft to the version endpoint and is the only command besides `create-playbook` that changes the versioned definition.
 
@@ -151,7 +151,7 @@ echo '{"body": "..."}' | wallfacer pages update <page-id>
 wallfacer pages delete <page-id>
 ```
 
-`update` takes any of `title`, `body`, `parent_page_id`, `position`, and `deleted: false` (restores a deleted page). `delete` keeps the page's revision history and re-parents its children to the deleted page's parent.
+`update` takes any of `title`, `body`, `parent_page_id`, `position`, and `deleted: false` (restores a deleted page). `position` here is an insert point: later siblings shift down, the parent renormalizes to dense `0..n-1` positions, and a value past the end appends, so read the landed position off the result. A `parent_page_id` change with no `position` appends to the new parent. On `create` the position is written verbatim. `delete` keeps the page's revision history and re-parents its children to the deleted page's parent.
 
 ## Request bodies via stdin
 
