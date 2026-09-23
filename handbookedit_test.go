@@ -675,3 +675,26 @@ func TestAnUnsetPositionLeavesTheEntryWhereItIs(t *testing.T) {
 		t.Errorf("position is %d, want the -1 sentinel that omits the field", position)
 	}
 }
+
+// TestPositionIsDocumentedAsAnInsertPointEverywhere guards the mismatch behind
+// #120: the server inserts and renormalizes on create exactly as it does on
+// update and move, so no command may describe --position as a sort key.
+func TestPositionIsDocumentedAsAnInsertPointEverywhere(t *testing.T) {
+	commands := map[string]*cobra.Command{
+		"create": handbookCreateCommand(testAccountID),
+		"update": handbookUpdateCommand(testAccountID),
+		"move":   handbookMoveCommand(testAccountID),
+	}
+	for name, cmd := range commands {
+		flag := cmd.Flags().Lookup("position")
+		if flag == nil {
+			t.Fatalf("%s has no --position flag", name)
+		}
+		if flag.Usage != handbookPositionInsertHelp {
+			t.Errorf("%s describes --position as %q, want the shared insert help", name, flag.Usage)
+		}
+		if strings.Contains(strings.ToLower(cmd.Long), "verbatim") {
+			t.Errorf("%s's long description still calls a position verbatim: %s", name, cmd.Long)
+		}
+	}
+}
