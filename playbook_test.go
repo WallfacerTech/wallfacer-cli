@@ -808,6 +808,47 @@ func TestUpdatePlaybookRefusesEnablingAnArchivedPlaybook(t *testing.T) {
 	}
 }
 
+// A rename onto a name another playbook holds is refused by the server alone:
+// the CLI runs no name check of its own, so the 409 is the only signal, and
+// what it prints has to say that nothing in the update landed.
+func TestUpdatePlaybookReportsANameAnotherPlaybookHolds(t *testing.T) {
+	fixture := newHandbookFixture(t)
+	fixture.onWrite(func(r *http.Request, body string) (string, int, bool) {
+		return `{"errors":[{"message":"A pipeline with this name already exists on this account.","code":"pipeline_name_taken","field":"name"}]}`, http.StatusConflict, true
+	})
+
+	err := captureError(t, func() error {
+		update := &playbookUpdate{body: map[string]interface{}{"name": "Release", "description": "Ship it"}}
+		return runPlaybookUpdate(fixture.api(), playbookBuildID, update)
+	})
+	if !strings.Contains(err.Error(), `"Release"`) {
+		t.Errorf("the refusal should name the name that was refused: %v", err)
+	}
+	if !strings.Contains(err.Error(), "nothing else in the update was applied") {
+		t.Errorf("the refusal should say the whole update was dropped: %v", err)
+	}
+	if strings.Contains(err.Error(), "409") || strings.Contains(err.Error(), "pipeline") {
+		t.Errorf("the refusal should not carry the API's own vocabulary: %v", err)
+	}
+}
+
+// Every other rejected update still surfaces the server's own status and body,
+// which is what a refusal the CLI has no words for has to fall back to.
+func TestUpdatePlaybookSurfacesAnUnrecognizedRejection(t *testing.T) {
+	fixture := newHandbookFixture(t)
+	fixture.onWrite(func(r *http.Request, body string) (string, int, bool) {
+		return `{"errors":[{"message":"This handbook has a step that needs a computer before it can be enabled or run.","code":"environment_required"}]}`, http.StatusUnprocessableEntity, true
+	})
+
+	err := captureError(t, func() error {
+		update := &playbookUpdate{body: map[string]interface{}{"disabled": false}}
+		return runPlaybookUpdate(fixture.api(), playbookBuildID, update)
+	})
+	if !strings.Contains(err.Error(), "422") || !strings.Contains(err.Error(), "environment_required") {
+		t.Errorf("error should carry the server's status and message, got %v", err)
+	}
+}
+
 // Disabling an archived playbook is not the refused transition, and neither is
 // any other metadata change: only enabling one is.
 func TestUpdatePlaybookStillPatchesOtherFieldsOnAnArchivedPlaybook(t *testing.T) {

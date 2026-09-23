@@ -91,6 +91,8 @@ wallfacer handbook restore-playbook <playbook-id>
 
 **`update-playbook` is metadata only.** Name, description, linked pages, and the enabled state, all of which take effect immediately. Steps and triggers change only through `publish`. Moving the playbook in the tree and ordering it among siblings are hierarchy edits and are not in this command.
 
+**A create suffixes a taken name; a rename refuses it.** `create-playbook --name` with a name another non-archived playbook holds lands as `<name> (2)`, so read the name that landed off the result. `update-playbook --name` onto a taken name is refused by the server and nothing in that update is applied, including the other fields it carried. The CLI runs no name check of its own, so retry with a different name rather than treating a refusal as partial.
+
 **A restore comes back disabled.** `restore-playbook` takes the same reference forms as every other command, which in practice means an ID or detail URL, since names resolve against active entries only. Its triggers stay cleared until `update-playbook --enable`, and the server renames it with a numeric suffix if another playbook claimed its name. A playbook that is not archived is refused before the request, and so is `update-playbook --enable` on one that is still archived: restore it first.
 
 ## Drafts and publication
@@ -148,7 +150,7 @@ wallfacer handbook move <reference> (--under <page-reference> | --top-level) [--
 wallfacer handbook reorder (--under <page-reference> | --top-level) <reference>...
 ```
 
-`move` refiles one entry of either type. Leave `--position` off and the entry goes to the end of its new parent; a move whose destination is the parent it already has leaves its position alone. A negative `--position` is refused before the request, so a move is never reported for a field that was not sent.
+`move` refiles one entry of either type. Leave `--position` off and the entry goes to the end of its new parent; a move whose destination is the parent it already has leaves its position alone. A negative `--position` is refused before the request, so a move is never reported for a field that was not sent. So is moving an archived playbook, which has no place in the tree until `restore-playbook` brings it back.
 
 `--position` on `move` and on `update` is an insert point, not a sort key: the sibling holding that position and everything after it shift down, the parent renormalizes to dense `0..n-1` positions, and a value past the last sibling appends. The position the entry lands on is the server's, not necessarily the integer sent, so read it back from the result. On `create` it is still written verbatim (see "Editing a page" above). Moving a playbook changes only its parent and position: its definition is not saved, published, or discarded, its triggers are untouched, and no task is created.
 
