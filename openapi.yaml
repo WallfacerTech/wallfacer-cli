@@ -1514,6 +1514,9 @@ components:
               type: string
               nullable: true
               description: 'A link to the thread on that channel, when the channel recorded one. Null otherwise.'
+        analysis_mode:
+          type: boolean
+          description: "Whether an analysis span is open on this session right now. False on every ordinary session, and false as soon as a span closes.\n\nRead this rather than inferring the span's state from the transcript: the message that closes a span is itself stamped `mode: analysis`, so the last message of a closed span looks exactly like the last message of an open one. This is the session's own state and is separate from `mode` on a message, which says which span a message belongs to and stays `'analysis' | null` per row."
         message_count:
           type: integer
           description: 'Total number of messages in this session, including queued ones that have not yet been delivered to the agent.'
@@ -7493,6 +7496,7 @@ paths:
                       can_send: true
                       send_restriction: null
                       conversation_opening: null
+                      analysis_mode: false
                       message_count: 0
                       idle_timeout_seconds: 300
                       created_by: 162
@@ -7542,6 +7546,7 @@ paths:
                       can_send: true
                       send_restriction: null
                       conversation_opening: null
+                      analysis_mode: false
                       message_count: 0
                       idle_timeout_seconds: 300
                       created_by: 171
@@ -7686,6 +7691,7 @@ paths:
                     can_send: true
                     send_restriction: null
                     conversation_opening: null
+                    analysis_mode: false
                     message_count: 0
                     idle_timeout_seconds: 300
                     created_by: 180
@@ -8042,6 +8048,7 @@ paths:
                     can_send: true
                     send_restriction: null
                     conversation_opening: null
+                    analysis_mode: false
                     message_count: 0
                     idle_timeout_seconds: 300
                     created_by: 189
@@ -8190,6 +8197,7 @@ paths:
                     can_send: true
                     send_restriction: null
                     conversation_opening: null
+                    analysis_mode: false
                     message_count: 0
                     idle_timeout_seconds: 300
                     created_by: 198
@@ -8481,6 +8489,7 @@ paths:
                               text: 'Et animi quos velit et fugiat.'
                               type: text
                       type: user
+                      mode: null
                       sequence: 50
                       status: sent
                       display_text: null
@@ -8505,6 +8514,7 @@ paths:
                               text: 'Ratione iure impedit molestiae ut rem.'
                               type: text
                       type: user
+                      mode: null
                       sequence: 12
                       status: sent
                       display_text: null
@@ -8543,6 +8553,7 @@ paths:
                                 text: 'Et animi quos velit et fugiat.'
                                 type: text
                         type: user
+                        mode: null
                         sequence: 50
                         status: sent
                         display_text: null
@@ -8567,6 +8578,7 @@ paths:
                                 text: 'Ratione iure impedit molestiae ut rem.'
                                 type: text
                         type: user
+                        mode: null
                         sequence: 12
                         status: sent
                         display_text: null
@@ -8626,6 +8638,13 @@ paths:
                             - attachment
                             - ai-title
                             - turn-input
+                        mode:
+                          type: string
+                          example: null
+                          description: "The conversation mode this message belongs to. Null on ordinary messages, which is almost all of them.\n\n- `analysis`: part of an analysis span, an administrator-only stretch of the conversation used to ask the agent how it reached a decision. Every message in the span carries it, from the one that opened it to the one that closed it. Render the run as visually distinct so a reader can tell it apart from the work either side of it: the span stays in the thread afterwards as the record of what was asked, but the agent itself is returned to the conversation it was having before, and its later replies have no knowledge of it."
+                          nullable: true
+                          enum:
+                            - analysis
                         sequence:
                           type: integer
                           example: 50
@@ -8692,6 +8711,7 @@ paths:
                       - session_id
                       - payload
                       - type
+                      - mode
                       - sequence
                       - status
                       - display_text
@@ -8826,6 +8846,7 @@ paths:
                             text: 'Eius et animi quos velit et.'
                             type: text
                     type: user
+                    mode: null
                     sequence: 86
                     status: sent
                     display_text: null
@@ -8890,6 +8911,13 @@ paths:
                           - attachment
                           - ai-title
                           - turn-input
+                      mode:
+                        type: string
+                        example: null
+                        description: "The conversation mode this message belongs to. Null on ordinary messages, which is almost all of them.\n\n- `analysis`: part of an analysis span, an administrator-only stretch of the conversation used to ask the agent how it reached a decision. Every message in the span carries it, from the one that opened it to the one that closed it. Render the run as visually distinct so a reader can tell it apart from the work either side of it: the span stays in the thread afterwards as the record of what was asked, but the agent itself is returned to the conversation it was having before, and its later replies have no knowledge of it."
+                        nullable: true
+                        enum:
+                          - analysis
                       sequence:
                         type: integer
                         example: 86
@@ -8956,6 +8984,7 @@ paths:
                       - session_id
                       - payload
                       - type
+                      - mode
                       - sequence
                       - status
                       - display_text
@@ -9282,6 +9311,7 @@ paths:
                             text: 'Adipisci quidem nostrum qui commodi incidunt iure.'
                             type: text
                     type: user
+                    mode: null
                     sequence: 32
                     status: sent
                     display_text: null
@@ -9346,6 +9376,13 @@ paths:
                           - attachment
                           - ai-title
                           - turn-input
+                      mode:
+                        type: string
+                        example: null
+                        description: "The conversation mode this message belongs to. Null on ordinary messages, which is almost all of them.\n\n- `analysis`: part of an analysis span, an administrator-only stretch of the conversation used to ask the agent how it reached a decision. Every message in the span carries it, from the one that opened it to the one that closed it. Render the run as visually distinct so a reader can tell it apart from the work either side of it: the span stays in the thread afterwards as the record of what was asked, but the agent itself is returned to the conversation it was having before, and its later replies have no knowledge of it."
+                        nullable: true
+                        enum:
+                          - analysis
                       sequence:
                         type: integer
                         example: 32
@@ -9412,6 +9449,7 @@ paths:
                       - session_id
                       - payload
                       - type
+                      - mode
                       - sequence
                       - status
                       - display_text
@@ -21249,7 +21287,7 @@ paths:
                       type:
                         type: string
                         description: ''
-                        example: page
+                        example: playbook
                         enum:
                           - page
                           - playbook
