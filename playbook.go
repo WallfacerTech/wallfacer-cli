@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"sort"
 	"strconv"
@@ -69,7 +70,7 @@ commands.`),
 		}),
 	}
 	addDefinitionFlags(cmd)
-	cmd.Flags().String("name", "", "Display name, unique among the account's non-archived playbooks")
+	cmd.Flags().String("name", "", "Display name; a name another non-archived playbook holds is suffixed rather than refused, so read the name that landed off the response")
 	cmd.Flags().String("description", "", "Human-readable description")
 	cmd.Flags().String("parent", "", "Handbook page to file the playbook under (ID, name, path, or URL)")
 	cmd.Flags().StringArray("link-page", nil, "Handbook page delivered on every run, repeatable (ID, name, path, or URL)")
@@ -511,6 +512,13 @@ func runPlaybookUpdate(api *handbookAPI, reference string, update *playbookUpdat
 
 	record, err := api.updatePipeline(ref.ID, update.body)
 	if err != nil {
+		// A rename onto a name another playbook holds is the one refusal the
+		// CLI cannot see coming: it generates no client-side name check, so
+		// the server's 409 is the only signal. Say whose refusal it is, and
+		// that the rest of the update did not land either.
+		if name, ok := update.body["name"].(string); ok && carriesCode(err, http.StatusConflict, "pipeline_name_taken") {
+			return errors.Errorf("another playbook in this account is already named %q, so playbook %s was not renamed and nothing else in the update was applied; pick another name, or see the names in use with: wallfacer handbook list --type playbook", name, ref.ID)
+		}
 		return handbookReadError(err, ref)
 	}
 

@@ -29,6 +29,44 @@ import (
 // place the handbook commands leave GET, so they all go through here: a 204
 // comes back as an empty map, and any status at or past 400 is an error rather
 // than a result, so a rejected write is never printed as a success.
+// handbookWriteRejected is the error every rejected write comes back as. Its
+// message is the "HTTP <status>: <body>" a caller with nothing better to say
+// prints verbatim; the fields are there so a caller that recognizes one
+// refusal can restate it in the CLI's own vocabulary instead.
+type handbookWriteRejected struct {
+	status int
+	body   string
+}
+
+func (e *handbookWriteRejected) Error() string {
+	return fmt.Sprintf("HTTP %d: %s", e.status, e.body)
+}
+
+// carriesCode reports whether a rejected write is the refusal identified by
+// code at status. The API answers every refusal with an `errors` array, so the
+// code rather than the message is what a caller matches on.
+func carriesCode(err error, status int, code string) bool {
+	rejected, ok := err.(*handbookWriteRejected)
+	if !ok || rejected.status != status {
+		return false
+	}
+
+	var decoded struct {
+		Errors []struct {
+			Code string `json:"code"`
+		} `json:"errors"`
+	}
+	if json.Unmarshal([]byte(rejected.body), &decoded) != nil {
+		return false
+	}
+	for _, e := range decoded.Errors {
+		if e.Code == code {
+			return true
+		}
+	}
+	return false
+}
+
 func (a *handbookAPI) send(method, path string, payload map[string]interface{}) (map[string]interface{}, error) {
 	server := viper.GetString("server")
 	if server == "" {
@@ -65,7 +103,7 @@ func (a *handbookAPI) send(method, path string, payload map[string]interface{}) 
 		return nil, errHandbookNotFound
 	}
 	if resp.StatusCode >= 400 {
-		return nil, errors.Errorf("HTTP %d: %s", resp.StatusCode, resp.String())
+		return nil, &handbookWriteRejected{status: resp.StatusCode, body: resp.String()}
 	}
 
 	if strings.TrimSpace(resp.String()) == "" {
@@ -610,6 +648,14 @@ func runHandbookMove(api *handbookAPI, reference, kind string, edit handbookEdit
 	ref, err := api.resolveHandbookRef(reference, kind)
 	if err != nil {
 		return err
+	}
+
+	// An archived playbook has no place in the handbook tree, so the server
+	// refuses a move with a 422 naming the `archived: false` request field.
+	// The CLI has no such flag, so the refusal is made here and names the
+	// command that restores one, as `update-playbook --enable` already does.
+	if ref.Type == kindPlaybook && ref.State == "archived" {
+		return errors.Errorf("playbook %s is archived, so moving it is refused; restore it first with: wallfacer handbook restore-playbook %s", ref.ID, ref.ID)
 	}
 
 	// Hierarchy only. A playbook's definition, triggers, and draft are not in

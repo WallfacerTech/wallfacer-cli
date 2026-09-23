@@ -329,19 +329,26 @@ func TestMovePlaybookChangesHierarchyAndNothingElse(t *testing.T) {
 	}
 }
 
-func TestMoveReachesAnArchivedPlaybookByID(t *testing.T) {
+// An archived playbook still resolves by ID, and the move is then refused
+// before anything is sent: the server answers one with a 422 naming the
+// `archived: false` request field, which is not a flag this CLI has.
+func TestMoveRefusesAnArchivedPlaybookReachedByID(t *testing.T) {
 	fixture := newHandbookFixture(t)
 
-	capture(t, func() error {
+	err := captureError(t, func() error {
 		return runHandbookMove(fixture.api(), playbookArchivedID, "", handbookEdit{parentRef: "Product"}, -1)
 	})
-
-	request := lastMutation(t, fixture)
-	if request.path != "/v1/accounts/"+testAccountID+"/pipelines/"+playbookArchivedID {
-		t.Fatalf("move issued %s %s, want the archived playbook", request.method, request.path)
+	if !strings.Contains(err.Error(), "wallfacer handbook restore-playbook "+playbookArchivedID) {
+		t.Errorf("the refusal should name the command to run: %v", err)
 	}
-	if body := request.decodedBody(t); len(body) != 1 || body["parent_page_id"] != pageProductID {
-		t.Errorf("move sent %v, want the parent alone when no position was given", body)
+	if strings.Contains(err.Error(), "archived: false") || strings.Contains(err.Error(), "pipeline") {
+		t.Errorf("the refusal should not carry the API's own vocabulary: %v", err)
+	}
+
+	for _, request := range fixture.recorded() {
+		if request.method != http.MethodGet {
+			t.Errorf("a refused move must not mutate anything: %s %s", request.method, request.path)
+		}
 	}
 }
 
