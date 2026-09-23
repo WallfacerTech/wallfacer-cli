@@ -272,22 +272,25 @@ func handbookBodySuppliedByFlags(cmd *cobra.Command) bool {
 	return false
 }
 
-// addHandbookContentFlags registers the fields create and update share. The
-// two commands describe `--position` differently: create writes the position
-// verbatim, update inserts at it. See handbookPositionInsertHelp.
-func addHandbookContentFlags(cmd *cobra.Command, positionHelp string) {
+// addHandbookContentFlags registers the fields create and update share.
+// `--position` is an insert point on both of them, described the same way it
+// is on move, so the help string is not the caller's to choose. See
+// handbookPositionInsertHelp.
+func addHandbookContentFlags(cmd *cobra.Command) {
 	cmd.Flags().String("title", "", "Page title")
 	cmd.Flags().String("body", "", "Markdown body")
 	cmd.Flags().String("body-file", "", "Read the markdown body from a file")
-	cmd.Flags().Int("position", 0, positionHelp)
+	cmd.Flags().Int("position", 0, handbookPositionInsertHelp)
 	addHandbookParentFlags(cmd)
 }
 
 // handbookPositionInsertHelp describes `--position` on the commands that
-// insert at it — update and move. The server shifts the sibling holding that
-// position and everything after it down, renormalizes the parent to dense
-// 0..n-1 positions, and clamps a value past the last sibling so it appends.
-const handbookPositionInsertHelp = "Insert at this position among the siblings (later siblings shift down; past the end appends)"
+// insert at it — create, update and move. The server shifts the sibling
+// holding that position and everything after it down, renormalizes the parent
+// to dense 0..n-1 positions, and clamps a value past the last sibling so it
+// appends, so the position on the returned record is the one the entry landed
+// on rather than the integer sent.
+const handbookPositionInsertHelp = "Insert at this position among the siblings (later siblings shift down; past the end appends; the record reports where it landed)"
 
 func handbookCreateCommand(accountID string) *cobra.Command {
 	cmd := &cobra.Command{
@@ -300,7 +303,14 @@ A page is live knowledge the moment it exists: agents running playbooks read it 
 The body comes from ` + "`--body`" + `, ` + "`--body-file`" + `, or a JSON object on stdin. Passing a
 body flag means stdin is not read at all, so pipe the whole JSON object when you want
 other fields to come from it too. File the page with
-` + "`--under <page-reference>`" + ` or leave it at the top level.`),
+` + "`--under <page-reference>`" + ` or leave it at the top level.
+
+` + "`--position`" + ` inserts rather than overwrites, the way ` + "`handbook update`" + ` and
+` + "`handbook move`" + ` do: the sibling holding that position and everything after it shift
+down, the parent renormalizes to dense 0..n-1 positions, and a value past the last
+sibling appends. The position the page lands on is the server's, not necessarily the
+integer sent, so read it back from the returned record. Leave ` + "`--position`" + ` off and
+the page appends to the end of its parent.`),
 		Example: `  wallfacer handbook create "Writing Great PRs" --body-file pr.md --under "R&D/Engineering"
   echo '{"title":"Release","body":"..."}' | wallfacer handbook create`,
 		Args: cobra.MaximumNArgs(1),
@@ -315,7 +325,7 @@ other fields to come from it too. File the page with
 			return runHandbookCreate(api, edit)
 		}),
 	}
-	addHandbookContentFlags(cmd, "Sort position among siblings (lower sorts first)")
+	addHandbookContentFlags(cmd)
 	return cmd
 }
 
@@ -336,8 +346,11 @@ retained.
 
 Fields left out are left alone, with one exception: moving the page with ` + "`--under`" + ` or
 ` + "`--top-level`" + ` and no ` + "`--position`" + ` appends it to the end of its new parent. ` + "`--position`" + `
-here inserts rather than overwrites, the way ` + "`handbook move`" + ` does; on
-` + "`handbook create`" + ` it is written verbatim.
+here inserts rather than overwrites, the way it does on ` + "`handbook move`" + ` and
+` + "`handbook create`" + `: the sibling holding that position and everything after it shift
+down, the parent renormalizes to dense 0..n-1 positions, and a value past the last
+sibling appends, so the position on the returned record is the one the page landed on
+rather than the integer sent.
 
 ` + "`--clear-body`" + ` empties the body, which is not the same as leaving ` + "`--body`" + ` off. Passing a
 body flag means stdin is not read at all, so pipe the whole JSON object when you want
@@ -353,7 +366,7 @@ other fields to come from it too.`),
 			return runHandbookUpdate(api, args[0], edit)
 		}),
 	}
-	addHandbookContentFlags(cmd, handbookPositionInsertHelp)
+	addHandbookContentFlags(cmd)
 	cmd.Flags().Bool("clear-body", false, "Clear the page's body")
 	return cmd
 }
