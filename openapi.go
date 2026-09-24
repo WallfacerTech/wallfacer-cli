@@ -1308,6 +1308,49 @@ func OpenapiListAnAgentsReveries(paramAccountId string, paramAgentUserId string,
 	return resp, decoded, nil
 }
 
+// OpenapiListTheSectionsAClaimCanBeFiledUnder List the sections a claim can be filed under
+func OpenapiListTheSectionsAClaimCanBeFiledUnder(paramAccountId string, paramAgentUserId string, params *viper.Viper) (*gentleman.Response, map[string]interface{}, error) {
+	handlerPath := "listthesectionsaclaimcanbefiledunder"
+	if openapiSubcommand {
+		handlerPath = "openapi " + handlerPath
+	}
+
+	server := viper.GetString("server")
+	if server == "" {
+		server = openapiServers()[viper.GetInt("server-index")]["url"]
+	}
+
+	url := server + "/v1/accounts/{account_id}/agents/{agent_user_id}/reveries/sections"
+	url = strings.Replace(url, "{account_id}", paramAccountId, 1)
+	url = strings.Replace(url, "{agent_user_id}", paramAgentUserId, 1)
+
+	req := cli.Client.Get().URL(url)
+
+	cli.HandleBefore(handlerPath, params, req)
+
+	resp, err := req.Do()
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "Request failed")
+	}
+
+	var decoded map[string]interface{}
+
+	if resp.StatusCode < 400 {
+		if err := cli.UnmarshalResponse(resp, &decoded); err != nil {
+			return nil, nil, errors.Wrap(err, "Unmarshalling response failed")
+		}
+	} else {
+		return nil, nil, errors.Errorf("HTTP %d: %s", resp.StatusCode, resp.String())
+	}
+
+	after := cli.HandleAfter(handlerPath, params, resp, decoded)
+	if after != nil {
+		decoded = after.(map[string]interface{})
+	}
+
+	return resp, decoded, nil
+}
+
 // OpenapiReadOneReverie Read one reverie
 func OpenapiReadOneReverie(paramAccountId string, paramAgentUserId string, paramReverieId string, params *viper.Viper) (*gentleman.Response, map[string]interface{}, error) {
 	handlerPath := "readonereverie"
@@ -5450,53 +5493,6 @@ func OpenapiSaveADraft(paramAccountId string, paramPipelineId string, params *vi
 	return resp, decoded, nil
 }
 
-// OpenapiCompileATriggerFromPlainEnglish Compile a trigger from plain English
-func OpenapiCompileATriggerFromPlainEnglish(paramAccountId string, paramPipelineId string, params *viper.Viper, body string) (*gentleman.Response, map[string]interface{}, error) {
-	handlerPath := "compileatriggerfromplainenglish"
-	if openapiSubcommand {
-		handlerPath = "openapi " + handlerPath
-	}
-
-	server := viper.GetString("server")
-	if server == "" {
-		server = openapiServers()[viper.GetInt("server-index")]["url"]
-	}
-
-	url := server + "/v1/accounts/{account_id}/pipelines/{pipeline_id}/triggers"
-	url = strings.Replace(url, "{account_id}", paramAccountId, 1)
-	url = strings.Replace(url, "{pipeline_id}", paramPipelineId, 1)
-
-	req := cli.Client.Post().URL(url)
-
-	if body != "" {
-		req = req.AddHeader("Content-Type", "application/json").BodyString(body)
-	}
-
-	cli.HandleBefore(handlerPath, params, req)
-
-	resp, err := req.Do()
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "Request failed")
-	}
-
-	var decoded map[string]interface{}
-
-	if resp.StatusCode < 400 {
-		if err := cli.UnmarshalResponse(resp, &decoded); err != nil {
-			return nil, nil, errors.Wrap(err, "Unmarshalling response failed")
-		}
-	} else {
-		return nil, nil, errors.Errorf("HTTP %d: %s", resp.StatusCode, resp.String())
-	}
-
-	after := cli.HandleAfter(handlerPath, params, resp, decoded)
-	if after != nil {
-		decoded = after.(map[string]interface{})
-	}
-
-	return resp, decoded, nil
-}
-
 // OpenapiListPipelineVersions List pipeline versions
 func OpenapiListPipelineVersions(paramAccountId string, paramPipelineId string, params *viper.Viper) (*gentleman.Response, map[string]interface{}, error) {
 	handlerPath := "listpipelineversions"
@@ -9195,7 +9191,7 @@ func openapiRegister(subcommand bool) {
 			cmd := &cobra.Command{
 				Use:     "search account-id q",
 				Short:   "Search",
-				Long:    cli.Markdown("Runs one query across the account and returns matches grouped by record type.\n\nEvery record is matched across its text (names, titles, descriptions, and bodies). Results are limited to the account, honor environment visibility, and exclude deleted records. Within each type, results are ordered by relevance, highest first, and capped by `per_type`.\n\nThe `data` object always has a key for each requested type, holding an array of results (empty when nothing matched). Each type paginates independently: when more results of a type exist, `meta.next_cursor` carries a cursor for that type. Pass it back as `cursor[<type>]` to fetch that type's next page, narrowing `types` to the type you are paging.\n## Request Schema (application/json)\n\nproperties:\n  cursor:\n    description: \"\"\n    example:\n    - architecto\n    items:\n      type: string\n    type: array\n  per_type:\n    description: Must be at least 1. Must not be greater than 25.\n    example: 22\n    type: integer\n  q:\n    description: Must not be greater than 255 characters.\n    example: b\n    type: string\n  types:\n    description: \"\"\n    example:\n    - sessions\n    items:\n      enum:\n      - environments\n      - tasks\n      - sessions\n      - pages\n      - pipelines\n      type: string\n    type: array\nrequired:\n- q\ntype: object\n"),
+				Long:    cli.Markdown("Runs one query across the account and returns matches grouped by record type.\n\nEvery record is matched across its text (names, titles, descriptions, and bodies). Results are limited to the account, honor environment visibility, and exclude deleted records. Within each type, results are ordered by relevance, highest first, and capped by `per_type`.\n\nThe `data` object always has a key for each requested type, holding an array of results (empty when nothing matched). Each type paginates independently: when more results of a type exist, `meta.next_cursor` carries a cursor for that type. Pass it back as `cursor[<type>]` to fetch that type's next page, narrowing `types` to the type you are paging.\n## Request Schema (application/json)\n\nproperties:\n  cursor:\n    description: \"\"\n    example:\n    - architecto\n    items:\n      type: string\n    type: array\n  per_type:\n    description: Must be at least 1. Must not be greater than 25.\n    example: 22\n    type: integer\n  q:\n    description: Must not be greater than 255 characters.\n    example: b\n    type: string\n  types:\n    description: \"\"\n    example:\n    - tasks\n    items:\n      enum:\n      - environments\n      - tasks\n      - sessions\n      - pages\n      - pipelines\n      type: string\n    type: array\nrequired:\n- q\ntype: object\n"),
 				Example: examples,
 				Args:    cobra.MinimumNArgs(2),
 				Run: func(cmd *cobra.Command, args []string) {
@@ -10489,6 +10485,40 @@ func openapiRegister(subcommand bool) {
 			var examples string
 
 			cmd := &cobra.Command{
+				Use:     "sections account-id agent-user-id",
+				Short:   "List the sections a claim can be filed under",
+				Long:    cli.Markdown("The areas an agent's claims are organized into, in reading order. They are the same for every agent on every account, so a client can offer them as a fixed choice rather than keeping its own copy.\n\nA claim is filed under one of these, or under a sub-section of one written as a slash-delimited path (`communication/slack`). A section outside this list is rejected: it would be a note about a particular craft rather than about how this colleague works, which is not what the list is for."),
+				Example: examples,
+				Args:    cobra.MinimumNArgs(2),
+				Run: func(cmd *cobra.Command, args []string) {
+
+					_, decoded, err := OpenapiListTheSectionsAClaimCanBeFiledUnder(args[0], args[1], params)
+					if err != nil {
+						log.Fatal().Err(err).Msg("Error calling operation")
+					}
+
+					if err := cli.Formatter.Format(decoded); err != nil {
+						log.Fatal().Err(err).Msg("Formatting failed")
+					}
+
+				},
+			}
+			groupCmd.AddCommand(cmd)
+
+			cli.SetCustomFlags(cmd)
+
+			if cmd.Flags().HasFlags() {
+				params.BindPFlags(cmd.Flags())
+			}
+
+		}()
+
+		func() {
+			params := viper.New()
+
+			var examples string
+
+			cmd := &cobra.Command{
 				Use:     "get account-id agent-user-id reverie-id",
 				Short:   "Read one reverie",
 				Long:    cli.Markdown("Returns a single claim, with the moments it was distilled from and whether a person has already edited it. A deleted claim is readable here too, so you can see what you removed before putting it back."),
@@ -10525,7 +10555,7 @@ func openapiRegister(subcommand bool) {
 			cmd := &cobra.Command{
 				Use:     "update account-id agent-user-id reverie-id",
 				Short:   "Edit a reverie",
-				Long:    cli.Markdown("Rewrite a claim, refile it, reorder it, or put back one you deleted with `deleted: false`.\n\nSending `text` makes the claim yours, whether or not the words changed. From then on the agent's own pass may cite it as evidence and may not change or remove it, so this is how you settle something the agent keeps getting wrong rather than correcting it again next week.\n\nSending only `section` and/or `position` refiles the claim and leaves it the agent's: where a claim is filed is not what it says, so tidying a list is not overruling it.\n## Request Schema (application/json)\n\nproperties:\n  deleted:\n    description: Whether the claim is deleted. Send `false` to put back one you deleted;\n      a delete is kept rather than purged precisely so pruning the list is reversible.\n      Sending `true` is the same as `DELETE`.\n    example: false\n    type: boolean\n  position:\n    description: Order within the section. Must be at least 0.\n    example: 1\n    type: integer\n  section:\n    description: Where the claim is filed, as a slash-delimited path of at most 3\n      segments. Sections are not pre-created; naming one is what makes it exist. Must\n      not be greater than 120 characters.\n    example: restraint\n    type: string\n  text:\n    description: 'The claim, at most 200 characters. One claim, not a paragraph: if\n      what you want to say does not fit, it is two reveries. Must be at least 1 character.\n      Must not be greater than 200 characters.'\n    example: 'Jonathan asks questions to be answered, not acted on: investigate, reply,\n      and change nothing unless he says to.'\n    type: string\ntype: object\n"),
+				Long:    cli.Markdown("Rewrite a claim, refile it, reorder it, or put back one you deleted with `deleted: false`.\n\nSending `text` makes the claim yours, whether or not the words changed. From then on the agent's own pass may cite it as evidence and may not change or remove it, so this is how you settle something the agent keeps getting wrong rather than correcting it again next week.\n\nSending only `section` and/or `position` refiles the claim and leaves it the agent's: where a claim is filed is not what it says, so tidying a list is not overruling it.\n## Request Schema (application/json)\n\nproperties:\n  deleted:\n    description: Whether the claim is deleted. Send `false` to put back one you deleted;\n      a delete is kept rather than purged precisely so pruning the list is reversible.\n      Sending `true` is the same as `DELETE`.\n    example: false\n    type: boolean\n  position:\n    description: Order within the section. Must be at least 0.\n    example: 1\n    type: integer\n  section:\n    description: 'Where the claim is filed: one of the areas an agent may hold claims\n      under (accountability, priorities, communication, reporting, responsiveness,\n      restraint, initiative, escalation, lessons), or a sub-section of one of them\n      as a slash-delimited path of at most 3 segments, such as `communication/slack`.\n      Sub-sections are not pre-created; naming one is what makes it exist. Any other\n      root is rejected. Must not be greater than 120 characters.'\n    example: restraint\n    type: string\n  text:\n    description: 'The claim, at most 200 characters. One claim, not a paragraph: if\n      what you want to say does not fit, it is two reveries. Must be at least 1 character.\n      Must not be greater than 200 characters.'\n    example: 'Jonathan asks questions to be answered, not acted on: investigate, reply,\n      and change nothing unless he says to.'\n    type: string\ntype: object\n"),
 				Example: examples,
 				Args:    cobra.MinimumNArgs(3),
 				Run: func(cmd *cobra.Command, args []string) {
@@ -11561,7 +11591,7 @@ func openapiRegister(subcommand bool) {
 			cmd := &cobra.Command{
 				Use:     "create account-id",
 				Short:   "Ingest an event",
-				Long:    cli.Markdown("Persists an external event into the account's event stream and (unless `route: false`) routes it through any account-scoped pipelines whose triggers match the `(source, type)` pair. The event envelope follows the CloudEvents shape: `type` and `source` are the routing key, `data` is the payload your pipeline conditions read via `${event.data.X}`. Pass `task_ids` to attach the event directly to one or more tasks the caller has access to. Returns 202 with the created event; routing and any directly-attached tasks are processed asynchronously.\n## Request Schema (application/json)\n\nproperties:\n  attach:\n    description: \"\"\n    example:\n    - architecto\n    items:\n      type: string\n    type: array\n  data:\n    description: Optional event payload (defaults to an empty object). Pipeline conditions\n      read into it via the `${event.data.X}` expression path; missing paths resolve\n      to empty.\n    example: null\n    properties: {}\n    type: object\n  route:\n    description: When false, skip routing this event through account-scoped pipelines\n      (useful when `task_ids` already lists the right tasks).\n    example: null\n    type: boolean\n  source:\n    description: The origin system the event came from (e.g. `github`, `linear`).\n      The other half of the routing key. Must not be greater than 255 characters.\n    example: github\n    type: string\n  task_ids:\n    description: Must be a valid UUID.\n    example:\n    - 6ff8f7f6-1eb3-3525-be4a-3932c805afed\n    items:\n      type: string\n    type: array\n  time:\n    description: ISO 8601 timestamp of when the event occurred in the source system.\n      Defaults to the time of ingestion. Must be a valid date.\n    example: null\n    type: string\n  type:\n    description: The event type, used as the routing key (e.g. `issue.labeled`, `pr.merged`).\n      Pipeline triggers match on the `(source, type)` pair. Must not be greater than\n      255 characters.\n    example: issue.labeled\n    type: string\nrequired:\n- type\n- source\ntype: object\n"),
+				Long:    cli.Markdown("Persists an external event into the account's event stream and (unless `route: false`) routes it through the account's pipelines, each of which says in plain language when it should run. The event envelope follows the CloudEvents shape: `type` and `source` describe the event, and `data` is the payload. Routing reads the whole event -- its source, type, actor, addressing and payload -- and every playbook whose sentences call for it runs. Pass `task_ids` to attach the event directly to one or more tasks the caller has access to. Returns 202 with the created event; routing and any directly-attached tasks are processed asynchronously.\n## Request Schema (application/json)\n\nproperties:\n  attach:\n    description: \"\"\n    example:\n    - architecto\n    items:\n      type: string\n    type: array\n  data:\n    description: Optional event payload (defaults to an empty object). Pipeline triggers\n      are judged against the whole stored payload, including free text such as bodies,\n      comments, and descriptions.\n    example: null\n    properties: {}\n    type: object\n  route:\n    description: When false, skip routing this event through account-scoped pipelines\n      (useful when `task_ids` already lists the right tasks).\n    example: null\n    type: boolean\n  source:\n    description: The origin system the event came from (e.g. `github`, `linear`).\n      Must not be greater than 255 characters.\n    example: github\n    type: string\n  task_ids:\n    description: Must be a valid UUID.\n    example:\n    - 6ff8f7f6-1eb3-3525-be4a-3932c805afed\n    items:\n      type: string\n    type: array\n  time:\n    description: ISO 8601 timestamp of when the event occurred in the source system.\n      Defaults to the time of ingestion. Must be a valid date.\n    example: null\n    type: string\n  type:\n    description: The event type (e.g. `issue.labeled`, `pr.merged`). Pipeline triggers\n      are plain-language sentences judged against it. Must not be greater than 255\n      characters.\n    example: issue.labeled\n    type: string\nrequired:\n- type\n- source\ntype: object\n"),
 				Example: examples,
 				Args:    cobra.MinimumNArgs(1),
 				Run: func(cmd *cobra.Command, args []string) {
@@ -13515,44 +13545,6 @@ func openapiRegister(subcommand bool) {
 			groupCmd.AddCommand(cmd)
 
 			cmd.Flags().String("idempotency-key", "", "")
-
-			cli.SetCustomFlags(cmd)
-
-			if cmd.Flags().HasFlags() {
-				params.BindPFlags(cmd.Flags())
-			}
-
-		}()
-
-		func() {
-			params := viper.New()
-
-			var examples string
-
-			cmd := &cobra.Command{
-				Use:     "triggers account-id pipeline-id",
-				Short:   "Compile a trigger from plain English",
-				Long:    cli.Markdown("Turns one plain-English description of when this pipeline should run into a deterministic trigger, deciding for you whether it is an EVENT trigger (fires in reaction to an inbound event) or a SCHEDULE trigger (fires on a time cadence). The response `kind` says which. For an event you get source/type/match filter(s) previewed against recent history plus a dedupe suggestion; for a schedule you get a cron expression + timezone and the next few fire times. Nothing is persisted. Add the returned trigger to the pipeline's draft (an event block, or a `kind:\"schedule\"` block with cron + timezone) and publish a new version to put it live.\n## Request Schema (application/json)\n\nproperties:\n  prompt:\n    description: Plain-English description of when this workflow should run (an event\n      or a schedule, the compiler decides). Must not be greater than 2000 characters.\n    example: when a customer labels an issue as a bug on the api repo\n    type: string\n  sample_event_id:\n    description: A recent event to ground the field paths against (event triggers).\n      When omitted, the most recent event matching the given source (and type) is\n      used. Must be a valid UUID.\n    example: null\n    nullable: true\n    type: string\n  source:\n    description: Origin system to ground against when no sample event id is supplied\n      (e.g. github). Must not be greater than 255 characters.\n    example: github\n    nullable: true\n    type: string\n  timezone:\n    description: IANA timezone to assume when a schedule sentence doesn't name one\n      (e.g. the author's timezone). Must be a valid time zone, such as <code>Africa/Accra</code>.\n    example: America/New_York\n    nullable: true\n    type: string\n  type:\n    description: Event type to ground against alongside source. Must not be greater\n      than 255 characters.\n    example: issue.labeled\n    nullable: true\n    type: string\nrequired:\n- prompt\ntype: object\n"),
-				Example: examples,
-				Args:    cobra.MinimumNArgs(2),
-				Run: func(cmd *cobra.Command, args []string) {
-					body, err := cli.GetBody("application/json", args[2:])
-					if err != nil {
-						log.Fatal().Err(err).Msg("Unable to get body")
-					}
-
-					_, decoded, err := OpenapiCompileATriggerFromPlainEnglish(args[0], args[1], params, body)
-					if err != nil {
-						log.Fatal().Err(err).Msg("Error calling operation")
-					}
-
-					if err := cli.Formatter.Format(decoded); err != nil {
-						log.Fatal().Err(err).Msg("Formatting failed")
-					}
-
-				},
-			}
-			groupCmd.AddCommand(cmd)
 
 			cli.SetCustomFlags(cmd)
 
