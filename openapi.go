@@ -5489,6 +5489,53 @@ func OpenapiSaveADraft(paramAccountId string, paramPipelineId string, params *vi
 	return resp, decoded, nil
 }
 
+// OpenapiCompileAnObjectiveFromPlainEnglish Compile an objective from plain English
+func OpenapiCompileAnObjectiveFromPlainEnglish(paramAccountId string, paramPipelineId string, params *viper.Viper, body string) (*gentleman.Response, map[string]interface{}, error) {
+	handlerPath := "compileanobjectivefromplainenglish"
+	if openapiSubcommand {
+		handlerPath = "openapi " + handlerPath
+	}
+
+	server := viper.GetString("server")
+	if server == "" {
+		server = openapiServers()[viper.GetInt("server-index")]["url"]
+	}
+
+	url := server + "/v1/accounts/{account_id}/pipelines/{pipeline_id}/objective"
+	url = strings.Replace(url, "{account_id}", paramAccountId, 1)
+	url = strings.Replace(url, "{pipeline_id}", paramPipelineId, 1)
+
+	req := cli.Client.Post().URL(url)
+
+	if body != "" {
+		req = req.AddHeader("Content-Type", "application/json").BodyString(body)
+	}
+
+	cli.HandleBefore(handlerPath, params, req)
+
+	resp, err := req.Do()
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "Request failed")
+	}
+
+	var decoded map[string]interface{}
+
+	if resp.StatusCode < 400 {
+		if err := cli.UnmarshalResponse(resp, &decoded); err != nil {
+			return nil, nil, errors.Wrap(err, "Unmarshalling response failed")
+		}
+	} else {
+		return nil, nil, errors.Errorf("HTTP %d: %s", resp.StatusCode, resp.String())
+	}
+
+	after := cli.HandleAfter(handlerPath, params, resp, decoded)
+	if after != nil {
+		decoded = after.(map[string]interface{})
+	}
+
+	return resp, decoded, nil
+}
+
 // OpenapiListPipelineVersions List pipeline versions
 func OpenapiListPipelineVersions(paramAccountId string, paramPipelineId string, params *viper.Viper) (*gentleman.Response, map[string]interface{}, error) {
 	handlerPath := "listpipelineversions"
@@ -9182,7 +9229,7 @@ func openapiRegister(subcommand bool) {
 			cmd := &cobra.Command{
 				Use:     "search account-id q",
 				Short:   "Search",
-				Long:    cli.Markdown("Runs one query across the account and returns matches grouped by record type.\n\nEvery record is matched across its text (names, titles, descriptions, and bodies). Results are limited to the account, honor environment visibility, and exclude deleted records. Within each type, results are ordered by relevance, highest first, and capped by `per_type`.\n\nThe `data` object always has a key for each requested type, holding an array of results (empty when nothing matched). Each type paginates independently: when more results of a type exist, `meta.next_cursor` carries a cursor for that type. Pass it back as `cursor[<type>]` to fetch that type's next page, narrowing `types` to the type you are paging.\n## Request Schema (application/json)\n\nproperties:\n  cursor:\n    description: \"\"\n    example:\n    - architecto\n    items:\n      type: string\n    type: array\n  per_type:\n    description: Must be at least 1. Must not be greater than 25.\n    example: 22\n    type: integer\n  q:\n    description: Must not be greater than 255 characters.\n    example: b\n    type: string\n  types:\n    description: \"\"\n    example:\n    - tasks\n    items:\n      enum:\n      - environments\n      - tasks\n      - sessions\n      - pages\n      - pipelines\n      type: string\n    type: array\nrequired:\n- q\ntype: object\n"),
+				Long:    cli.Markdown("Runs one query across the account and returns matches grouped by record type.\n\nEvery record is matched across its text (names, titles, descriptions, and bodies). Results are limited to the account, honor environment visibility, and exclude deleted records. Within each type, results are ordered by relevance, highest first, and capped by `per_type`.\n\nThe `data` object always has a key for each requested type, holding an array of results (empty when nothing matched). Each type paginates independently: when more results of a type exist, `meta.next_cursor` carries a cursor for that type. Pass it back as `cursor[<type>]` to fetch that type's next page, narrowing `types` to the type you are paging.\n## Request Schema (application/json)\n\nproperties:\n  cursor:\n    description: \"\"\n    example:\n    - architecto\n    items:\n      type: string\n    type: array\n  per_type:\n    description: Must be at least 1. Must not be greater than 25.\n    example: 22\n    type: integer\n  q:\n    description: Must not be greater than 255 characters.\n    example: b\n    type: string\n  types:\n    description: \"\"\n    example:\n    - pages\n    items:\n      enum:\n      - environments\n      - tasks\n      - sessions\n      - pages\n      - pipelines\n      type: string\n    type: array\nrequired:\n- q\ntype: object\n"),
 				Example: examples,
 				Args:    cobra.MinimumNArgs(2),
 				Run: func(cmd *cobra.Command, args []string) {
@@ -12545,7 +12592,7 @@ func openapiRegister(subcommand bool) {
 			cmd := &cobra.Command{
 				Use:     "update-current account-id",
 				Short:   "Save first-task setup",
-				Long:    cli.Markdown("Saves a draft without creating an agent or starting work. Drafts can be saved while an account awaits activation. Once a task starts, its setup is immutable.\n## Request Schema (application/json)\n\nproperties:\n  display_name:\n    description: Must not be greater than 120 characters.\n    example: b\n    type: string\n  intent:\n    description: \"\"\n    enum:\n    - starter\n    - custom\n    example: custom\n    type: string\n  prompt:\n    description: Must not be greater than 20000 characters.\n    example: \"n\"\n    type: string\nrequired:\n- intent\n- display_name\n- prompt\ntype: object\n"),
+				Long:    cli.Markdown("Saves a draft without creating an agent or starting work. Drafts can be saved while an account awaits activation. Once a task starts, its setup is immutable.\n## Request Schema (application/json)\n\nproperties:\n  display_name:\n    description: Must not be greater than 120 characters.\n    example: b\n    type: string\n  intent:\n    description: \"\"\n    enum:\n    - starter\n    - custom\n    example: starter\n    type: string\n  prompt:\n    description: Must not be greater than 20000 characters.\n    example: \"n\"\n    type: string\nrequired:\n- intent\n- display_name\n- prompt\ntype: object\n"),
 				Example: examples,
 				Args:    cobra.MinimumNArgs(1),
 				Run: func(cmd *cobra.Command, args []string) {
@@ -12785,7 +12832,7 @@ func openapiRegister(subcommand bool) {
 			cmd := &cobra.Command{
 				Use:     "update account-id task-id",
 				Short:   "Update a task",
-				Long:    cli.Markdown("Partially updates a task. Only provided fields are changed.\n## Request Schema (application/json)\n\nproperties:\n  idle_timeout_seconds:\n    description: Seconds of inactivity before sessions under this task are marked\n      idle. When a session goes idle its VM is destroyed and billing for that VM stops.\n      Must be between 60 and 900.\n    example: 600\n    type: integer\n  owner_user_id:\n    description: The human accountable for this task (agents cannot be owners). Set\n      it to claim or reassign the task; set it to null to unclaim. Errors and \"needs\n      me\" decisions route to the owner.\n    example: 6924\n    nullable: true\n    type: integer\n  prompt:\n    description: Updated instructions for the AI agent.\n    example: Also fix the redirect on Firefox.\n    nullable: true\n    type: string\n  status:\n    description: Pause or resume a pipeline task. `paused` stops the engine (no further\n      steps run); `active` resumes it, re-running the interrupted step. Abort any\n      in-flight turn before pausing if you want it to stop immediately.\n    enum:\n    - active\n    - paused\n    example: paused\n    type: string\n  title:\n    description: Short description of the work to be done. Must not be greater than\n      255 characters.\n    example: Fix login redirect on Safari\n    type: string\ntype: object\n"),
+				Long:    cli.Markdown("Partially updates a task. Only provided fields are changed.\n## Request Schema (application/json)\n\nproperties:\n  idle_timeout_seconds:\n    description: Seconds of inactivity before sessions under this task are marked\n      idle. When a session goes idle its VM is destroyed and billing for that VM stops.\n      Must be between 60 and 900.\n    example: 600\n    type: integer\n  owner_user_id:\n    description: The human accountable for this task (agents cannot be owners). Set\n      it to claim or reassign the task; set it to null to unclaim. Errors and \"needs\n      me\" decisions route to the owner.\n    example: 6924\n    nullable: true\n    type: integer\n  prompt:\n    description: Updated instructions for the AI agent.\n    example: Also fix the redirect on Firefox.\n    nullable: true\n    type: string\n  status:\n    description: |-\n      Move the task to a new lifecycle status:\n\n      - `paused`: stop the task where it is; no further steps run. Abort any in-flight turn first if you want it to stop immediately.\n      - `active`: resume a paused task, re-running the interrupted step.\n      - `done`: finish the task by hand, for when its goal was reached outside the platform. Counts as a real completion.\n      - `cancelled`: close the task because it is no longer needed. Ends the task without counting as a completion.\n\n      Finishing a task with `done` or `cancelled` cancels whatever step it was on and ends any session still running against it. Only the task owner or an account admin can do it, and only while the task is still `active` or `paused`; a task that has already finished returns 409.\n    enum:\n    - active\n    - paused\n    - done\n    - cancelled\n    example: done\n    type: string\n  title:\n    description: Short description of the work to be done. Must not be greater than\n      255 characters.\n    example: Fix login redirect on Safari\n    type: string\ntype: object\n"),
 				Example: examples,
 				Args:    cobra.MinimumNArgs(2),
 				Run: func(cmd *cobra.Command, args []string) {
@@ -13332,7 +13379,7 @@ func openapiRegister(subcommand bool) {
 			cmd := &cobra.Command{
 				Use:     "create account-id",
 				Short:   "Create a pipeline",
-				Long:    cli.Markdown("Creates a new pipeline from a full handbook `definition`. Returns 201 with the created pipeline plus its initial version.\n## Request Schema (application/json)\n\nproperties:\n  definition:\n    description: Full handbook definition (`format_version`, `description`, `triggers[]`,\n      `steps[]`). Validated server-side; failures return 422 with one error per offending\n      rule.\n    example: null\n    properties: {}\n    type: object\n  description:\n    description: Optional human-readable description. Must not be greater than 2000\n      characters.\n    example: AI scopes, implements, opens a PR. Tech lead approves staging deploy;\n      release manager approves production.\n    nullable: true\n    type: string\n  linked_page_ids:\n    description: Must be a valid UUID.\n    example:\n    - 6ff8f7f6-1eb3-3525-be4a-3932c805afed\n    items:\n      type: string\n    type: array\n  name:\n    description: Display name for the pipeline. Must be unique among non-archived\n      pipelines for this account. Must not be greater than 255 characters.\n    example: Acme engineering pipeline\n    type: string\n  parent_page_id:\n    description: Handbook page to file this playbook under. Omit or pass null for\n      a top-level playbook. Must be a valid UUID.\n    example: null\n    nullable: true\n    type: string\n  position:\n    description: Sort position among siblings in the handbook tree. Lower sorts first;\n      ties break by creation time. Must be at least 0.\n    example: 0\n    type: integer\nrequired:\n- name\n- definition\ntype: object\n"),
+				Long:    cli.Markdown("Creates a new pipeline from a full handbook `definition`. Returns 201 with the created pipeline plus its initial version.\n## Request Schema (application/json)\n\nproperties:\n  definition:\n    description: Full handbook definition (`format_version`, `description`, `objective`,\n      `abandon_if`, `resolutions[]`, `triggers[]`, `steps[]`). `objective` states\n      in one sentence what has to be true for a run to be over; every person and agent\n      working a step is shown it, and the conditions in `resolutions[]` finish a run\n      as soon as it is met. Validated server-side; failures return 422 with one error\n      per offending rule.\n    example: null\n    properties: {}\n    type: object\n  description:\n    description: Optional human-readable description. Must not be greater than 2000\n      characters.\n    example: AI scopes, implements, opens a PR. Tech lead approves staging deploy;\n      release manager approves production.\n    nullable: true\n    type: string\n  linked_page_ids:\n    description: Must be a valid UUID.\n    example:\n    - 6ff8f7f6-1eb3-3525-be4a-3932c805afed\n    items:\n      type: string\n    type: array\n  name:\n    description: Display name for the pipeline. Must be unique among non-archived\n      pipelines for this account. Must not be greater than 255 characters.\n    example: Acme engineering pipeline\n    type: string\n  parent_page_id:\n    description: Handbook page to file this playbook under. Omit or pass null for\n      a top-level playbook. Must be a valid UUID.\n    example: null\n    nullable: true\n    type: string\n  position:\n    description: Sort position among siblings in the handbook tree. Lower sorts first;\n      ties break by creation time. Must be at least 0.\n    example: 0\n    type: integer\nrequired:\n- name\n- definition\ntype: object\n"),
 				Example: examples,
 				Args:    cobra.MinimumNArgs(1),
 				Run: func(cmd *cobra.Command, args []string) {
@@ -13512,7 +13559,7 @@ func openapiRegister(subcommand bool) {
 			cmd := &cobra.Command{
 				Use:     "update-draft account-id pipeline-id",
 				Short:   "Save a draft",
-				Long:    cli.Markdown("Persists an in-progress handbook definition without publishing it. There is one draft per pipeline; saving again overwrites it. Drafts are stored verbatim and NOT validated; the full validator runs at publish time. Publishing any version clears the draft.\n## Request Schema (application/json)\n\nproperties:\n  definition:\n    description: The in-progress handbook definition (`{format_version, description,\n      triggers[], steps[]}`). Stored verbatim; not validated until you publish.\n    example: null\n    properties: {}\n    type: object\nrequired:\n- definition\ntype: object\n"),
+				Long:    cli.Markdown("Persists an in-progress handbook definition without publishing it. There is one draft per pipeline; saving again overwrites it. Drafts are stored verbatim and NOT validated; the full validator runs at publish time. Publishing any version clears the draft.\n## Request Schema (application/json)\n\nproperties:\n  definition:\n    description: The in-progress handbook definition (`{format_version, description,\n      objective, abandon_if, resolutions[], triggers[], steps[]}`). Stored verbatim;\n      not validated until you publish.\n    example: null\n    properties: {}\n    type: object\nrequired:\n- definition\ntype: object\n"),
 				Example: examples,
 				Args:    cobra.MinimumNArgs(2),
 				Run: func(cmd *cobra.Command, args []string) {
@@ -13535,6 +13582,44 @@ func openapiRegister(subcommand bool) {
 			groupCmd.AddCommand(cmd)
 
 			cmd.Flags().String("idempotency-key", "", "")
+
+			cli.SetCustomFlags(cmd)
+
+			if cmd.Flags().HasFlags() {
+				params.BindPFlags(cmd.Flags())
+			}
+
+		}()
+
+		func() {
+			params := viper.New()
+
+			var examples string
+
+			cmd := &cobra.Command{
+				Use:     "objective account-id pipeline-id",
+				Short:   "Compile an objective from plain English",
+				Long:    cli.Markdown("Turns one plain-English sentence stating what has to be true for a run of this workflow to be over into the conditions the platform watches for. A run ends as soon as its objective is met, however it was met: if someone merges the pull request by hand, the run finishes there instead of waiting at an approval step for a decision that no longer matters.\n\nEach returned condition names the event to watch and the filter to apply, previewed against recent history so you can see whether it would have fired. Every condition also ties the event back to the specific run it belongs to (usually by the branch the work is on), so one event can only ever finish the run it actually relates to.\n\nSet `outcome` to `cancelled` to compile the companion sentence instead: when the objective has become pointless, and the run should be abandoned rather than completed.\n\nNothing is persisted. Put the sentence on the workflow as `objective` (or `abandon_if`), add the returned conditions to its `resolutions`, and publish a new version to put it live.\n## Request Schema (application/json)\n\nproperties:\n  outcome:\n    description: 'Which sentence this is: `done` (the default) compiles the objective\n      itself, `cancelled` compiles the companion \"give up if\" sentence.'\n    enum:\n    - done\n    - cancelled\n    example: done\n    nullable: true\n    type: string\n  prompt:\n    description: Plain-English sentence stating what has to be true for a run of this\n      workflow to be over (its objective), or when it has become pointless (its abandon\n      condition). Must not be greater than 2000 characters.\n    example: the fix for the assigned issue is merged\n    type: string\n  sample_event_id:\n    description: A recent event to ground the field paths against. When omitted, the\n      most recent event matching the given source (and type) is used. Must be a valid\n      UUID.\n    example: null\n    nullable: true\n    type: string\n  source:\n    description: Origin system to ground against when no sample event id is supplied\n      (e.g. github). Must not be greater than 255 characters.\n    example: github\n    nullable: true\n    type: string\n  type:\n    description: Event type to ground against alongside source. Must not be greater\n      than 255 characters.\n    example: pull_request\n    nullable: true\n    type: string\nrequired:\n- prompt\ntype: object\n"),
+				Example: examples,
+				Args:    cobra.MinimumNArgs(2),
+				Run: func(cmd *cobra.Command, args []string) {
+					body, err := cli.GetBody("application/json", args[2:])
+					if err != nil {
+						log.Fatal().Err(err).Msg("Unable to get body")
+					}
+
+					_, decoded, err := OpenapiCompileAnObjectiveFromPlainEnglish(args[0], args[1], params, body)
+					if err != nil {
+						log.Fatal().Err(err).Msg("Error calling operation")
+					}
+
+					if err := cli.Formatter.Format(decoded); err != nil {
+						log.Fatal().Err(err).Msg("Formatting failed")
+					}
+
+				},
+			}
+			groupCmd.AddCommand(cmd)
 
 			cli.SetCustomFlags(cmd)
 
