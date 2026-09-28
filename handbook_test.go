@@ -783,6 +783,55 @@ func TestListCarriesPathsAndArchivedState(t *testing.T) {
 	}
 }
 
+// The server sets a tree node's has_body from the trimmed body, so a page whose body
+// is only whitespace must read has_body false from `list` and `read` too, the
+// same as from `tree` and `resolve`.
+func TestWhitespaceOnlyBodyHasBodyAgreesAcrossTreeAndRecords(t *testing.T) {
+	base := "/v1/accounts/" + testAccountID
+	const blankRecord = `{"id":"` + pageBuildID + `","title":"Build","description":"","parent_page_id":null,"body":"  \n\t\r\n ","deleted_at":null}`
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case base + "/handbook":
+			fmt.Fprint(w, `{"data":{"tree":[{"type":"page","id":"`+pageBuildID+`","title":"Build","description":"","position":0,"has_body":false,"children":[]}]}}`)
+		case base + "/pages":
+			fmt.Fprint(w, `{"data":[`+blankRecord+`],"links":{"next":null},"meta":{"current_page":1}}`)
+		case base + "/pages/" + pageBuildID:
+			fmt.Fprint(w, wrapData(blankRecord))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+			fmt.Fprint(w, `{"errors":[{"message":"Not found","code":"not_found"}]}`)
+		}
+	}))
+	t.Cleanup(server.Close)
+
+	viper.Set("server", server.URL)
+	t.Cleanup(func() { viper.Set("server", "") })
+
+	newAPI := func() *handbookAPI { return &handbookAPI{accountID: testAccountID} }
+
+	resolved := capture(t, func() error { return runHandbookResolve(newAPI(), pageBuildID, kindPage) })
+	listed := capture(t, func() error { return runHandbookList(newAPI(), kindPage, 0, 0, false, false) })
+	read := capture(t, func() error { return runHandbookRead(newAPI(), pageBuildID, kindPage) })
+
+	references := map[string]map[string]interface{}{
+		"resolve": resolved["data"].(map[string]interface{}),
+		"list":    listed["data"].([]interface{})[0].(map[string]interface{}),
+		"read":    read["reference"].(map[string]interface{}),
+	}
+	for command, reference := range references {
+		hasBody, present := reference["has_body"]
+		if !present {
+			t.Errorf("%s reference omits has_body; want an explicit false: %v", command, reference)
+			continue
+		}
+		if hasBody != false {
+			t.Errorf("%s reference has_body = %v, want false to match the tree", command, hasBody)
+		}
+	}
+}
+
 // `tree`, `list` and `search` name many records at once, so their follow_up
 // entries give the command's shape and the caller fills the reference in from
 // the record they picked. That is the documented exception to entries running
