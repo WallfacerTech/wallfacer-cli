@@ -404,12 +404,22 @@ func refFromPageRecord(record map[string]interface{}, accountID, resolvedFrom st
 		State:        "active",
 		ResolvedFrom: resolvedFrom,
 	}
-	hasBody := stringField(record, "body") != ""
+	hasBody := pageHasBody(stringField(record, "body"))
 	ref.HasBody = &hasBody
 	if stringField(record, "deleted_at") != "" {
 		ref.State = "deleted"
 	}
 	return ref
+}
+
+// phpTrimCutset is the set of characters PHP's trim() strips by default.
+const phpTrimCutset = " \t\n\r\x00\x0B"
+
+// pageHasBody applies the rule Sophon's HandbookTreeResource uses for a tree
+// node's has_body (trim($body) is non-empty), so a whitespace-only page reads
+// the same from a page record as it does from the tree.
+func pageHasBody(body string) bool {
+	return strings.Trim(body, phpTrimCutset) != ""
 }
 
 // refFromPipelineRecord builds a reference from a pipeline record, which unlike
