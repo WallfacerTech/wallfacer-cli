@@ -1282,11 +1282,11 @@ components:
         disabled_at:
           type: string
           nullable: true
-          description: 'ISO 8601 timestamp the pipeline was disabled. While set, the pipeline spawns no tasks but stays visible and editable. Null while enabled.'
+          description: "ISO 8601 timestamp the pipeline was disabled. While set, the pipeline's triggers are cleared so no event spawns a task from it. While set with `archived_at` null, a manual run still works and the pipeline stays visible and editable; an archived pipeline is disabled too, and is hidden from the default list and refuses a manual run. Null while enabled."
         archived_at:
           type: string
           nullable: true
-          description: 'ISO 8601 timestamp the pipeline was archived (deleted). Hidden from the default list. Null while active.'
+          description: 'ISO 8601 timestamp the pipeline was archived (deleted). Hidden from the default list. An archived pipeline is also disabled, so `disabled_at` is set too. Null while active.'
         created_at:
           type: string
           description: 'ISO 8601 timestamp.'
@@ -6481,32 +6481,59 @@ paths:
                           type: string
                           example: forbidden
         422:
-          description: 'Validation failed.'
+          description: ''
           content:
             application/json:
               schema:
-                type: object
-                example:
-                  errors:
-                    -
-                      message: 'The field is required.'
-                      code: validation_error
-                properties:
-                  errors:
-                    type: array
+                oneOf:
+                  -
+                    description: 'Validation failed.'
+                    type: object
                     example:
-                      -
-                        message: 'The field is required.'
-                        code: validation_error
-                    items:
-                      type: object
-                      properties:
-                        message:
-                          type: string
-                          example: 'The field is required.'
-                        code:
-                          type: string
-                          example: validation_error
+                      errors:
+                        -
+                          message: 'The field is required.'
+                          code: validation_error
+                    properties:
+                      errors:
+                        type: array
+                        example:
+                          -
+                            message: 'The field is required.'
+                            code: validation_error
+                        items:
+                          type: object
+                          properties:
+                            message:
+                              type: string
+                              example: 'The field is required.'
+                            code:
+                              type: string
+                              example: validation_error
+                  -
+                    description: "The requested `pipeline_id` has a step that needs a computer, and neither that step's performer nor the request names one. Give the performer an environment, or pass `environment_id` on the task."
+                    type: object
+                    example:
+                      errors:
+                        -
+                          message: 'This handbook has a step that needs a computer before it can be run.'
+                          code: environment_required
+                    properties:
+                      errors:
+                        type: array
+                        example:
+                          -
+                            message: 'This handbook has a step that needs a computer before it can be run.'
+                            code: environment_required
+                        items:
+                          type: object
+                          properties:
+                            message:
+                              type: string
+                              example: 'This handbook has a step that needs a computer before it can be run.'
+                            code:
+                              type: string
+                              example: environment_required
         429:
           description: 'Rate limit exceeded. Check Retry-After header.'
           content:
@@ -6564,7 +6591,7 @@ paths:
       tags:
         - Tasks
       requestBody:
-        required: true
+        required: false
         content:
           application/json:
             schema:
@@ -6577,8 +6604,9 @@ paths:
                   nullable: true
                 prompt:
                   type: string
-                  description: 'Instructions for the AI agent. If provided, a session starts immediately and this becomes the first message.'
-                  example: 'Fix the login bug on the /auth page'
+                  description: "Instructions for the AI agent. If provided, a session starts immediately and this becomes the first message. At least one of `title` or `prompt` is required. Cannot be combined with `pipeline_id`. For a handbook run, use `message`. No fixed size limit applies: text too large to hand to the agent directly is stored and fetched by it over HTTPS. The remaining ceilings are the transport's HTTP request-body limit and the context window of the selected agent program and model, which reports its own error on the turn."
+                  example: 'The login page redirects to /undefined on Safari 17. Fix the redirect logic in auth.ts.'
+                  nullable: true
                 message:
                   type: string
                   description: "Kickoff instruction for a handbook run. Only valid with `pipeline_id`. Unlike `prompt`, it does not start a freeform session. It is recorded as the task's synthetic trigger event (with you as the actor) and surfaced to the first AI step as the triggering context. Optional: omit it to run the handbook purely on its authored steps."
@@ -6683,8 +6711,7 @@ paths:
                 inputs:
                   type: array
                   description: ''
-                  example:
-                    - []
+                  example: null
                   items:
                     type: object
                     properties:
@@ -6716,8 +6743,6 @@ paths:
                         enum:
                           - utf-8
                         nullable: true
-              required:
-                - inputs
     parameters:
       -
         in: path
@@ -7872,7 +7897,7 @@ paths:
       tags:
         - Tasks
       requestBody:
-        required: true
+        required: false
         content:
           application/json:
             schema:
@@ -7920,8 +7945,7 @@ paths:
                 images:
                   type: array
                   description: ''
-                  example:
-                    - []
+                  example: null
                   items:
                     type: object
                     properties:
@@ -7944,8 +7968,7 @@ paths:
                 inputs:
                   type: array
                   description: ''
-                  example:
-                    - []
+                  example: null
                   items:
                     type: object
                     properties:
@@ -7977,9 +8000,6 @@ paths:
                         enum:
                           - utf-8
                         nullable: true
-              required:
-                - images
-                - inputs
     parameters:
       -
         in: path
@@ -9185,7 +9205,7 @@ paths:
       tags:
         - Tasks
       requestBody:
-        required: true
+        required: false
         content:
           application/json:
             schema:
@@ -9198,8 +9218,7 @@ paths:
                 images:
                   type: array
                   description: ''
-                  example:
-                    - []
+                  example: null
                   items:
                     type: object
                     properties:
@@ -9222,8 +9241,7 @@ paths:
                 inputs:
                   type: array
                   description: ''
-                  example:
-                    - []
+                  example: null
                   items:
                     type: object
                     properties:
@@ -9255,9 +9273,6 @@ paths:
                         enum:
                           - utf-8
                         nullable: true
-              required:
-                - images
-                - inputs
     parameters:
       -
         in: path
@@ -12188,7 +12203,7 @@ paths:
                       status: open
                       outcome: null
                       closing_note: null
-                      created_by_user_id: '312'
+                      created_by_user_id: '315'
                       closed_by_user_id: null
                       closed_at: null
                       created_at: '2026-09-24T23:06:28.000000Z'
@@ -12200,7 +12215,7 @@ paths:
                       status: open
                       outcome: null
                       closing_note: null
-                      created_by_user_id: '314'
+                      created_by_user_id: '317'
                       closed_by_user_id: null
                       closed_at: null
                       created_at: '2026-09-24T23:06:28.000000Z'
@@ -12346,7 +12361,7 @@ paths:
                     status: open
                     outcome: null
                     closing_note: null
-                    created_by_user_id: '318'
+                    created_by_user_id: '321'
                     closed_by_user_id: null
                     closed_at: null
                     created_at: '2026-09-24T23:06:28.000000Z'
@@ -12446,7 +12461,7 @@ paths:
                     status: open
                     outcome: null
                     closing_note: null
-                    created_by_user_id: '316'
+                    created_by_user_id: '319'
                     closed_by_user_id: null
                     closed_at: null
                     created_at: '2026-09-24T23:06:28.000000Z'
@@ -12503,7 +12518,7 @@ paths:
                     status: open
                     outcome: null
                     closing_note: null
-                    created_by_user_id: '320'
+                    created_by_user_id: '323'
                     closed_by_user_id: null
                     closed_at: null
                     created_at: '2026-09-24T23:06:28.000000Z'
@@ -13996,6 +14011,16 @@ paths:
             type: integer
             description: 'Results per page (max 100).'
             example: 25
+        -
+          in: query
+          name: cursor
+          description: 'Opaque cursor for the next or previous page. Pass back the `next_cursor` or `prev_cursor` returned by a previous call; omit it for the first page.'
+          example: null
+          required: false
+          schema:
+            type: string
+            description: 'Opaque cursor for the next or previous page. Pass back the `next_cursor` or `prev_cursor` returned by a previous call; omit it for the first page.'
+            example: null
       responses:
         200:
           description: ''
@@ -17859,7 +17884,7 @@ paths:
                     ref: 'person:01a0d5ab-9ec4-73f0-9204-5efecb44591d'
                     kind: external
                     name: 'Ramiro Okuneva'
-                    email: leo34@example.net
+                    email: pfritsch@example.com
                     title: null
                     preferred_channel: null
                     contact_notes: null
@@ -20982,7 +21007,7 @@ paths:
                   nullable: true
                 position:
                   type: integer
-                  description: 'Sort position among siblings. Lower sorts first; ties break by creation time. Must be at least 0.'
+                  description: 'Where to insert the page among its siblings (pages and playbooks share one ordering). The item at that position and everything after it shift down, and the parent renormalizes to dense 0..n-1 positions; a value past the last sibling appends. Omitted, the page appends. Must be at least 0.'
                   example: 0
               required:
                 - title
@@ -21007,7 +21032,7 @@ paths:
     patch:
       summary: 'Update a page'
       operationId: updateAPage
-      description: "Updates a page's title, body, parent, or position. Moving a page (changing `parent_page_id` and `position`) reorganizes the handbook tree; moving a page under itself or one of its own sub-pages is rejected. Passing `deleted: false` restores a deleted page (its content and history come back intact; if its parent was deleted in the meantime it restores to the top level)."
+      description: "Updates a page's title, body, parent, or position. Moving a page (changing `parent_page_id` and `position`) reorganizes the handbook tree; moving a page under itself or one of its own sub-pages is rejected. `position` inserts rather than overwrites: the sibling holding that position and everything after it shift down, and the parent is renormalized to dense 0..n-1 positions, so no two siblings ever share one. A position past the last sibling appends. Passing `deleted: false` restores a deleted page (its content and history come back intact; if its parent was deleted in the meantime it restores to the top level)."
       parameters: []
       responses: {  }
       tags:
@@ -21035,7 +21060,7 @@ paths:
                   nullable: true
                 position:
                   type: integer
-                  description: 'New sort position among siblings. Must be at least 0.'
+                  description: 'Where to insert the page among its siblings (pages and playbooks share one ordering). The item at that position and everything after it shift down, and the parent renormalizes to dense 0..n-1 positions; a value past the last sibling appends. Omitted on a move to a new parent, the page appends there. Must be at least 0.'
                   example: 0
                 deleted:
                   type: boolean
@@ -21044,7 +21069,7 @@ paths:
     delete:
       summary: 'Delete a page'
       operationId: deleteAPage
-      description: "Deletes the page. Anything filed under it (sub-pages and playbooks) is not deleted: children move up to the deleted page's parent, or to the top level when the deleted page was top-level. The page's revision history is retained."
+      description: "Deletes the page. Anything filed under it (sub-pages and playbooks) is not deleted: children move up to the deleted page's parent (or to the top level when the deleted page was top-level), taking the deleted page's place in their existing order. The page's revision history is retained."
       parameters: []
       responses:
         204:
@@ -21387,7 +21412,17 @@ paths:
       summary: 'List pipeline versions'
       operationId: listPipelineVersions
       description: 'Returns all versions of the pipeline, newest first.'
-      parameters: []
+      parameters:
+        -
+          in: query
+          name: per_page
+          description: 'Results per page (max 200).'
+          example: 25
+          required: false
+          schema:
+            type: integer
+            description: 'Results per page (max 200).'
+            example: 25
       responses:
         200:
           description: ''
@@ -21506,33 +21541,60 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                example:
-                  errors:
-                    -
-                      message: 'format_version must be an integer'
-                      code: definition_validation_failed
-                      field: format_version
-                properties:
-                  errors:
-                    type: array
+                oneOf:
+                  -
+                    description: ''
+                    type: object
                     example:
-                      -
-                        message: 'format_version must be an integer'
-                        code: definition_validation_failed
-                        field: format_version
-                    items:
-                      type: object
-                      properties:
-                        message:
-                          type: string
-                          example: 'format_version must be an integer'
-                        code:
-                          type: string
-                          example: definition_validation_failed
-                        field:
-                          type: string
-                          example: format_version
+                      errors:
+                        -
+                          message: 'format_version must be an integer'
+                          code: definition_validation_failed
+                          field: format_version
+                    properties:
+                      errors:
+                        type: array
+                        example:
+                          -
+                            message: 'format_version must be an integer'
+                            code: definition_validation_failed
+                            field: format_version
+                        items:
+                          type: object
+                          properties:
+                            message:
+                              type: string
+                              example: 'format_version must be an integer'
+                            code:
+                              type: string
+                              example: definition_validation_failed
+                            field:
+                              type: string
+                              example: format_version
+                  -
+                    description: 'Publishing this definition as the active version of a live handbook would activate a step that needs a computer whose performer has none. Give the performer an environment, or publish with `activate=false`.'
+                    type: object
+                    example:
+                      errors:
+                        -
+                          message: 'This handbook has a step that needs a computer before it can be enabled or run.'
+                          code: environment_required
+                    properties:
+                      errors:
+                        type: array
+                        example:
+                          -
+                            message: 'This handbook has a step that needs a computer before it can be enabled or run.'
+                            code: environment_required
+                        items:
+                          type: object
+                          properties:
+                            message:
+                              type: string
+                              example: 'This handbook has a step that needs a computer before it can be enabled or run.'
+                            code:
+                              type: string
+                              example: environment_required
       tags:
         - 'Pipeline Versions'
       requestBody:
@@ -21802,33 +21864,60 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                example:
-                  errors:
-                    -
-                      message: 'Step kind must be one of: ai, wait'
-                      code: step_kind_unknown
-                      field: 'steps[0].kind'
-                properties:
-                  errors:
-                    type: array
+                oneOf:
+                  -
+                    description: ''
+                    type: object
                     example:
-                      -
-                        message: 'Step kind must be one of: ai, wait'
-                        code: step_kind_unknown
-                        field: 'steps[0].kind'
-                    items:
-                      type: object
-                      properties:
-                        message:
-                          type: string
-                          example: 'Step kind must be one of: ai, wait'
-                        code:
-                          type: string
-                          example: step_kind_unknown
-                        field:
-                          type: string
-                          example: 'steps[0].kind'
+                      errors:
+                        -
+                          message: 'Step kind must be one of: ai, wait'
+                          code: step_kind_unknown
+                          field: 'steps[0].kind'
+                    properties:
+                      errors:
+                        type: array
+                        example:
+                          -
+                            message: 'Step kind must be one of: ai, wait'
+                            code: step_kind_unknown
+                            field: 'steps[0].kind'
+                        items:
+                          type: object
+                          properties:
+                            message:
+                              type: string
+                              example: 'Step kind must be one of: ai, wait'
+                            code:
+                              type: string
+                              example: step_kind_unknown
+                            field:
+                              type: string
+                              example: 'steps[0].kind'
+                  -
+                    description: 'The definition has a step that needs a computer and its performer has none. A handbook is live as soon as it is created, so give the performer an environment before creating it.'
+                    type: object
+                    example:
+                      errors:
+                        -
+                          message: 'This handbook has a step that needs a computer before it can be enabled or run.'
+                          code: environment_required
+                    properties:
+                      errors:
+                        type: array
+                        example:
+                          -
+                            message: 'This handbook has a step that needs a computer before it can be enabled or run.'
+                            code: environment_required
+                        items:
+                          type: object
+                          properties:
+                            message:
+                              type: string
+                              example: 'This handbook has a step that needs a computer before it can be enabled or run.'
+                            code:
+                              type: string
+                              example: environment_required
       tags:
         - Pipelines
       requestBody:
@@ -21840,7 +21929,7 @@ paths:
               properties:
                 name:
                   type: string
-                  description: 'Display name for the pipeline. Must be unique among non-archived pipelines for this account. Must not be greater than 255 characters.'
+                  description: 'Display name for the pipeline. If another non-archived pipeline in the account already holds it, a numeric suffix is appended (`Acme engineering pipeline (2)`), so read `name` from the response for the name that landed. Must not be greater than 255 characters.'
                   example: 'Acme engineering pipeline'
                 description:
                   type: string
@@ -21859,7 +21948,7 @@ paths:
                   nullable: true
                 position:
                   type: integer
-                  description: 'Sort position among siblings in the handbook tree. Lower sorts first; ties break by creation time. Must be at least 0.'
+                  description: 'Where to insert the playbook among its siblings in the handbook tree (pages and playbooks share one ordering). The item at that position and everything after it shift down, and the parent renormalizes to dense 0..n-1 positions; a value past the last sibling appends. Omitted, the playbook appends. Must be at least 0.'
                   example: 0
                 linked_page_ids:
                   type: array
@@ -21892,9 +21981,169 @@ paths:
     patch:
       summary: 'Update pipeline metadata'
       operationId: updatePipelineMetadata
-      description: "Updates the pipeline's display name, description, or routing on/off state. These settings take effect immediately. The pipeline's steps and triggers themselves change through publishing a new version, not through this endpoint. Passing `archived: false` restores an archived pipeline: it comes back disabled (triggers stay cleared until enabled), renamed with a numeric suffix if another pipeline claimed its name in the meantime."
+      description: "Updates the pipeline's display name, description, or routing on/off state. These settings take effect immediately. The pipeline's steps and triggers themselves change through publishing a new version, not through this endpoint. `position` inserts rather than overwrites: the sibling holding that position and everything after it shift down, and the parent is renormalized to dense 0..n-1 positions, so no two siblings ever share one. A position past the last sibling appends. Passing `archived: false` restores an archived pipeline: it comes back disabled (triggers stay cleared until enabled), at the end of its parent in the handbook tree, renamed with a numeric suffix if another pipeline claimed its name in the meantime."
       parameters: []
-      responses: {  }
+      responses:
+        200:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  data:
+                    id: 01a0cfff-e820-73bc-84a9-cd482237cc19
+                    account_id: 01a0cfff-e80a-7118-8f9a-2cfe05cecaea
+                    name: 'Review a pull request'
+                    description: 'Quos velit et fugiat sunt nihil accusantium harum.'
+                    active_version: null
+                    version_count: 0
+                    task_count: 0
+                    draft: null
+                    parent_page_id: null
+                    position: 0
+                    linked_page_ids: []
+                    disabled_at: null
+                    archived_at: null
+                    created_at: '2026-09-23T20:40:49.000000Z'
+                    created_by: 250
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Pipeline'
+        409:
+          description: 'Another non-archived pipeline in the account already holds the requested `name`. Nothing was changed. Pick a different name, or rename or archive the other pipeline first.'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: 'A pipeline with this name already exists on this account.'
+                      code: pipeline_name_taken
+                      field: name
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: 'A pipeline with this name already exists on this account.'
+                        code: pipeline_name_taken
+                        field: name
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: 'A pipeline with this name already exists on this account.'
+                        code:
+                          type: string
+                          example: pipeline_name_taken
+                        field:
+                          type: string
+                          example: name
+        422:
+          description: ''
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  -
+                    description: 'Enabling this handbook (`disabled: false` on a disabled one) would switch on a step that needs a computer whose performer is not an enabled agent with an environment. Give the performer an environment (or pick a performer that has one and publish that version) first.'
+                    type: object
+                    example:
+                      errors:
+                        -
+                          message: 'This handbook has a step that needs a computer before it can be enabled or run.'
+                          code: environment_required
+                    properties:
+                      errors:
+                        type: array
+                        example:
+                          -
+                            message: 'This handbook has a step that needs a computer before it can be enabled or run.'
+                            code: environment_required
+                        items:
+                          type: object
+                          properties:
+                            message:
+                              type: string
+                              example: 'This handbook has a step that needs a computer before it can be enabled or run.'
+                            code:
+                              type: string
+                              example: environment_required
+                  -
+                    description: 'This pipeline is archived, so it cannot be enabled. Restore it with `archived: false` first, then enable it in a second request. Restore deliberately comes back disabled, so the two cannot land in one call.'
+                    type: object
+                    example:
+                      errors:
+                        -
+                          message: 'Restore this pipeline before enabling it. Pass archived: false first.'
+                          code: invalid_transition
+                    properties:
+                      errors:
+                        type: array
+                        example:
+                          -
+                            message: 'Restore this pipeline before enabling it. Pass archived: false first.'
+                            code: invalid_transition
+                        items:
+                          type: object
+                          properties:
+                            message:
+                              type: string
+                              example: 'Restore this pipeline before enabling it. Pass archived: false first.'
+                            code:
+                              type: string
+                              example: invalid_transition
+                  -
+                    description: 'This pipeline is archived, so it has no place in the handbook tree to move to. Restore it with `archived: false` first; `position` or `parent_page_id` may ride along with the restore.'
+                    type: object
+                    example:
+                      errors:
+                        -
+                          message: 'Restore this pipeline before moving it. Pass archived: false first.'
+                          code: invalid_transition
+                    properties:
+                      errors:
+                        type: array
+                        example:
+                          -
+                            message: 'Restore this pipeline before moving it. Pass archived: false first.'
+                            code: invalid_transition
+                        items:
+                          type: object
+                          properties:
+                            message:
+                              type: string
+                              example: 'Restore this pipeline before moving it. Pass archived: false first.'
+                            code:
+                              type: string
+                              example: invalid_transition
+                  -
+                    description: '`archived` was set to something other than `false`. The only transition this endpoint makes is restoring; archive a pipeline through `DELETE` instead.'
+                    type: object
+                    example:
+                      errors:
+                        -
+                          message: 'Pass false to restore an archived pipeline. Archiving goes through DELETE.'
+                          code: invalid_transition
+                    properties:
+                      errors:
+                        type: array
+                        example:
+                          -
+                            message: 'Pass false to restore an archived pipeline. Archiving goes through DELETE.'
+                            code: invalid_transition
+                        items:
+                          type: object
+                          properties:
+                            message:
+                              type: string
+                              example: 'Pass false to restore an archived pipeline. Archiving goes through DELETE.'
+                            code:
+                              type: string
+                              example: invalid_transition
       tags:
         - Pipelines
       requestBody:
@@ -21906,7 +22155,7 @@ paths:
               properties:
                 name:
                   type: string
-                  description: 'New display name. Subject to the same per-account uniqueness rule as create. Must not be greater than 255 characters.'
+                  description: 'New display name. No other non-archived pipeline in the account may hold it: a collision is refused with 409 `pipeline_name_taken` and nothing in the request is applied. Unlike create, a rename is never suffixed. Sending the name the pipeline already holds is a no-op. Must not be greater than 255 characters.'
                   example: 'Acme engineering pipeline (v2)'
                 description:
                   type: string
@@ -21915,7 +22164,7 @@ paths:
                   nullable: true
                 disabled:
                   type: boolean
-                  description: "Pause or resume routing. `true` clears the pipeline's triggers from the routing index so it spawns no new tasks but stays visible and editable; `false` re-materialises them. Already-running tasks continue either way. Idempotent."
+                  description: "Pause or resume routing. `true` clears the pipeline's triggers from the routing index so no event spawns a task from it, while the pipeline stays visible, editable, and runnable by a manual task create with `pipeline_id`; `false` re-materialises them. Already-running tasks continue either way. Idempotent."
                   example: true
                 archived:
                   type: boolean
@@ -21928,7 +22177,7 @@ paths:
                   nullable: true
                 position:
                   type: integer
-                  description: 'New sort position among siblings in the handbook tree. Must be at least 0.'
+                  description: 'Where to insert the playbook among its siblings in the handbook tree (pages and playbooks share one ordering). The item at that position and everything after it shift down, and the parent renormalizes to dense 0..n-1 positions; a value past the last sibling appends. Omitted on a move to a new parent, the playbook appends there. Must be at least 0.'
                   example: 0
                 linked_page_ids:
                   type: array
@@ -21940,7 +22189,7 @@ paths:
     delete:
       summary: 'Delete a pipeline'
       operationId: deleteAPipeline
-      description: 'Soft-archives the pipeline: it is hidden from the default list and its triggers are cleared, but tasks already run against it keep their history (the version rows survive). Recoverable via `include_archived=true`. Frees the name for reuse.'
+      description: 'Soft-archives the pipeline: it is hidden from the default list and its triggers are cleared and it is disabled, but tasks already run against it keep their history (the version rows survive). Recoverable via `include_archived=true`. Frees the name for reuse.'
       parameters: []
       responses:
         204:
@@ -24783,7 +25032,7 @@ paths:
                             example: '2026-09-24T23:06:28.000000Z'
                           published_by:
                             type: integer
-                            example: 301
+                            example: 304
                           steps:
                             type: array
                             example:

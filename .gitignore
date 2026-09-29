@@ -1,3 +1,6 @@
-# Compiled binaries
-wallfacer
-openapi-cli-generator
+# Compiled binaries. Anchored to the repository root: unanchored, `wallfacer-cli`
+# also matches the `skills/wallfacer-cli/` directory and silently ignores new
+# files added to the bundled skill.
+/wallfacer
+/openapi-cli-generator
+/wallfacer-cli
