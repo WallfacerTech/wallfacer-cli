@@ -5,6 +5,7 @@ go 1.25.0
 require (
 	github.com/WallfacerTech/openapi-cli-generator v0.0.0
 	github.com/pkg/errors v0.8.1
+	github.com/pmezard/go-difflib v1.0.0
 	github.com/rs/zerolog v1.11.0
 	github.com/spf13/cobra v0.0.3
 	github.com/spf13/viper v1.2.1

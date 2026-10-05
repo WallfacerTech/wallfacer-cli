@@ -343,17 +343,50 @@ func TestWriteTextSummarizesTheResult(t *testing.T) {
 func TestUnifiedDiff(t *testing.T) {
 	var out textOut
 	writeUnifiedDiff(&out, "a\nb\nc\nd\n", "a\nB\nc\nd\ne\n", "v1", "v2")
-	got := out.String()
-	for _, want := range []string{"--- v1\n", "+++ v2\n", "-b\n", "+B\n", "+e\n", " a\n"} {
-		if !strings.Contains(got, want) {
-			t.Errorf("diff is missing %q:\n%s", want, got)
-		}
+	want := "--- v1\n+++ v2\n@@ -1,4 +1,5 @@\n a\n-b\n+B\n c\n d\n+e\n"
+	if got := out.String(); got != want {
+		t.Errorf("diff =\n%s\nwant\n%s", got, want)
 	}
 
 	var same textOut
 	writeUnifiedDiff(&same, "a\n", "a\n", "x", "y")
 	if !strings.Contains(same.String(), "(no differences)") {
 		t.Errorf("identical inputs: %s", same.String())
+	}
+}
+
+// A search that stopped before reading every page must not report a clean
+// miss: the match may be on a page it never read.
+func TestSearchWithNoMatchesReportsAnIncompleteSweep(t *testing.T) {
+	fixture := newHandbookFixture(t)
+
+	out := captureText(t, func() error { return runHandbookSearch(fixture.api(), "zzz-absent", "", 20, 1) })
+	assertContains(t, out, `No pages or playbooks match "zzz-absent" in what was searched.`, "--max-pages 2")
+	if strings.Contains(out, "Try a shorter") {
+		t.Errorf("an incomplete search suggested the query was wrong:\n%s", out)
+	}
+}
+
+func TestPlaybookReadOffersRunOnlyWhenRunnable(t *testing.T) {
+	fixture := newHandbookFixture(t)
+
+	published := captureText(t, func() error { return runHandbookRead(fixture.api(), playbookBuildID, "") })
+	assertContains(t, published, "wallfacer run "+playbookBuildID)
+
+	archived := captureText(t, func() error { return runHandbookRead(fixture.api(), playbookArchivedID, kindPlaybook) })
+	assertContains(t, archived, "Archived: nothing starts this playbook and it cannot be run.", "wallfacer handbook restore-playbook "+playbookArchivedID)
+	if strings.Contains(archived, "wallfacer run ") {
+		t.Errorf("an archived playbook was offered a run:\n%s", archived)
+	}
+
+	var unpublished textOut
+	renderHandbookRead(&handbookAPI{})(&unpublished, map[string]interface{}{
+		"reference": map[string]interface{}{"type": kindPlaybook, "id": playbookBuildID, "title": "Build", "state": "active"},
+		"data":      map[string]interface{}{"name": "Build", "draft": map[string]interface{}{"present": true}},
+	})
+	assertContains(t, unpublished.String(), "Nothing published yet", "wallfacer handbook publish "+playbookBuildID)
+	if strings.Contains(unpublished.String(), "wallfacer run ") {
+		t.Errorf("an unpublished playbook was offered a run:\n%s", unpublished.String())
 	}
 }
 

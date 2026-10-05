@@ -9,6 +9,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/pmezard/go-difflib/difflib"
 	"gopkg.in/yaml.v2"
 )
 
@@ -238,8 +239,23 @@ func renderHandbookSearch(maxPages int) textRenderer {
 	return func(t *textOut, p map[string]interface{}) {
 		matches := asList(p["data"])
 		query := scalar(p["query"])
+		incomplete := false
+		for _, sweep := range asMap(p["pagination"]) {
+			if complete, ok := asMap(sweep)["complete"].(bool); ok && !complete {
+				incomplete = true
+			}
+		}
+		stopped := func() {
+			t.line("Stopped after %d result pages per type. Search further: wallfacer handbook search %q --max-pages %d", maxPages, query, maxPages*2)
+		}
+
 		if len(matches) == 0 {
-			t.line("No pages or playbooks match %q. Try a shorter or different word, or browse with `wallfacer handbook tree`.", query)
+			t.line("No pages or playbooks match %q in what was searched.", query)
+			if incomplete {
+				stopped()
+			} else {
+				t.line("Try a shorter or different word, or browse with `wallfacer handbook tree`.")
+			}
 			return
 		}
 		header := plural(len(matches), "match", "matches")
@@ -266,18 +282,12 @@ func renderHandbookSearch(maxPages int) textRenderer {
 			t.text(detail)
 		}
 
-		incomplete := false
-		for _, sweep := range asMap(p["pagination"]) {
-			if complete, ok := asMap(sweep)["complete"].(bool); ok && !complete {
-				incomplete = true
-			}
-		}
 		t.gap()
 		if truncated, _ := p["truncated"].(bool); truncated {
 			t.line("See more: wallfacer handbook search %q --limit %s", query, scalar(p["total"]))
 		}
 		if incomplete {
-			t.line("Stopped after %d result pages per type. Search further: wallfacer handbook search %q --max-pages %d", maxPages, query, maxPages*2)
+			stopped()
 		}
 		t.line("Read one: wallfacer handbook read <id|path>   Browse instead: wallfacer handbook tree")
 	}
@@ -435,15 +445,23 @@ func renderPlaybookRead(api *handbookAPI, t *textOut, p map[string]interface{}) 
 	t.gap()
 	t.line("## Triggers")
 	t.gap()
+	id := scalar(ref["id"])
 	triggers := asList(definition["triggers"])
 	disabled := scalar(record["disabled_at"]) != ""
+	// `wallfacer run` refuses an archived playbook and one with nothing
+	// published, so only a runnable playbook is told it can be run.
+	archived := scalar(ref["state"]) == "archived"
+	runnable := active != nil && !archived
 	switch {
+	case archived:
+		t.line("Archived: nothing starts this playbook and it cannot be run. `wallfacer handbook restore-playbook %s` brings it back, disabled.", id)
+		t.gap()
 	case active == nil:
-		t.line("Nothing published yet, so nothing starts this playbook.")
+		t.line("Nothing published yet, so nothing starts this playbook and it cannot be run. Publish a saved draft with `wallfacer handbook publish %s`.", id)
 	case len(triggers) == 0:
-		t.line("None. This playbook starts only by hand: `wallfacer run %s`.", scalar(ref["id"]))
+		t.line("None. This playbook starts only by hand: `wallfacer run %s`.", id)
 	case disabled:
-		t.line("Disabled: these triggers are switched off, so nothing starts this playbook on its own. `wallfacer run %s` still starts it by hand.", scalar(ref["id"]))
+		t.line("Disabled: these triggers are switched off, so nothing starts this playbook on its own. `wallfacer run %s` still starts it by hand.", id)
 		t.gap()
 	}
 	for _, item := range triggers {
@@ -455,7 +473,7 @@ func renderPlaybookRead(api *handbookAPI, t *textOut, p map[string]interface{}) 
 	if active == nil {
 		t.line("## Steps")
 		t.gap()
-		t.line("No published version. A saved draft, if any, reads with `wallfacer handbook draft %s`.", scalar(ref["id"]))
+		t.line("No published version. A saved draft, if any, reads with `wallfacer handbook draft %s`.", id)
 	} else {
 		t.line("## Steps (v%s)", scalar(active["version"]))
 	}
@@ -473,11 +491,18 @@ func renderPlaybookRead(api *handbookAPI, t *textOut, p map[string]interface{}) 
 	t.gap()
 	t.line("---")
 	if active != nil {
-		t.line("Full definition as editable YAML: wallfacer handbook version %s", scalar(ref["id"]))
+		t.line("Full definition as editable YAML: wallfacer handbook version %s", id)
 	}
 	followUp := withoutKeys(p["follow_up"], "read")
-	followUp["run"] = fmt.Sprintf("wallfacer run %s", scalar(ref["id"]))
-	t.next(followUp, api.annotator(scalar(ref["id"])))
+	switch {
+	case runnable:
+		followUp["run"] = fmt.Sprintf("wallfacer run %s", id)
+	case archived:
+		followUp["restore"] = fmt.Sprintf("wallfacer handbook restore-playbook %s", id)
+	default:
+		followUp["publish"] = fmt.Sprintf("wallfacer handbook publish %s", id)
+	}
+	t.next(followUp, api.annotator(id))
 }
 
 // triggerLead is the field that says when a trigger fires, shown first.
@@ -973,117 +998,25 @@ func renderHandbookReorder(parentLabel string) textRenderer {
 	}
 }
 
-// writeUnifiedDiff prints a line diff of a and b with three lines of context.
+// writeUnifiedDiff prints a unified diff of a and b with three lines of
+// context, in the standard format patch and git apply read.
 func writeUnifiedDiff(t *textOut, a, b, aLabel, bLabel string) {
-	aLines := splitLines(a)
-	bLines := splitLines(b)
-	ops := diffLines(aLines, bLines)
-
-	changed := false
-	for _, op := range ops {
-		if op.kind != ' ' {
-			changed = true
-			break
-		}
-	}
-	if !changed {
+	if a == b {
 		t.line("(no differences)")
 		return
 	}
-
-	t.line("--- %s", aLabel)
-	t.line("+++ %s", bLabel)
-	const context = 3
-	for i := 0; i < len(ops); {
-		if ops[i].kind == ' ' {
-			i++
-			continue
-		}
-		start := i - context
-		if start < 0 {
-			start = 0
-		}
-		end := i
-		for end < len(ops) {
-			if ops[end].kind != ' ' {
-				end++
-				continue
-			}
-			run := end
-			for run < len(ops) && ops[run].kind == ' ' {
-				run++
-			}
-			if run == len(ops) || run-end > 2*context {
-				break
-			}
-			end = run
-		}
-		stop := end + context
-		if stop > len(ops) {
-			stop = len(ops)
-		}
-		t.line("@@ line %d @@", ops[start].aLine+1)
-		for _, op := range ops[start:stop] {
-			t.line("%c%s", op.kind, op.text)
-		}
-		i = stop
+	diff, err := difflib.GetUnifiedDiffString(difflib.UnifiedDiff{
+		// SplitLines terminates the last line itself, so a trailing newline
+		// would otherwise come back as an extra empty line.
+		A:        difflib.SplitLines(strings.TrimSuffix(a, "\n")),
+		B:        difflib.SplitLines(strings.TrimSuffix(b, "\n")),
+		FromFile: aLabel,
+		ToFile:   bLabel,
+		Context:  3,
+	})
+	if err != nil {
+		t.line("(could not compute the diff: %v)", err)
+		return
 	}
-}
-
-type diffOp struct {
-	kind  byte // ' ', '-', '+'
-	text  string
-	aLine int
-}
-
-func splitLines(s string) []string {
-	s = strings.TrimRight(s, "\n")
-	if s == "" {
-		return nil
-	}
-	return strings.Split(s, "\n")
-}
-
-// diffLines is a longest-common-subsequence line diff. Playbook definitions
-// run to a few hundred lines, well inside what the quadratic table handles.
-func diffLines(a, b []string) []diffOp {
-	n, m := len(a), len(b)
-	lcs := make([][]int, n+1)
-	for i := range lcs {
-		lcs[i] = make([]int, m+1)
-	}
-	for i := n - 1; i >= 0; i-- {
-		for j := m - 1; j >= 0; j-- {
-			if a[i] == b[j] {
-				lcs[i][j] = lcs[i+1][j+1] + 1
-			} else if lcs[i+1][j] >= lcs[i][j+1] {
-				lcs[i][j] = lcs[i+1][j]
-			} else {
-				lcs[i][j] = lcs[i][j+1]
-			}
-		}
-	}
-	var ops []diffOp
-	i, j := 0, 0
-	for i < n && j < m {
-		switch {
-		case a[i] == b[j]:
-			ops = append(ops, diffOp{' ', a[i], i})
-			i++
-			j++
-		case lcs[i+1][j] >= lcs[i][j+1]:
-			ops = append(ops, diffOp{'-', a[i], i})
-			i++
-		default:
-			ops = append(ops, diffOp{'+', b[j], i})
-			j++
-		}
-	}
-	for ; i < n; i++ {
-		ops = append(ops, diffOp{'-', a[i], i})
-	}
-	for ; j < m; j++ {
-		ops = append(ops, diffOp{'+', b[j], i})
-	}
-	return ops
+	t.block(diff)
 }
