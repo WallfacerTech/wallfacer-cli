@@ -281,6 +281,7 @@ type handbookRef struct {
 	VersionCount  *float64               `json:"version_count,omitempty"`
 	LinkedPageIDs []interface{}          `json:"linked_page_ids,omitempty"`
 	MatchedIn     []string               `json:"matched_in,omitempty"`
+	Snippet       string                 `json:"snippet,omitempty"`
 
 	// versionHint carries the version a playbook-version URL named. It is
 	// not part of the entry's identity, so it stays out of the output.

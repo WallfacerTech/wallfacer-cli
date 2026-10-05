@@ -540,12 +540,12 @@ func runHandbookCreate(api *handbookAPI, edit handbookEdit) error {
 	}
 
 	ref := refFromPageRecord(record, api.accountID, "created")
-	return emitHandbook(map[string]interface{}{
+	return emitHandbookAs(map[string]interface{}{
 		"data":      record,
 		"reference": ref,
-		"note":      "The page is live handbook knowledge from now on: agents running playbooks read it as written. Revisions are snapshotted per editing session, not per save, so `follow_up.revisions` reads back an earlier session's wording rather than each intermediate one.",
+		"note":      "The page is live handbook knowledge from now on: agents running playbooks read it as written. Revisions are snapshotted per editing session, not per save, so the revisions command reads back an earlier session's wording rather than each intermediate one.",
 		"follow_up": handbookWriteFollowUp(ref),
-	})
+	}, renderHandbookWrite(api, "Created"))
 }
 
 func runHandbookUpdate(api *handbookAPI, reference string, edit handbookEdit) error {
@@ -568,12 +568,12 @@ func runHandbookUpdate(api *handbookAPI, reference string, edit handbookEdit) er
 	}
 
 	updated := api.refreshWritten(ref, refFromPageRecord(record, api.accountID, ref.ResolvedFrom))
-	return emitHandbook(map[string]interface{}{
+	return emitHandbookAs(map[string]interface{}{
 		"data":      record,
 		"reference": updated,
-		"note":      "The page's new content is live immediately. Revisions coalesce per author per editing session, so a save that continues the session you are already in updates that revision in place rather than retaining the wording it replaced; `follow_up.revisions` lists them.",
+		"note":      "The page's new content is live immediately. Revisions coalesce per author per editing session, so a save that continues the session you are already in updates that revision in place rather than retaining the wording it replaced; the revisions command lists them.",
 		"follow_up": handbookWriteFollowUp(updated),
-	})
+	}, renderHandbookWrite(api, "Updated"))
 }
 
 func runHandbookDelete(api *handbookAPI, reference string) error {
@@ -609,12 +609,12 @@ func runHandbookDelete(api *handbookAPI, reference string) error {
 		reparentedTo = ref.ParentPageID
 	}
 
-	note := "Sub-pages and playbooks filed under this page were not deleted: they moved up to `reparented_to` (null means the top level). The page keeps its content and revision history and can be restored by ID."
+	note := "Sub-pages and playbooks filed under this page were not deleted: they moved up to the deleted page's parent (reparented_to; empty means the top level). The page keeps its content and revision history and can be restored by ID."
 	if len(reparented) == 0 {
 		note = "Nothing was filed under this page, so nothing moved. The page keeps its content and revision history and can be restored by ID."
 	}
 
-	return emitHandbook(map[string]interface{}{
+	return emitHandbookAs(map[string]interface{}{
 		"data": map[string]interface{}{
 			"id":                 ref.ID,
 			"title":              ref.Title,
@@ -631,7 +631,7 @@ func runHandbookDelete(api *handbookAPI, reference string) error {
 			"revisions": fmt.Sprintf("wallfacer handbook revisions %s", ref.ID),
 			"deleted":   "wallfacer handbook list --include-deleted",
 		},
-	})
+	}, renderHandbookWrite(api, "Deleted"))
 }
 
 func runHandbookRestore(api *handbookAPI, reference string) error {
@@ -649,12 +649,12 @@ func runHandbookRestore(api *handbookAPI, reference string) error {
 	}
 
 	restored := api.refreshWritten(ref, refFromPageRecord(record, api.accountID, ref.ResolvedFrom))
-	return emitHandbook(map[string]interface{}{
+	return emitHandbookAs(map[string]interface{}{
 		"data":      record,
 		"reference": restored,
-		"note":      "The page is back with its content and revision history intact. If its parent was deleted in the meantime it came back at the top level; `data.parent_page_id` says where it landed.",
+		"note":      "The page is back with its content and revision history intact. If its parent was deleted in the meantime it came back at the top level; its parent_page_id says where it landed.",
 		"follow_up": handbookWriteFollowUp(restored),
-	})
+	}, renderHandbookWrite(api, "Restored"))
 }
 
 func runHandbookMove(api *handbookAPI, reference, kind string, edit handbookEdit, position int) error {
@@ -705,12 +705,12 @@ func runHandbookMove(api *handbookAPI, reference, kind string, edit handbookEdit
 		note = "Moved. Only the playbook's parent and position changed: its definition, draft, and triggers are untouched and no task was created."
 	}
 
-	return emitHandbook(map[string]interface{}{
+	return emitHandbookAs(map[string]interface{}{
 		"data":      record,
 		"reference": moved,
 		"note":      note,
 		"follow_up": handbookWriteFollowUp(moved),
-	})
+	}, renderHandbookWrite(api, "Moved"))
 }
 
 func runHandbookReorder(api *handbookAPI, parentRef string, topLevel bool, childRefs []string) error {
@@ -763,7 +763,7 @@ func runHandbookReorder(api *handbookAPI, parentRef string, topLevel bool, child
 		return err
 	}
 
-	return emitHandbook(map[string]interface{}{
+	return emitHandbookAs(map[string]interface{}{
 		"data":     tree,
 		"parent":   parentPageID,
 		"children": ordered,
@@ -772,7 +772,7 @@ func runHandbookReorder(api *handbookAPI, parentRef string, topLevel bool, child
 			"tree": "wallfacer handbook tree",
 			"move": "wallfacer handbook move <reference> --under <page-reference>",
 		},
-	})
+	}, renderHandbookReorder(reorderParentLabel(idx, parentID)))
 }
 
 // checkReorderCoversParent rejects a list that is not exactly the parent's
@@ -800,6 +800,15 @@ func checkReorderCoversParent(idx *handbookIndex, parentID string, ordered []*ha
 		return errors.Errorf("the order must list every child of %s; missing: %s", describeReorderParent(parentID), strings.Join(missing, ", "))
 	}
 	return nil
+}
+
+// reorderParentLabel names the parent a reorder wrote, by path when the tree
+// has it.
+func reorderParentLabel(idx *handbookIndex, parentID string) string {
+	if parent, ok := idx.byID[parentID]; ok {
+		return fmt.Sprintf("%s (%s)", parent.Path, parent.ID)
+	}
+	return describeReorderParent(parentID)
 }
 
 func describeReorderParent(parentID string) string {

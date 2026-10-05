@@ -33,7 +33,7 @@ Rules that matter:
 wallfacer handbook tree
 ```
 
-The handbook as one nested tree of pages and playbooks, exactly as the API returns it. Every node carries `type`, `id`, and its children, so any node reads with `handbook read <id>`. Archived playbooks and deleted pages are not in the tree.
+The handbook as an outline: one line per page or playbook with its type (`page`, `page, empty`, `playbook v4, disabled, draft saved`), ID, and description, indented the way it is filed. `--under <page>` prints one branch and `--depth N` limits the levels; an entry with hidden children says how many sit below it. With `-o json` the API's tree comes back unchanged, pruned to the same branch and depth (a pruned node carries `children_hidden`). Archived playbooks and deleted pages are not in the tree.
 
 ```bash
 wallfacer handbook list [--type page|playbook] [--page N] [--per-page N]
@@ -170,13 +170,26 @@ These are separate histories and only one of them needs a publish.
 
 A task pins the playbook version that was active when it was created and keeps running that version, so publishing changes later tasks and not the ones already in flight. Page content is not pinned: a run reads pages as they are at the time it reads them.
 
+## Output
+
+Every command prints text by default and the structured payload with `-o json` (or `-o yaml`, or any `-q` query):
+
+- **Pages** (`read`, `revision`) print as a markdown file: YAML frontmatter with the ID, path, parent, and state, then `# Title` and the body. `read --body` prints the body alone, in any format, for `update --body-file`.
+- **Playbooks** (`read`) print the frontmatter, the description, the triggers (marked as switched off when the playbook is disabled, or a note when nothing starts it on its own), and each step of the active version with its settings and instructions.
+- **Definitions** (`version`, `draft`) print as a YAML document with the version's details as `#` comments, so the output saves to a file, edits, and goes straight back through `save-draft --definition-file`.
+- **Diffs** (`diff`, `diff-draft`) print a unified diff of the two definitions as YAML.
+- **Lists** (`tree`, `list`, `search`, `revisions`, `versions`) print one entry per line with the ID the next command takes, and say where pagination stands with a concrete next-page command. Search ranks title matches, then description, then body, and shows the text around a body match.
+- **Writes** print one summary: what changed, where the entry is now, the server's notes about what the change means, and the reads that show it.
+
+Every text result ends with `Next:`, the `follow_up` commands with each command labelled by the title of the entry it reads.
+
 ## Following a result
 
-Every command returns a `follow_up` object naming the next command. When the result names one record — a read, a resolve, a write, a `revisions` or `versions` listing — each entry names the exact command for a reference in it: the parent page, each child, each linked page of a playbook, its versions, its draft, a page's revisions. Those run as printed, with no placeholder left to fill in: that is why a read names `revisions` rather than a `revision` command it holds no id for, and why the `revisions` listing names a concrete `revision` command and `versions` a concrete `version` one.
+Every command returns a `follow_up` object naming the next command (the `Next:` block in text output). When the result names one record — a read, a resolve, a write, a `revisions` or `versions` listing — each entry names the exact command for a reference in it: the parent page, each child, each linked page of a playbook, its versions, its draft, a page's revisions. Those run as printed, with no placeholder left to fill in: that is why a read names `revisions` rather than a `revision` command it holds no id for, and why the `revisions` listing names a concrete `revision` command and `versions` a concrete `version` one.
 
 `tree`, `list` and `search` name many records at once, so their entries carry a `<id>`, `<query>` or `<n>` placeholder you fill from the record you picked rather than an id the command is holding. `next_page` is a placeholder for the same reason: which page to ask for is the caller's choice. One result plus `--help` is enough to reach everything else. A write returns the updated resource plus the reads that show what it did, including the revisions command for the page it touched.
 
-`--query` projection and `-o yaml` work as they do everywhere else:
+`--query` projection and `-o yaml` work as they do everywhere else, and a query always produces structured output:
 
 ```bash
 wallfacer handbook read "Engineering/Build" -q 'data.body' --raw

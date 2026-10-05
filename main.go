@@ -225,6 +225,9 @@ func main() {
 		injectAccountID(cli.Root, accountID)
 	}
 
+	configureOutputFormat()
+	configureRootHelp(cli.Root)
+
 	hardenUnknownArgs(cli.Root)
 
 	updateCh := startUpdateCheck(version)

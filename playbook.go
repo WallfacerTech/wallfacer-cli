@@ -165,7 +165,7 @@ func playbookDiffDraftCommand(accountID string) *cobra.Command {
 	return &cobra.Command{
 		Use:   "diff-draft <playbook-reference>",
 		Short: "Compare the saved draft with the active published definition",
-		Long:  cli.Markdown("Reads the draft and the active version and compares them here, field by field. Nothing is written: the draft stays unpublished and the active version stays active. A playbook with no published version yet reports every field of the draft as added."),
+		Long:  cli.Markdown("Reads the draft and the active version and compares them here: a unified diff of the two definitions as YAML, or with `-o json` a field-by-field change list. Nothing is written: the draft stays unpublished and the active version stays active. A playbook with no published version yet reports every field of the draft as added."),
 		Args:  cobra.ExactArgs(1),
 		Run: handbookRun(accountID, func(api *handbookAPI, cmd *cobra.Command, args []string) error {
 			return runPlaybookDiffDraft(api, args[0])
@@ -221,10 +221,11 @@ To submit a definition directly without saving it as a draft first, the low-leve
 
 func playbookDiffCommand(accountID string) *cobra.Command {
 	return &cobra.Command{
-		Use:   "diff <playbook-reference> <a> <b>",
-		Short: "Compare two published versions of a playbook",
-		Long:  cli.Markdown("Each side is a version number or a version UUID. The API returns both versions' definitions side by side, not a change list, and the comparison is a read: no version is published, activated, or altered to produce it. To compare an unpublished draft against the active version and get a change list, use `handbook diff-draft`."),
-		Args:  cobra.ExactArgs(3),
+		Use:     "diff <playbook-reference> <a> <b>",
+		Short:   "Compare two published versions of a playbook",
+		Long:    cli.Markdown("Each side is a version number or a version UUID. Prints a unified diff of the two definitions as YAML; with `-o json` it is the API's response, both definitions side by side. The comparison is a read: no version is published, activated, or altered to produce it. To compare an unpublished draft against the active version, use `handbook diff-draft`."),
+		Example: `  wallfacer handbook diff "Research and Improve Ideas" 3 4`,
+		Args:    cobra.ExactArgs(3),
 		Run: handbookRun(accountID, func(api *handbookAPI, cmd *cobra.Command, args []string) error {
 			return runPlaybookDiff(api, args[0], args[1], args[2])
 		}),
@@ -477,7 +478,7 @@ func runPlaybookCreate(api *handbookAPI, name, description, parent string, linke
 		data["draft"] = map[string]interface{}{"present": true, "definition": definition}
 	}
 
-	return emitHandbook(map[string]interface{}{
+	return emitHandbookAs(map[string]interface{}{
 		"data":      data,
 		"reference": ref,
 		"follow_up": map[string]interface{}{
@@ -485,7 +486,7 @@ func runPlaybookCreate(api *handbookAPI, name, description, parent string, linke
 			"versions":   fmt.Sprintf("wallfacer handbook versions %s", ref.ID),
 			"save_draft": fmt.Sprintf("wallfacer handbook save-draft %s", ref.ID),
 		},
-	})
+	}, renderHandbookWrite(api, "Created"))
 }
 
 func runPlaybookUpdate(api *handbookAPI, reference string, update *playbookUpdate) error {
@@ -523,7 +524,7 @@ func runPlaybookUpdate(api *handbookAPI, reference string, update *playbookUpdat
 	}
 
 	updated := refFromPipelineRecord(record, api.accountID, ref.ResolvedFrom)
-	return emitHandbook(map[string]interface{}{
+	return emitHandbookAs(map[string]interface{}{
 		"data": map[string]interface{}{
 			"playbook": record,
 			"changed":  sortedKeys(update.body),
@@ -533,7 +534,7 @@ func runPlaybookUpdate(api *handbookAPI, reference string, update *playbookUpdat
 		},
 		"reference": updated,
 		"follow_up": api.followUp(updated),
-	})
+	}, renderHandbookWrite(api, "Updated"))
 }
 
 func runPlaybookArchive(api *handbookAPI, reference string) error {
@@ -554,7 +555,7 @@ func runPlaybookArchive(api *handbookAPI, reference string) error {
 	}
 
 	ref.State = "archived"
-	return emitHandbook(map[string]interface{}{
+	return emitHandbookAs(map[string]interface{}{
 		"data": map[string]interface{}{
 			"id":       ref.ID,
 			"archived": true,
@@ -564,7 +565,7 @@ func runPlaybookArchive(api *handbookAPI, reference string) error {
 			"restore": fmt.Sprintf("wallfacer handbook restore-playbook %s", ref.ID),
 			"list":    "wallfacer handbook list --type playbook --include-archived",
 		},
-	})
+	}, renderHandbookWrite(api, "Archived"))
 }
 
 func runPlaybookRestore(api *handbookAPI, reference string) error {
@@ -585,7 +586,7 @@ func runPlaybookRestore(api *handbookAPI, reference string) error {
 	}
 
 	restored := refFromPipelineRecord(record, api.accountID, ref.ResolvedFrom)
-	return emitHandbook(map[string]interface{}{
+	return emitHandbookAs(map[string]interface{}{
 		"data": map[string]interface{}{
 			"playbook": record,
 			// A restore always comes back disabled, and the name may have
@@ -598,7 +599,7 @@ func runPlaybookRestore(api *handbookAPI, reference string) error {
 			"enable": fmt.Sprintf("wallfacer handbook update-playbook %s --enable", restored.ID),
 			"read":   fmt.Sprintf("wallfacer handbook read %s", restored.ID),
 		},
-	})
+	}, renderHandbookWrite(api, "Restored"))
 }
 
 func runPlaybookSaveDraft(api *handbookAPI, reference string, definition map[string]interface{}) error {
@@ -629,7 +630,7 @@ func runPlaybookSaveDraft(api *handbookAPI, reference string, definition map[str
 		data["active_version"] = nil
 	}
 
-	return emitHandbook(map[string]interface{}{
+	return emitHandbookAs(map[string]interface{}{
 		"data":      data,
 		"reference": ref,
 		"follow_up": map[string]interface{}{
@@ -637,7 +638,7 @@ func runPlaybookSaveDraft(api *handbookAPI, reference string, definition map[str
 			"publish": fmt.Sprintf("wallfacer handbook publish %s", ref.ID),
 			"discard": fmt.Sprintf("wallfacer handbook discard-draft %s", ref.ID),
 		},
-	})
+	}, renderHandbookWrite(api, "Saved a draft of"))
 }
 
 func runPlaybookDiscardDraft(api *handbookAPI, reference string) error {
@@ -657,7 +658,7 @@ func runPlaybookDiscardDraft(api *handbookAPI, reference string) error {
 		return err
 	}
 
-	return emitHandbook(map[string]interface{}{
+	return emitHandbookAs(map[string]interface{}{
 		"data": map[string]interface{}{
 			"discarded":      true,
 			"draft":          map[string]interface{}{"present": record["draft"] != nil},
@@ -668,7 +669,7 @@ func runPlaybookDiscardDraft(api *handbookAPI, reference string) error {
 			"read":    fmt.Sprintf("wallfacer handbook read %s", ref.ID),
 			"version": fmt.Sprintf("wallfacer handbook version %s", ref.ID),
 		},
-	})
+	}, renderHandbookWrite(api, "Discarded the draft of"))
 }
 
 func runPlaybookDiffDraft(api *handbookAPI, reference string) error {
@@ -722,14 +723,14 @@ func runPlaybookDiffDraft(api *handbookAPI, reference string) error {
 		data["note"] = "the playbook has no published version; every field of the draft is new"
 	}
 
-	return emitHandbook(map[string]interface{}{
+	return emitHandbookAs(map[string]interface{}{
 		"data":      data,
 		"reference": ref,
 		"follow_up": map[string]interface{}{
 			"draft":   fmt.Sprintf("wallfacer handbook draft %s", ref.ID),
 			"publish": fmt.Sprintf("wallfacer handbook publish %s", ref.ID),
 		},
-	})
+	}, renderHandbookDiffDraft(api, activeDefinition, definition))
 }
 
 func runPlaybookPublish(api *handbookAPI, reference, notes string, activate bool) error {
@@ -802,7 +803,7 @@ func runPlaybookPublish(api *handbookAPI, reference, notes string, activate bool
 	}
 
 	updated := refFromPipelineRecord(after, api.accountID, ref.ResolvedFrom)
-	return emitHandbook(map[string]interface{}{
+	return emitHandbookAs(map[string]interface{}{
 		"data":      data,
 		"reference": updated,
 		"follow_up": map[string]interface{}{
@@ -810,7 +811,7 @@ func runPlaybookPublish(api *handbookAPI, reference, notes string, activate bool
 			"versions": fmt.Sprintf("wallfacer handbook versions %s", ref.ID),
 			"read":     fmt.Sprintf("wallfacer handbook read %s", ref.ID),
 		},
-	})
+	}, renderHandbookWrite(api, "Published"))
 }
 
 func runPlaybookDiff(api *handbookAPI, reference, a, b string) error {
@@ -827,7 +828,7 @@ func runPlaybookDiff(api *handbookAPI, reference, a, b string) error {
 		return err
 	}
 
-	return emitHandbook(map[string]interface{}{
+	return emitHandbookAs(map[string]interface{}{
 		// The diff endpoint answers under `data` already; emitting the
 		// response as-is would nest it a second time and break the query
 		// projection every other handbook command shares.
@@ -839,7 +840,7 @@ func runPlaybookDiff(api *handbookAPI, reference, a, b string) error {
 			"b":        fmt.Sprintf("wallfacer handbook version %s %s", ref.ID, b),
 			"versions": fmt.Sprintf("wallfacer handbook versions %s", ref.ID),
 		},
-	})
+	}, renderHandbookDiff(api))
 }
 
 // draftDefinitionOf pulls the stored draft's definition out of a playbook
