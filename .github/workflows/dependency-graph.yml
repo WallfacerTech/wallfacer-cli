@@ -1,16 +1,19 @@
-name: CI
+name: Dependency graph
 
+# Submits the module graph the binary is actually built from, resolved by the
+# Go toolchain go.mod asks for, so the dependency graph and Dependabot alerts
+# track the versions that ship.
 on:
   push:
     branches: [main]
-  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
-  build:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest, macos-latest]
+  submit:
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -26,5 +29,7 @@ jobs:
       - name: Fix local module replace path
         run: go mod edit -replace github.com/WallfacerTech/openapi-cli-generator=./openapi-cli-generator
 
-      - run: go vet ./...
-      - run: go build -o wallfacer .
+      - uses: actions/go-dependency-submission@v2
+        with:
+          go-mod-path: go.mod
+          go-build-target: .
