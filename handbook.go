@@ -7,6 +7,7 @@ import (
 	"math"
 	"net/url"
 	"os"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -501,7 +502,7 @@ func runHandbookSearch(api *handbookAPI, query, kind string, limit, maxPages int
 			}
 			ref := withIndexedPath(idx, refFromPageRecord(record, api.accountID, "search"))
 			ref.MatchedIn = matchedIn
-			if matchedIn[0] == "body" {
+			if slices.Contains(matchedIn, "body") {
 				ref.Snippet = snippetAround(stringField(record, "body"), query, 60)
 			}
 			matches = append(matches, ref)
@@ -543,6 +544,16 @@ func runHandbookSearch(api *handbookAPI, query, kind string, limit, maxPages int
 		matches = matches[:limit]
 	}
 
+	// searchCommand repeats this search with one dimension widened, keeping
+	// the query, type, and the other bound as they were.
+	searchCommand := func(limit, maxPages int) string {
+		cmd := "wallfacer handbook search " + shellQuote(query)
+		if kind != "" {
+			cmd += " --type " + kind
+		}
+		return cmd + fmt.Sprintf(" --limit %d --max-pages %d", limit, maxPages)
+	}
+
 	return emitHandbookAs(map[string]interface{}{
 		"data":       matches,
 		"query":      query,
@@ -555,7 +566,7 @@ func runHandbookSearch(api *handbookAPI, query, kind string, limit, maxPages int
 			"widen":      "wallfacer handbook search <query> --limit <n> --max-pages <n>",
 			"whole_tree": "wallfacer handbook tree",
 		},
-	}, renderHandbookSearch(maxPages))
+	}, renderHandbookSearch(searchCommand, maxPages))
 }
 
 func matchRank(ref *handbookRef) int {

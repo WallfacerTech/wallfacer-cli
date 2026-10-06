@@ -299,7 +299,36 @@ func TestSearchRanksTitleMatchesBeforeBodyMatches(t *testing.T) {
 	}
 
 	out := captureText(t, func() error { return runHandbookSearch(fixture.api(), "review", "", 20, 20) })
-	assertContains(t, out, "title matches first", "matched in body: “")
+	assertContains(t, out, "title matches first", "matched in body: “", "matched in title, description, body: “")
+}
+
+// A body hit carries a snippet whatever else matched, not only when the body
+// is the best-ranked field.
+func TestEveryBodyMatchCarriesASnippet(t *testing.T) {
+	fixture := newHandbookFixture(t)
+
+	output := capture(t, func() error { return runHandbookSearch(fixture.api(), "review", "", 20, 20) })
+	multiField := false
+	for _, item := range output["data"].([]interface{}) {
+		entry := item.(map[string]interface{})
+		matched := entry["matched_in"].([]interface{})
+		bodyMatched := false
+		for _, field := range matched {
+			bodyMatched = bodyMatched || field == "body"
+		}
+		if !bodyMatched {
+			continue
+		}
+		if matched[0] != "body" {
+			multiField = true
+		}
+		if snippet, _ := entry["snippet"].(string); snippet == "" {
+			t.Errorf("%v matched in %v but carries no snippet", entry["id"], matched)
+		}
+	}
+	if !multiField {
+		t.Fatal("the fixture needs a match on the body and a better-ranked field")
+	}
 }
 
 func TestSnippetAround(t *testing.T) {
@@ -402,7 +431,20 @@ func TestSearchCommandsQuoteTheQueryForTheShell(t *testing.T) {
 	fixture := newHandbookFixture(t)
 
 	out := captureText(t, func() error { return runHandbookSearch(fixture.api(), "$(true) it's", "", 20, 1) })
-	assertContains(t, out, `wallfacer handbook search '$(true) it'\''s' --max-pages 2`)
+	assertContains(t, out, `wallfacer handbook search '$(true) it'\''s' --limit 20 --max-pages 2`)
+}
+
+// The continuation commands repeat the search that was run, widening only
+// the bound each one is about.
+func TestSearchContinuationsKeepTheSearchScope(t *testing.T) {
+	fixture := newHandbookFixture(t)
+
+	more := captureText(t, func() error { return runHandbookSearch(fixture.api(), "review", kindPage, 1, 50) })
+	assertContains(t, more, "See more: wallfacer handbook search review --type page --limit ")
+	assertContains(t, more, " --max-pages 50\n")
+
+	further := captureText(t, func() error { return runHandbookSearch(fixture.api(), "zzz-absent", kindPage, 5, 1) })
+	assertContains(t, further, "Search further: wallfacer handbook search zzz-absent --type page --limit 5 --max-pages 2\n")
 }
 
 func TestShellQuote(t *testing.T) {

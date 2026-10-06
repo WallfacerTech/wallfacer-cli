@@ -263,10 +263,11 @@ func renderHandbookList(listCommand func(page int) string) textRenderer {
 	}
 }
 
-func renderHandbookSearch(maxPages int) textRenderer {
+func renderHandbookSearch(searchCommand func(limit, maxPages int) string, maxPages int) textRenderer {
 	return func(t *textOut, p map[string]interface{}) {
 		matches := asList(p["data"])
 		query := scalar(p["query"])
+		limit := atoi(scalar(p["limit"]))
 		incomplete := false
 		for _, sweep := range asMap(p["pagination"]) {
 			if complete, ok := asMap(sweep)["complete"].(bool); ok && !complete {
@@ -274,7 +275,7 @@ func renderHandbookSearch(maxPages int) textRenderer {
 			}
 		}
 		stopped := func() {
-			t.line("Stopped after %d result pages per type. Search further: wallfacer handbook search %s --max-pages %d", maxPages, shellQuote(query), maxPages*2)
+			t.line("Stopped after %d result pages per type. Search further: %s", maxPages, searchCommand(limit, maxPages*2))
 		}
 
 		if len(matches) == 0 {
@@ -312,7 +313,7 @@ func renderHandbookSearch(maxPages int) textRenderer {
 
 		t.gap()
 		if truncated, _ := p["truncated"].(bool); truncated {
-			t.line("See more: wallfacer handbook search %s --limit %s", shellQuote(query), scalar(p["total"]))
+			t.line("See more: %s", searchCommand(atoi(scalar(p["total"])), maxPages))
 		}
 		if incomplete {
 			stopped()
