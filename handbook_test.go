@@ -235,9 +235,14 @@ func (f *handbookFixture) api() *handbookAPI {
 	return &handbookAPI{accountID: testAccountID}
 }
 
-// capture runs a command body and returns whatever it printed.
+// capture runs a command body with -o json and returns the object it printed.
+// The text views have their own tests; these assert on the structured payload
+// scripts rely on.
 func capture(t *testing.T, run func() error) map[string]interface{} {
 	t.Helper()
+
+	viper.Set("output-format", formatJSON)
+	defer viper.Set("output-format", "")
 
 	var buf bytes.Buffer
 	previous := cli.Stdout
@@ -840,7 +845,7 @@ func TestManyRecordListingsFollowUpIsAShape(t *testing.T) {
 	fixture := newHandbookFixture(t)
 
 	listings := map[string]func() error{
-		"tree": func() error { return runHandbookTree(fixture.api()) },
+		"tree": func() error { return runHandbookTree(fixture.api(), "", 0) },
 		"list": func() error { return runHandbookList(fixture.api(), "", 0, 0, false, false) },
 		"search": func() error {
 			return runHandbookSearch(fixture.api(), "build", "", 20, 20)
@@ -928,7 +933,7 @@ func TestDiscoveryCommandsOnlyRead(t *testing.T) {
 	fixture := newHandbookFixture(t)
 
 	commands := []func() error{
-		func() error { return runHandbookTree(fixture.api()) },
+		func() error { return runHandbookTree(fixture.api(), "", 0) },
 		func() error { return runHandbookList(fixture.api(), "", 0, 0, true, true) },
 		func() error { return runHandbookSearch(fixture.api(), "build", "", 20, 20) },
 		func() error { return runHandbookRead(fixture.api(), pageBuildID, "") },

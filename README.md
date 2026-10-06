@@ -106,17 +106,22 @@ Run `wallfacer --help` to see all command groups, or `wallfacer <group> --help` 
 `wallfacer handbook` lists, searches, reads, edits, and organizes the account's handbook pages and playbooks. References accept a stable ID, a unique name, a full path (`R&D/Engineering/Build`), a Wallfacer page or playbook detail URL inside the configured account, or a `wallfacer://handbook/pages/<id>` link. Names and paths resolve against active entries; an ambiguous name is reported with its candidates rather than guessed at.
 
 ```bash
+wallfacer handbook tree                            # outline of every page and playbook
+wallfacer handbook tree --under "R&D" --depth 1    # one branch, one level
+wallfacer handbook read "Writing Great PRs"        # a page as markdown with frontmatter
 wallfacer handbook list --type playbook            # flat, with each entry's path and state
 wallfacer handbook list --page 2                   # traverse past the first page
 wallfacer handbook search "review" --limit 5
-wallfacer handbook read <page-id> -q 'data.body' --raw
+wallfacer handbook read <page-id> --body > page.md    # body only, for update --body-file
 wallfacer handbook versions <playbook-id>          # published versions, newest first
-wallfacer handbook version <playbook-id> 3         # one published version in full
+wallfacer handbook version <playbook-id> 3         # one published version as editable YAML
 wallfacer handbook draft <playbook-id>             # the unpublished draft, on its own
 wallfacer handbook revisions <page-id>
 ```
 
-Reads never substitute an unpublished draft for a playbook's active definition: `handbook read` reports only that a draft exists, and `handbook draft` returns its content. Every result carries a `follow_up` object naming the next command. Where the result names one record — a read, a resolve, a write, a `revisions` or `versions` listing — every entry runs as printed, with the ids already filled in. Where it names many (`tree`, `list`, `search`), the entries give the command's shape and you fill the reference in from the record you picked; `next_page` is the same, since which page to ask for is the caller's choice. Either way the next read is available from one result plus `--help`.
+Handbook commands print readable text: pages as markdown with YAML frontmatter, playbook definitions as YAML that saves straight back into `save-draft`, and lists one entry per line with the ID `read` takes. Record views end with `Next:` commands for that record, labelled with the entries they read. Add `-o json` for the structured payload when scripting; `-q` implies it.
+
+Reads never substitute an unpublished draft for a playbook's active definition: `handbook read` reports only that a draft exists, and `handbook draft` returns its content. Every result carries a `follow_up` object naming the next command. Where the result names one record — a read, a resolve, a write, a `revisions` or `versions` listing — every entry has the ids already filled in, and a command is named only when the record has what it reads: a playbook with no active version names no `version`, and one without a saved draft names no `draft` or `publish`. Where it names many (`tree`, `list`, `search`), the entries give the command's shape and you fill the reference in from the record you picked. `next_page` keeps a `<n>` placeholder for the page and carries the flags you passed, `--per-page` included. Either way the next read is available from one result plus `--help`.
 
 Page edits and hierarchy changes use the same references:
 

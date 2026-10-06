@@ -107,6 +107,10 @@ func (f *teamFixture) route(r *http.Request) (string, int) {
 
 	case base + "/pipelines/" + playbookDraftOnlyID:
 		return wrapData(playbookDraftOnlyRecordJSON), http.StatusOK
+	case base + "/pipelines/" + playbookEmptyID:
+		return wrapData(playbookEmptyRecordJSON), http.StatusOK
+	case base + "/pipelines/" + playbookInactiveID:
+		return wrapData(playbookInactiveRecordJSON), http.StatusOK
 
 	case base + "/pipelines/" + playbookDisabledID:
 		return wrapData(playbookDisabledRecordJSON), http.StatusOK
@@ -581,8 +585,19 @@ func TestRunRefusesPagesDraftsAndOtherAccounts(t *testing.T) {
 	}
 
 	draft := expectError(t, func() error { return runPlaybook(fixture.api(), playbookDraftOnlyID, "", "", taskOptions{}) })
-	if !strings.Contains(draft, "is draft-only") || !strings.Contains(draft, "wallfacer handbook publish") {
+	if !strings.Contains(draft, "has no active version") || !strings.Contains(draft, "wallfacer handbook publish "+playbookDraftOnlyID) {
 		t.Errorf("running a draft-only playbook failed with %q", draft)
+	}
+
+	// With no draft, `publish` fails with "no saved draft", so the hint names
+	// what does work for each state instead.
+	empty := expectError(t, func() error { return runPlaybook(fixture.api(), playbookEmptyID, "", "", taskOptions{}) })
+	if !strings.Contains(empty, "no draft is saved") || !strings.Contains(empty, "save-draft "+playbookEmptyID) || strings.Contains(empty, "saved draft with") {
+		t.Errorf("running a playbook with nothing published and no draft failed with %q", empty)
+	}
+	inactive := expectError(t, func() error { return runPlaybook(fixture.api(), playbookInactiveID, "", "", taskOptions{}) })
+	if !strings.Contains(inactive, "wallfacer handbook versions "+playbookInactiveID) || strings.Contains(inactive, "saved draft") || strings.Contains(inactive, "Nothing is published") {
+		t.Errorf("running a playbook with a version but none active failed with %q", inactive)
 	}
 
 	archived := expectError(t, func() error { return runPlaybook(fixture.api(), playbookArchivedID, "", "", taskOptions{}) })

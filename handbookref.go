@@ -281,10 +281,18 @@ type handbookRef struct {
 	VersionCount  *float64               `json:"version_count,omitempty"`
 	LinkedPageIDs []interface{}          `json:"linked_page_ids,omitempty"`
 	MatchedIn     []string               `json:"matched_in,omitempty"`
+	Snippet       string                 `json:"snippet,omitempty"`
 
 	// versionHint carries the version a playbook-version URL named. It is
 	// not part of the entry's identity, so it stays out of the output.
 	versionHint string
+}
+
+// hasVersions reports whether a playbook has anything published, active or
+// not. A version published with --activate=false counts, which is why the
+// version count is consulted as well as the active version.
+func (r *handbookRef) hasVersions() bool {
+	return r.ActiveVersion != nil || (r.VersionCount != nil && *r.VersionCount > 0)
 }
 
 // handbookIndex is the handbook tree flattened into one lookup table. The tree

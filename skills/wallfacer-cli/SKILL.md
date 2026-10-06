@@ -5,7 +5,7 @@ description: Drive the Wallfacer platform from the shell via the `wallfacer` CLI
 
 # wallfacer
 
-Auto-generated CLI wrapping the Wallfacer API. YAML config under `~/.wallfacer/`, stdout is JSON by default (`-o json`). Every command accepts `--help`.
+Auto-generated CLI wrapping the Wallfacer API, plus hand-written product commands (`handbook`, `team`, `chat`, `run`). YAML config under `~/.wallfacer/`. `handbook` commands print readable text by default (markdown pages, outlines, YAML definitions); API commands print JSON. `-o json` gives JSON everywhere, and `-q` implies it. Every command accepts `--help`, and bare `wallfacer` prints a start-here guide and glossary.
 
 ## Auth
 
@@ -88,11 +88,23 @@ References: [config](references/config.md) · [environments](references/environm
 `wallfacer handbook` is the entry point for the account's handbook: pages and playbooks in one surface, with every result carrying the references needed for the next command, and the place its playbooks are authored. No command in the group creates a task.
 
 ```bash
-wallfacer handbook tree                       # pages and playbooks as one nested tree
+wallfacer handbook tree                       # outline of pages and playbooks, one line each
+wallfacer handbook tree --under "Engineering" --depth 1   # one branch, one level
 wallfacer handbook list --type playbook       # flat, with each entry's path and state
-wallfacer handbook search "pull request"      # both types, title + description + page body
-wallfacer handbook read "Engineering/Build"   # page body, or a playbook's active definition
+wallfacer handbook search "pull request"      # both types, best match first, body snippets
+wallfacer handbook read "Engineering/Build"   # page as markdown, or a playbook's triggers and steps
 wallfacer handbook resolve <reference>        # a name, path, or URL -> stable ID, type, state
+```
+
+Output is text by default: a page reads as a markdown file with YAML frontmatter (ID, path, parent, state), lists are one line per entry with the ID the next command takes, and a view of one record ends with a `Next:` block of the commands for that record, each labelled with the title of the entry it reads. Pass `-o json` for the structured payload (`data`, `reference`, `follow_up`, `pagination`) when scripting; `-q` implies JSON.
+
+Two reads are built to round-trip into writes:
+
+```bash
+wallfacer handbook read "Engineering/Build" --body > build.md      # body only, any format
+wallfacer handbook update "Engineering/Build" --body-file build.md
+wallfacer handbook version <playbook-reference> > playbook.yaml    # valid YAML, details in comments
+wallfacer handbook save-draft <playbook-reference> --definition-file playbook.yaml
 ```
 
 Page authoring and tree organization take the same references:
@@ -137,7 +149,7 @@ wallfacer run "Implement Assigned GitHub Issues" --message "Start with #66" # se
 ```
 
 - **Chat is agent-directed.** A human member, and a disabled or paused agent, are refused by name rather than quietly becoming the identity on the task.
-- **Run uses the version the server has active.** No version is pinned, a draft-only playbook is refused, and `--agent` is the task's identity and default environment rather than an override of the playbook's step actors.
+- **Run uses the version the server has active.** No version is pinned, a playbook with no active version is refused with the command that gets it one, and `--agent` is the task's identity and default environment rather than an override of the playbook's step actors.
 - **Neither falls back to the other.** Chat never sends `pipeline_id`; run never sends `prompt`.
 - **Both return the created task plus `follow_up`** naming the `tasks get`, `sessions list`, and `messages list` commands for what they started, and a `messages create` reply. A run adds `handbook read` for the playbook and `handbook version` for the version it is executing; a chat has neither.
 
@@ -172,14 +184,15 @@ cat vm.json | wallfacer vms create
 
 ## Output format
 
-Use `--output-format json` or `-o json` (not `--output json`):
+Use `--output-format` or `-o` (not `--output`). Values are `text`, `json`, and `yaml`.
 
 ```bash
-wallfacer environments get <environment-id> -o json
-wallfacer vms list -o json
+wallfacer handbook read "Engineering/Build"            # text (the handbook default)
+wallfacer handbook read "Engineering/Build" -o json    # the structured payload
+wallfacer environments get <environment-id>            # JSON (API commands only print JSON or YAML)
 ```
 
-Default output is JSON. Also supports `-o yaml`.
+`handbook` commands default to text; API commands default to JSON. `--query` always produces structured output, so `-q 'data.id' --raw` works the same on every command.
 
 ## Destructive ops
 
