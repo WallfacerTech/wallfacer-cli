@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -12,6 +13,7 @@ import (
 	"github.com/WallfacerTech/openapi-cli-generator/cli"
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
+	"gopkg.in/yaml.v2"
 )
 
 // Output formats. The hand-written product commands (handbook first) print
@@ -127,9 +129,11 @@ func (t *textOut) gap() {
 }
 
 // field is one frontmatter entry. Empty values are left out.
+// A field's value is a string, quoted when plain YAML would read it as
+// something else, or a decoded JSON number or bool, written as one.
 type field struct {
 	key   string
-	value string
+	value interface{}
 }
 
 // frontmatter writes a YAML frontmatter block, one key per line, so a page
@@ -137,10 +141,17 @@ type field struct {
 func (t *textOut) frontmatter(fields ...field) {
 	t.line("---")
 	for _, f := range fields {
-		if f.value == "" {
+		value, isString := f.value.(string)
+		if !isString {
+			value = scalar(f.value)
+		}
+		if value == "" {
 			continue
 		}
-		t.line("%s: %s", f.key, yamlScalar(f.value))
+		if isString {
+			value = yamlScalar(value)
+		}
+		t.line("%s: %s", f.key, value)
 	}
 	t.line("---")
 }
@@ -246,6 +257,10 @@ func (t *textOut) next(followUp interface{}, annotate func(string) string) {
 	}
 }
 
+// yamlDatePrefix matches the YAML 1.1 timestamp forms. Go's decoder leaves
+// them as strings, but other frontmatter readers turn them into dates.
+var yamlDatePrefix = regexp.MustCompile(`^[0-9]{4}-[0-9]{1,2}-[0-9]{1,2}`)
+
 // yamlScalar quotes a frontmatter value only when plain YAML would misread
 // it, and keeps it on one line either way.
 func yamlScalar(value string) string {
@@ -257,9 +272,12 @@ func yamlScalar(value string) string {
 		strings.HasSuffix(value, ":") ||
 		strings.ContainsAny(value[:1], "&*!|>'\"%@`[]{},?-#:") ||
 		value != strings.TrimSpace(value)
-	switch strings.ToLower(value) {
-	case "true", "false", "yes", "no", "null", "~", "on", "off":
-		needsQuote = true
+	// Anything else plain YAML resolves to a number, bool, null, or date
+	// ("2026", "0x1F", "y", "2026-09-23") stays a string by being quoted.
+	if !needsQuote {
+		var decoded map[string]interface{}
+		err := yaml.Unmarshal([]byte("v: "+value), &decoded)
+		needsQuote = err != nil || decoded["v"] != value || yamlDatePrefix.MatchString(value)
 	}
 	if !needsQuote {
 		return value

@@ -37,7 +37,7 @@ func (a *handbookAPI) annotator(self string) func(string) string {
 				return ""
 			}
 			if ref, ok := a.index.byID[fields[i]]; ok {
-				return fmt.Sprintf("%s (%s)", ref.Title, ref.Type)
+				return fmt.Sprintf("%s (%s)", oneLine(ref.Title), ref.Type)
 			}
 			return ""
 		}
@@ -79,7 +79,7 @@ func entryKind(entry map[string]interface{}) string {
 
 // entryLine is one handbook entry on one line: label, type, ID, description.
 func entryLine(indent, label string, entry map[string]interface{}) string {
-	line := fmt.Sprintf("%s- %s · %s · %s", indent, label, entryKind(entry), scalar(entry["id"]))
+	line := fmt.Sprintf("%s- %s · %s · %s", indent, oneLine(label), entryKind(entry), scalar(entry["id"]))
 	if description := oneLine(scalar(entry["description"])); description != "" {
 		line += " — " + description
 	}
@@ -389,7 +389,7 @@ func (a *handbookAPI) parentField(ref map[string]interface{}) field {
 	}
 	if a.index != nil {
 		if parent, ok := a.index.byID[parentID]; ok {
-			return field{"parent", fmt.Sprintf("%s · %s", parent.Title, parentID)}
+			return field{"parent", fmt.Sprintf("%s · %s", oneLine(parent.Title), parentID)}
 		}
 	}
 	return field{"parent", parentID}
@@ -407,7 +407,7 @@ func renderHandbookRead(api *handbookAPI) textRenderer {
 		fields := append(referenceFields(ref), api.parentField(ref), field{"updated_at", stamp(record["updated_at"])})
 		t.frontmatter(fields...)
 		t.gap()
-		t.line("# %s", scalar(record["title"]))
+		t.line("# %s", oneLine(scalar(record["title"])))
 		t.gap()
 		if body := markdownBody(scalar(record["body"])); body != "" {
 			t.block(body)
@@ -466,11 +466,11 @@ func renderPlaybookRead(api *handbookAPI, t *textOut, p map[string]interface{}) 
 	fields := append(withoutField(referenceFields(ref), "description"), api.parentField(ref),
 		field{"active_version", activeField},
 		field{"draft", draftField},
-		field{"tasks_run", scalar(record["task_count"])},
+		field{"tasks_run", record["task_count"]},
 	)
 	t.frontmatter(fields...)
 	t.gap()
-	t.line("# %s", scalar(record["name"]))
+	t.line("# %s", oneLine(scalar(record["name"])))
 	if description := markdownBody(scalar(record["description"])); description != "" {
 		t.gap()
 		t.block(description)
@@ -529,7 +529,7 @@ func renderPlaybookRead(api *handbookAPI, t *textOut, p map[string]interface{}) 
 	for i, item := range steps {
 		step := asMap(item)
 		t.gap()
-		t.line("### %d. %s", i+1, scalar(step["title"]))
+		t.line("### %d. %s", i+1, oneLine(scalar(step["title"])))
 		t.line("%s", stepMeta(step))
 		if content := markdownBody(scalar(step["content"])); content != "" {
 			t.gap()
@@ -675,7 +675,7 @@ func renderHandbookRevision(api *handbookAPI) textRenderer {
 			field{"description", oneLine(scalar(revision["description"]))},
 		)
 		t.gap()
-		t.line("# %s", scalar(revision["title"]))
+		t.line("# %s", oneLine(scalar(revision["title"])))
 		t.gap()
 		if body := markdownBody(scalar(revision["body"])); body != "" {
 			t.block(body)
@@ -1060,7 +1060,7 @@ func writeFact(t *textOut, key string, value interface{}) {
 		t.line("%s:", key)
 		for _, item := range v {
 			entry := asMap(item)
-			t.line("  - %s (%s) · %s", scalar(entry["title"]), scalar(entry["type"]), scalar(entry["id"]))
+			t.line("  - %s (%s) · %s", oneLine(scalar(entry["title"])), scalar(entry["type"]), scalar(entry["id"]))
 		}
 	default:
 		t.line("%s: %s", key, oneLine(scalar(value)))
@@ -1073,7 +1073,7 @@ func renderHandbookReorder(parentLabel string) textRenderer {
 		t.line("Reordered %s under %s:", plural(len(children), "entry", "entries"), parentLabel)
 		for i, item := range children {
 			child := asMap(item)
-			t.line("  position %d: %s (%s) · %s", i, scalar(child["title"]), scalar(child["type"]), scalar(child["id"]))
+			t.line("  position %d: %s (%s) · %s", i, oneLine(scalar(child["title"])), scalar(child["type"]), scalar(child["id"]))
 		}
 		if note := scalar(p["note"]); note != "" {
 			t.gap()

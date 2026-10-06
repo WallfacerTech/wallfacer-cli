@@ -638,10 +638,45 @@ func TestYAMLScalarQuotesOnlyWhenNeeded(t *testing.T) {
 		"ends with colon:":     `"ends with colon:"`,
 		"issue#12":             "issue#12",
 		"see #12":              `"see #12"`,
+		"v4":                   "v4",
+		"2026":                 `"2026"`,
+		"1e3":                  `"1e3"`,
+		"0x1F":                 `"0x1F"`,
+		"y":                    `"y"`,
+		"2026-09-23":           `"2026-09-23"`,
+		"2026-09-23T23:09:08Z": `"2026-09-23T23:09:08Z"`,
 	} {
 		if got := yamlScalar(in); got != want {
 			t.Errorf("yamlScalar(%q) = %s, want %s", in, got, want)
 		}
+	}
+}
+
+// A number decoded from JSON is written as a YAML number; only strings are
+// quoted when plain YAML would read them as something else.
+func TestFrontmatterKeepsNumbersAndStringsApart(t *testing.T) {
+	var out textOut
+	out.frontmatter(field{"title", "2026"}, field{"tasks_run", float64(3)})
+	assertContains(t, out.b.String(), "title: \"2026\"\n", "tasks_run: 3\n")
+}
+
+// Titles are free text and can hold line breaks. Every place one lands in a
+// line of output, it is collapsed first, so a pasted Next: row cannot run a
+// second command and an entry stays on one line.
+func TestTitlesWithLineBreaksStayOnOneLine(t *testing.T) {
+	const title = "Parent\ntouch /tmp/pwn #"
+	const id = "11111111-1111-4111-8111-111111111111"
+	api := &handbookAPI{index: &handbookIndex{byID: map[string]*handbookRef{
+		id: {ID: id, Title: title, Type: kindPage},
+	}}}
+
+	label := api.annotator("")("wallfacer handbook read " + id)
+	if label != "Parent touch /tmp/pwn # (page)" {
+		t.Errorf("annotation = %q, want the title on one line", label)
+	}
+	line := entryLine("", title, map[string]interface{}{"type": kindPage, "id": id})
+	if strings.ContainsAny(line, "\r\n") {
+		t.Errorf("entry line kept a line break: %q", line)
 	}
 }
 
