@@ -111,6 +111,30 @@ func dropSpentNextPage(followUp interface{}, pagination map[string]interface{}) 
 	return out
 }
 
+// markdownBody drops the blank lines around stored markdown and keeps every
+// other character, so a body that opens with an indented code block still
+// renders as one.
+func markdownBody(text string) string {
+	text = strings.TrimRight(text, " \t\r\n")
+	for {
+		line, rest, found := strings.Cut(text, "\n")
+		if !found || strings.TrimSpace(line) != "" {
+			return text
+		}
+		text = rest
+	}
+}
+
+// shellQuote renders an argument so a printed command means the same thing
+// when pasted into a POSIX shell: plain words stay bare, anything else is
+// single-quoted.
+func shellQuote(arg string) string {
+	if arg != "" && strings.Trim(arg, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-./:@%+=,") == "" {
+		return arg
+	}
+	return "'" + strings.ReplaceAll(arg, "'", `'\''`) + "'"
+}
+
 func oneLine(text string) string {
 	return strings.Join(strings.Fields(text), " ")
 }
@@ -250,7 +274,7 @@ func renderHandbookSearch(maxPages int) textRenderer {
 			}
 		}
 		stopped := func() {
-			t.line("Stopped after %d result pages per type. Search further: wallfacer handbook search %q --max-pages %d", maxPages, query, maxPages*2)
+			t.line("Stopped after %d result pages per type. Search further: wallfacer handbook search %s --max-pages %d", maxPages, shellQuote(query), maxPages*2)
 		}
 
 		if len(matches) == 0 {
@@ -288,7 +312,7 @@ func renderHandbookSearch(maxPages int) textRenderer {
 
 		t.gap()
 		if truncated, _ := p["truncated"].(bool); truncated {
-			t.line("See more: wallfacer handbook search %q --limit %s", query, scalar(p["total"]))
+			t.line("See more: wallfacer handbook search %s --limit %s", shellQuote(query), scalar(p["total"]))
 		}
 		if incomplete {
 			stopped()
@@ -385,7 +409,7 @@ func renderHandbookRead(api *handbookAPI) textRenderer {
 		t.gap()
 		t.line("# %s", scalar(record["title"]))
 		t.gap()
-		if body := strings.TrimSpace(scalar(record["body"])); body != "" {
+		if body := markdownBody(scalar(record["body"])); body != "" {
 			t.block(body)
 		} else {
 			t.line("_This page has no body yet._")
@@ -447,7 +471,7 @@ func renderPlaybookRead(api *handbookAPI, t *textOut, p map[string]interface{}) 
 	t.frontmatter(fields...)
 	t.gap()
 	t.line("# %s", scalar(record["name"]))
-	if description := strings.TrimSpace(scalar(record["description"])); description != "" {
+	if description := markdownBody(scalar(record["description"])); description != "" {
 		t.gap()
 		t.block(description)
 	}
@@ -507,7 +531,7 @@ func renderPlaybookRead(api *handbookAPI, t *textOut, p map[string]interface{}) 
 		t.gap()
 		t.line("### %d. %s", i+1, scalar(step["title"]))
 		t.line("%s", stepMeta(step))
-		if content := strings.TrimSpace(scalar(step["content"])); content != "" {
+		if content := markdownBody(scalar(step["content"])); content != "" {
 			t.gap()
 			t.block(content)
 		}
@@ -653,7 +677,7 @@ func renderHandbookRevision(api *handbookAPI) textRenderer {
 		t.gap()
 		t.line("# %s", scalar(revision["title"]))
 		t.gap()
-		if body := strings.TrimSpace(scalar(revision["body"])); body != "" {
+		if body := markdownBody(scalar(revision["body"])); body != "" {
 			t.block(body)
 		} else {
 			t.line("_This revision has no body._")

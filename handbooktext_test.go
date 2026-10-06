@@ -383,6 +383,45 @@ func TestSearchWithNoMatchesReportsAnIncompleteSweep(t *testing.T) {
 	}
 }
 
+// The search commands a result prints are pasted into a shell, so the query
+// comes back single-quoted rather than as a Go string the shell would expand.
+func TestSearchCommandsQuoteTheQueryForTheShell(t *testing.T) {
+	fixture := newHandbookFixture(t)
+
+	out := captureText(t, func() error { return runHandbookSearch(fixture.api(), "$(true) it's", "", 20, 1) })
+	assertContains(t, out, `wallfacer handbook search '$(true) it'\''s' --max-pages 2`)
+}
+
+func TestShellQuote(t *testing.T) {
+	for arg, want := range map[string]string{
+		"triage":            "triage",
+		"Engineering/Build": "Engineering/Build",
+		"pull request":      "'pull request'",
+		"$HOME":             "'$HOME'",
+		"it's":              `'it'\''s'`,
+		"":                  "''",
+	} {
+		if got := shellQuote(arg); got != want {
+			t.Errorf("shellQuote(%q) = %s, want %s", arg, got, want)
+		}
+	}
+}
+
+// Leading indentation is markdown: a body that opens with an indented code
+// block keeps it, and only the blank lines around the body are dropped.
+func TestMarkdownBodyKeepsLeadingIndentation(t *testing.T) {
+	for body, want := range map[string]string{
+		"    go test ./...\n\nRun it first.\n": "    go test ./...\n\nRun it first.",
+		"\n\n  \n    indented\n\n":             "    indented",
+		"plain":                                "plain",
+		" \n\t\n":                              "",
+	} {
+		if got := markdownBody(body); got != want {
+			t.Errorf("markdownBody(%q) = %q, want %q", body, got, want)
+		}
+	}
+}
+
 func TestPlaybookReadOffersRunOnlyWhenRunnable(t *testing.T) {
 	fixture := newHandbookFixture(t)
 
