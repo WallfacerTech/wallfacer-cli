@@ -223,7 +223,7 @@ func runPlaybook(api *directoryAPI, reference, message, agentReference string, o
 		return errors.Errorf("playbook %s (%s) is %s and cannot be run", ref.Title, ref.ID, ref.State)
 	}
 	if ref.ActiveVersion == nil {
-		return errors.Errorf("playbook %s (%s) is draft-only and cannot be run; read the draft with `wallfacer handbook draft %s`, then publish it with `wallfacer handbook publish %s`", ref.Title, ref.ID, ref.ID, ref.ID)
+		return errors.Errorf("playbook %s (%s) has no active version and cannot be run. %s", ref.Title, ref.ID, noActiveVersionHint(ref))
 	}
 
 	// No version is named in the request: the server runs the version it has
@@ -263,6 +263,21 @@ func runPlaybook(api *directoryAPI, reference, message, agentReference string, o
 		payload["agent"] = agent
 	}
 	return emitHandbook(payload)
+}
+
+// noActiveVersionHint says how a playbook with no active version gets one, in
+// terms of what it has: a saved draft publishes as is, a version published
+// without activating has to be published again, and with neither a draft has
+// to be saved first.
+func noActiveVersionHint(ref *handbookRef) string {
+	hasDraft := ref.HasDraft != nil && *ref.HasDraft
+	switch {
+	case hasDraft:
+		return fmt.Sprintf("Publish its saved draft with `wallfacer handbook publish %s`.", ref.ID)
+	case ref.hasVersions():
+		return fmt.Sprintf("List its published versions with `wallfacer handbook versions %s`; publishing one again makes it active.", ref.ID)
+	}
+	return fmt.Sprintf("Nothing is published and no draft is saved; save one with `wallfacer handbook save-draft %s --definition-file <file>`, then `wallfacer handbook publish %s`.", ref.ID, ref.ID)
 }
 
 // runCreateError phrases the refusals `run` can be handed the way the ones it

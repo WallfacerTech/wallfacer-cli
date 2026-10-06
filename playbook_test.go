@@ -22,6 +22,8 @@ const (
 	playbookInvalidDraftID  = "bbbbbbb5-1111-4111-8111-111111111111"
 	playbookRejectedID      = "bbbbbbb6-1111-4111-8111-111111111111"
 	playbookCreatedID       = "bbbbbbb7-1111-4111-8111-111111111111"
+	playbookEmptyID         = "bbbbbbb8-1111-4111-8111-111111111111"
+	playbookInactiveID      = "bbbbbbba-1111-4111-8111-111111111111"
 
 	newVersionID = "ccccccc2-1111-4111-8111-111111111111"
 )
@@ -29,7 +31,9 @@ const (
 // authoringFixture serves the playbook states the draft-and-publish commands
 // have to tell apart: a draft alongside an active version, published with no
 // draft, a draft with nothing published yet, a disabled playbook, a draft the
-// server will reject, and a draft stored verbatim that holds no definition.
+// server will reject, a draft stored verbatim that holds no definition, a
+// playbook with neither a published version nor a draft, and one whose only
+// version was published without being activated.
 type authoringFixture struct {
 	server *httptest.Server
 
@@ -41,6 +45,10 @@ type authoringFixture struct {
 	// assert that a failed or refused publish created nothing.
 	published int
 	discarded int
+
+	// tree, when set, replaces the handbook tree, so a test can put entries
+	// into it that the shared tree does not hold.
+	tree string
 }
 
 func newAuthoringFixture(t *testing.T) *authoringFixture {
@@ -78,6 +86,9 @@ func (f *authoringFixture) route(r *http.Request) (string, int) {
 
 	switch {
 	case r.URL.Path == base+"/handbook":
+		if f.tree != "" {
+			return f.tree, http.StatusOK
+		}
 		return handbookTreeJSON, http.StatusOK
 
 	case r.URL.Path == base+"/pages":
@@ -133,6 +144,20 @@ func (f *authoringFixture) route(r *http.Request) (string, int) {
 		f.published++
 		f.mu.Unlock()
 		return wrapData(firstVersionRecordJSON), http.StatusCreated
+	case r.URL.Path == base+"/pipelines/"+playbookUnpublishedID+"/versions":
+		return noVersionsJSON, http.StatusOK
+	case r.URL.Path == base+"/pipelines/"+playbookUnpublishedID+"/draft" && r.Method == http.MethodDelete:
+		return "", http.StatusNoContent
+
+	// Nothing published and no draft saved.
+	case r.URL.Path == base+"/pipelines/"+playbookEmptyID && r.Method == http.MethodGet:
+		return wrapData(playbookEmptyRecordJSON), http.StatusOK
+	case r.URL.Path == base+"/pipelines/"+playbookEmptyID+"/versions":
+		return noVersionsJSON, http.StatusOK
+
+	// One version, published without being activated, and no draft.
+	case r.URL.Path == base+"/pipelines/"+playbookInactiveID && r.Method == http.MethodGet:
+		return wrapData(playbookInactiveRecordJSON), http.StatusOK
 
 	// Disabled, with a draft to publish.
 	case r.URL.Path == base+"/pipelines/"+playbookDisabledID && r.Method == http.MethodGet:
@@ -953,6 +978,16 @@ func TestCreateWithDraftSavesTheDraftToo(t *testing.T) {
 	if hasDraft := output["reference"].(map[string]interface{})["has_draft"]; hasDraft != true {
 		t.Errorf("the reference must report has_draft after a create that saved one: %v", output["reference"])
 	}
+
+	// The draft just saved is what to read and publish next; saving another
+	// would overwrite it.
+	followUp := output["follow_up"].(map[string]interface{})
+	if followUp["draft"] != "wallfacer handbook draft "+playbookCreatedID || followUp["publish"] != "wallfacer handbook publish "+playbookCreatedID {
+		t.Errorf("a create that saved a draft should name draft and publish: %v", followUp)
+	}
+	if _, ok := followUp["save_draft"]; ok {
+		t.Errorf("a create that saved a draft offered to save another: %v", followUp)
+	}
 }
 
 func TestLoadDefinitionAcceptsJSONYAMLAndTheRequestEnvelope(t *testing.T) {
@@ -1010,6 +1045,12 @@ func TestLoadDefinitionAcceptsJSONYAMLAndTheRequestEnvelope(t *testing.T) {
 const playbookPublishedOnlyRecordJSON = `{"id":"` + playbookPublishedOnlyID + `","account_id":"` + testAccountID + `","name":"Published Only","description":null,"active_version":{"id":"` + playbookVersionID + `","version":2},"version_count":2,"draft":null,"parent_page_id":null,"position":3,"linked_page_ids":[],"disabled_at":null,"archived_at":null,"created_at":"2026-08-01T00:00:00.000000Z","created_by":1}`
 
 const playbookUnpublishedRecordJSON = `{"id":"` + playbookUnpublishedID + `","account_id":"` + testAccountID + `","name":"Not Published Yet","description":null,"active_version":null,"version_count":0,"draft":{"definition":{"format_version":1,"steps":[{"id":"implement","kind":"ai","title":"Implement the issue"}],"triggers":[]},"updated_at":"2026-09-12T00:00:00.000000Z","updated_by":2},"parent_page_id":null,"position":4,"linked_page_ids":[],"disabled_at":null,"archived_at":null,"created_at":"2026-08-01T00:00:00.000000Z","created_by":1}`
+
+const playbookEmptyRecordJSON = `{"id":"` + playbookEmptyID + `","account_id":"` + testAccountID + `","name":"Empty Playbook","description":null,"active_version":null,"version_count":0,"draft":null,"parent_page_id":null,"position":10,"linked_page_ids":[],"disabled_at":null,"archived_at":null,"created_at":"2026-08-01T00:00:00.000000Z","created_by":1}`
+
+const playbookInactiveRecordJSON = `{"id":"` + playbookInactiveID + `","account_id":"` + testAccountID + `","name":"Inactive Playbook","description":null,"active_version":null,"version_count":1,"draft":null,"parent_page_id":null,"position":11,"linked_page_ids":[],"disabled_at":null,"archived_at":null,"created_at":"2026-08-01T00:00:00.000000Z","created_by":1}`
+
+const noVersionsJSON = `{"data":[],"links":{"first":"http://example.test/versions?page=1","last":"http://example.test/versions?page=1","prev":null,"next":null},"meta":{"current_page":1,"last_page":1,"per_page":25,"total":0}}`
 
 const playbookDisabledRecordJSON = `{"id":"` + playbookDisabledID + `","account_id":"` + testAccountID + `","name":"Paused Playbook","description":null,"active_version":{"id":"` + playbookVersionID + `","version":2},"version_count":2,"draft":{"definition":{"format_version":1,"steps":[{"id":"implement","kind":"ai","title":"Implement the issue, revised"}],"triggers":[]},"updated_at":"2026-09-12T00:00:00.000000Z","updated_by":2},"parent_page_id":null,"position":5,"linked_page_ids":[],"disabled_at":"2026-09-01T00:00:00.000000Z","archived_at":null,"created_at":"2026-08-01T00:00:00.000000Z","created_by":1}`
 

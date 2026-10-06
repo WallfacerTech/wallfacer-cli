@@ -96,7 +96,7 @@ wallfacer handbook read "Engineering/Build"   # page as markdown, or a playbook'
 wallfacer handbook resolve <reference>        # a name, path, or URL -> stable ID, type, state
 ```
 
-Output is text by default: a page reads as a markdown file with YAML frontmatter (ID, path, parent, state), lists are one line per entry with the ID the next command takes, and every result ends with a `Next:` block of runnable commands, each labelled with the title of the entry it reads. Pass `-o json` for the structured payload (`data`, `reference`, `follow_up`, `pagination`) when scripting; `-q` implies JSON.
+Output is text by default: a page reads as a markdown file with YAML frontmatter (ID, path, parent, state), lists are one line per entry with the ID the next command takes, and a view of one record ends with a `Next:` block of the commands for that record, each labelled with the title of the entry it reads. Pass `-o json` for the structured payload (`data`, `reference`, `follow_up`, `pagination`) when scripting; `-q` implies JSON.
 
 Two reads are built to round-trip into writes:
 
@@ -149,7 +149,7 @@ wallfacer run "Implement Assigned GitHub Issues" --message "Start with #66" # se
 ```
 
 - **Chat is agent-directed.** A human member, and a disabled or paused agent, are refused by name rather than quietly becoming the identity on the task.
-- **Run uses the version the server has active.** No version is pinned, a draft-only playbook is refused, and `--agent` is the task's identity and default environment rather than an override of the playbook's step actors.
+- **Run uses the version the server has active.** No version is pinned, a playbook with no active version is refused with the command that gets it one, and `--agent` is the task's identity and default environment rather than an override of the playbook's step actors.
 - **Neither falls back to the other.** Chat never sends `pipeline_id`; run never sends `prompt`.
 - **Both return the created task plus `follow_up`** naming the `tasks get`, `sessions list`, and `messages list` commands for what they started, and a `messages create` reply. A run adds `handbook read` for the playbook and `handbook version` for the version it is executing; a chat has neither.
 

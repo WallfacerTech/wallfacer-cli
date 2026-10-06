@@ -876,7 +876,9 @@ func handbookWriteFollowUp(ref *handbookRef) map[string]interface{} {
 		// `revision` command of its own.
 		out["revisions"] = fmt.Sprintf("wallfacer handbook revisions %s", ref.ID)
 	case kindPlaybook:
-		out["versions"] = fmt.Sprintf("wallfacer handbook versions %s", ref.ID)
+		if ref.hasVersions() {
+			out["versions"] = fmt.Sprintf("wallfacer handbook versions %s", ref.ID)
+		}
 	}
 	if ref.ParentPageID != "" {
 		out["parent"] = fmt.Sprintf("wallfacer handbook read %s", ref.ParentPageID)

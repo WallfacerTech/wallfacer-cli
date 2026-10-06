@@ -53,9 +53,11 @@ flight. Linking or unlinking a page is metadata and reaches later runs immediate
 a publish.
 
 Output is text: pages as markdown with YAML frontmatter, playbook definitions as YAML that
-` + "`save-draft`" + ` takes back, lists one entry per line, and a ` + "`Next:`" + ` block of runnable
-commands labelled with the entries they reach. Pass ` + "`-o json`" + ` for the structured payload
-(` + "`data`, `reference`, `follow_up`" + `) when scripting; ` + "`-q`" + ` implies JSON.`),
+` + "`save-draft`" + ` takes back, and lists one entry per line with the ID ` + "`read`" + ` takes.
+A view of one record ends with ` + "`Next:`" + `, the commands for that record, labelled with
+the entries they reach; a command is named only when the record has what it reads. Pass
+` + "`-o json`" + ` for the structured payload (` + "`data`, `reference`, `follow_up`" + `) when
+scripting; ` + "`-q`" + ` implies JSON.`),
 	}
 
 	handbookCmd.AddCommand(
@@ -167,7 +169,7 @@ func handbookReadCommand(accountID string) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "read <reference>",
 		Short: "Read a page's body or a playbook's full active definition",
-		Long:  cli.Markdown("A page prints as a markdown document: YAML frontmatter (ID, path, parent, state), the title, and the body, followed by the commands for its parent, children, and revisions. `--body` prints the body alone, which round-trips through an editor: `read --body > page.md`, edit, `update --body-file page.md`.\n\nA playbook prints its triggers and its active version's steps with each step's settings and instructions. `wallfacer handbook version <playbook>` prints the same definition as editable YAML. An unpublished draft is never substituted for the active definition: the frontmatter says whether one is saved, and `wallfacer handbook draft` prints it.\n\nWith `-o json`, a page is the API record and a playbook carries `active_version` expanded to the full published definition."),
+		Long:  cli.Markdown("A page prints as a markdown document: YAML frontmatter (ID, path, parent, state), the title, and the body, followed by the commands for its parent, children, and revisions. `--body` prints the body alone, which round-trips through an editor: `read --body > page.md`, edit, `update --body-file page.md`. With `--body` the reference resolves as a page, so a name or path a page shares with a playbook reads the page.\n\nA playbook prints its triggers and its active version's steps with each step's settings and instructions. `wallfacer handbook version <playbook>` prints the same definition as editable YAML. An unpublished draft is never substituted for the active definition: the frontmatter says whether one is saved, and `wallfacer handbook draft` prints it.\n\nWith `-o json`, a page is the API record and a playbook carries `active_version` expanded to the full published definition."),
 		Example: `  wallfacer handbook read "Writing Great PRs"
   wallfacer handbook read "R&D/Engineering/Build" --body > build.md
   wallfacer handbook read 019eaa1d-6a8e-72e7-83a3-99b055f6de75 -o json`,
@@ -178,7 +180,7 @@ func handbookReadCommand(accountID string) *cobra.Command {
 				return err
 			}
 			if bodyOnly, _ := cmd.Flags().GetBool("body"); bodyOnly {
-				return runHandbookReadBody(api, args[0])
+				return runHandbookReadBody(api, args[0], kind)
 			}
 			return runHandbookRead(api, args[0], kind)
 		}),
@@ -442,8 +444,8 @@ func runHandbookList(api *handbookAPI, kind string, page, perPage int, includeDe
 		pagination["playbooks"] = paginationOf(resp)
 	}
 
-	listCommand := func(next int) string {
-		cmd := fmt.Sprintf("wallfacer handbook list --page %d", next)
+	listCommand := func(next string) string {
+		cmd := "wallfacer handbook list --page " + next
 		if kind != "" {
 			cmd += " --type " + kind
 		}
@@ -462,11 +464,13 @@ func runHandbookList(api *handbookAPI, kind string, page, perPage int, includeDe
 	return emitHandbookAs(map[string]interface{}{
 		"data":       entries,
 		"pagination": pagination,
+		// next_page carries the same flags as the text view's next-page
+		// command, with the page left for the caller.
 		"follow_up": map[string]interface{}{
 			"read":      "wallfacer handbook read <id>",
-			"next_page": "wallfacer handbook list --page <n>",
+			"next_page": listCommand("<n>"),
 		},
-	}, renderHandbookList(listCommand))
+	}, renderHandbookList(func(next int) string { return listCommand(strconv.Itoa(next)) }))
 }
 
 func runHandbookSearch(api *handbookAPI, query, kind string, limit, maxPages int) error {
@@ -609,14 +613,25 @@ func runHandbookRead(api *handbookAPI, reference, kind string) error {
 
 // runHandbookReadBody prints a page's markdown body and nothing else, in every
 // output format: it is the file an editor opens and `update --body-file`
-// takes back.
-func runHandbookReadBody(api *handbookAPI, reference string) error {
-	ref, err := api.resolveHandbookRef(reference, "")
-	if err != nil {
-		return err
+// takes back. The reference resolves as a page, so a page and a playbook that
+// share a name read the page; kind is the --type the caller passed, and a
+// playbook is refused rather than ignored.
+func runHandbookReadBody(api *handbookAPI, reference, kind string) error {
+	if kind == kindPlaybook {
+		return errors.New("--body reads a page's body and cannot be combined with --type playbook; `wallfacer handbook version <playbook>` prints a playbook's definition as editable YAML")
 	}
-	if ref.Type != kindPage {
-		return errors.Errorf("--body reads a page's body, and %q is a %s; `wallfacer handbook version %s` prints a playbook's definition as editable YAML", reference, ref.Type, ref.ID)
+	ref, err := api.resolveHandbookRef(reference, kindPage)
+	if err != nil {
+		// A reference that names only a playbook is pointed at the
+		// playbook's editable form rather than just refused. An ambiguous
+		// name is reported as it is: it names more than one page.
+		if _, ambiguous := err.(*ambiguousRefError); ambiguous {
+			return err
+		}
+		if playbook, playbookErr := api.resolveHandbookRef(reference, kindPlaybook); playbookErr == nil {
+			return errors.Errorf("--body reads a page's body, and %q is a playbook; `wallfacer handbook version %s` prints a playbook's definition as editable YAML", reference, playbook.ID)
+		}
+		return err
 	}
 	record, err := api.readPage(ref)
 	if err != nil {
@@ -657,7 +672,7 @@ func runHandbookRevisions(api *handbookAPI, reference string, page, perPage int)
 
 	items := responseList(resp)
 	followUp := map[string]interface{}{
-		"next_page": fmt.Sprintf("wallfacer handbook revisions %s --page <n>", ref.ID),
+		"next_page": nextPageCommand(fmt.Sprintf("wallfacer handbook revisions %s", ref.ID), perPage),
 	}
 	// Name the newest revision on this page of results, so the command runs as
 	// printed rather than leaving the caller to paste an id into it.
@@ -710,8 +725,12 @@ func runHandbookVersions(api *handbookAPI, reference string, page, perPage int) 
 
 	items := responseList(resp)
 	followUp := map[string]interface{}{
-		"active":    fmt.Sprintf("wallfacer handbook version %s", ref.ID),
-		"next_page": fmt.Sprintf("wallfacer handbook versions %s --page <n>", ref.ID),
+		"next_page": nextPageCommand(fmt.Sprintf("wallfacer handbook versions %s", ref.ID), perPage),
+	}
+	// With no version argument the command reads the active version, so it is
+	// named only when there is one.
+	if ref.ActiveVersion != nil {
+		followUp["active"] = fmt.Sprintf("wallfacer handbook version %s", ref.ID)
 	}
 	// Same as revisions: name the newest version on this page of results rather
 	// than printing a command with a placeholder still in it.
@@ -781,16 +800,25 @@ func runHandbookDraft(api *handbookAPI, reference string) error {
 		draft = nil
 	}
 
+	// A tree node carries no version count; the record does, and it is what
+	// tells "nothing published" from "published, none active".
+	versionCount, _ := record["version_count"].(float64)
+	followUp := map[string]interface{}{}
+	switch {
+	case ref.ActiveVersion != nil:
+		followUp["active"] = fmt.Sprintf("wallfacer handbook version %s", ref.ID)
+	case versionCount > 0:
+		followUp["versions"] = fmt.Sprintf("wallfacer handbook versions %s", ref.ID)
+	}
+
 	return emitHandbookAs(map[string]interface{}{
 		"data": map[string]interface{}{
 			"present": present,
 			"draft":   draft,
 		},
 		"reference": ref,
-		"follow_up": map[string]interface{}{
-			"active": fmt.Sprintf("wallfacer handbook version %s", ref.ID),
-		},
-	}, renderHandbookDraft(api))
+		"follow_up": followUp,
+	}, renderHandbookDraft(api, int(versionCount)))
 }
 
 // expandActiveVersion replaces the pipeline record's summary of its active
@@ -819,6 +847,17 @@ func expandActiveVersion(api *handbookAPI, record map[string]interface{}, pipeli
 	}
 	record["active_version"] = full
 	return nil
+}
+
+// nextPageCommand is the command for the following page of a listing, with
+// `<n>` left for the renderer to fill. A page size the caller chose is carried
+// over, since the next page under a different size skips or repeats records.
+func nextPageCommand(base string, perPage int) string {
+	cmd := base + " --page <n>"
+	if perPage > 0 {
+		cmd += fmt.Sprintf(" --per-page %d", perPage)
+	}
+	return cmd
 }
 
 // firstRevisionID takes the id of the newest revision in a revisions listing,
@@ -875,15 +914,19 @@ func (a *handbookAPI) followUp(ref *handbookRef) map[string]interface{} {
 
 	switch ref.Type {
 	case kindPage:
-		// This result names one record, so every entry here runs as printed.
 		// No revision id is in hand, which is why the entry is `revisions`:
 		// that listing is what names a concrete `revision` command.
 		out["revisions"] = fmt.Sprintf("wallfacer handbook revisions %s", ref.ID)
 	case kindPlaybook:
-		out["versions"] = fmt.Sprintf("wallfacer handbook versions %s", ref.ID)
-		// With no version argument the command reads the active version, which
-		// is the one entry here that runs as printed; `versions` names the rest.
-		out["version"] = fmt.Sprintf("wallfacer handbook version %s", ref.ID)
+		// Each command is named only when the playbook has what it reads: with
+		// no version argument `version` reads the active version, and an
+		// unpublished playbook has none.
+		if ref.hasVersions() {
+			out["versions"] = fmt.Sprintf("wallfacer handbook versions %s", ref.ID)
+		}
+		if ref.ActiveVersion != nil {
+			out["version"] = fmt.Sprintf("wallfacer handbook version %s", ref.ID)
+		}
 		if ref.HasDraft != nil && *ref.HasDraft {
 			out["draft"] = fmt.Sprintf("wallfacer handbook draft %s", ref.ID)
 		}

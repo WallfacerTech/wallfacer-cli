@@ -478,14 +478,25 @@ func runPlaybookCreate(api *handbookAPI, name, description, parent string, linke
 		data["draft"] = map[string]interface{}{"present": true, "definition": definition}
 	}
 
+	followUp := map[string]interface{}{
+		"read": fmt.Sprintf("wallfacer handbook read %s", ref.ID),
+	}
+	if ref.hasVersions() {
+		followUp["versions"] = fmt.Sprintf("wallfacer handbook versions %s", ref.ID)
+	}
+	// A draft saved here is the next thing to read and publish; saving
+	// another would overwrite it.
+	if alsoDraft {
+		followUp["draft"] = fmt.Sprintf("wallfacer handbook draft %s", ref.ID)
+		followUp["publish"] = fmt.Sprintf("wallfacer handbook publish %s", ref.ID)
+	} else {
+		followUp["save_draft"] = fmt.Sprintf("wallfacer handbook save-draft %s --definition-file <file>", ref.ID)
+	}
+
 	return emitHandbookAs(map[string]interface{}{
 		"data":      data,
 		"reference": ref,
-		"follow_up": map[string]interface{}{
-			"read":       fmt.Sprintf("wallfacer handbook read %s", ref.ID),
-			"versions":   fmt.Sprintf("wallfacer handbook versions %s", ref.ID),
-			"save_draft": fmt.Sprintf("wallfacer handbook save-draft %s", ref.ID),
-		},
+		"follow_up": followUp,
 	}, renderHandbookWrite(api, "Created"))
 }
 
@@ -658,17 +669,22 @@ func runPlaybookDiscardDraft(api *handbookAPI, reference string) error {
 		return err
 	}
 
+	after := refFromPipelineRecord(record, api.accountID, ref.ResolvedFrom)
+	followUp := map[string]interface{}{
+		"read": fmt.Sprintf("wallfacer handbook read %s", ref.ID),
+	}
+	if after.ActiveVersion != nil {
+		followUp["version"] = fmt.Sprintf("wallfacer handbook version %s", ref.ID)
+	}
+
 	return emitHandbookAs(map[string]interface{}{
 		"data": map[string]interface{}{
 			"discarded":      true,
 			"draft":          map[string]interface{}{"present": record["draft"] != nil},
 			"active_version": record["active_version"],
 		},
-		"reference": refFromPipelineRecord(record, api.accountID, ref.ResolvedFrom),
-		"follow_up": map[string]interface{}{
-			"read":    fmt.Sprintf("wallfacer handbook read %s", ref.ID),
-			"version": fmt.Sprintf("wallfacer handbook version %s", ref.ID),
-		},
+		"reference": after,
+		"follow_up": followUp,
 	}, renderHandbookWrite(api, "Discarded the draft of"))
 }
 

@@ -168,7 +168,7 @@ func TestReadBodyPrintsOnlyTheBody(t *testing.T) {
 		var buf bytes.Buffer
 		previous := cli.Stdout
 		cli.Stdout = &buf
-		err := runHandbookReadBody(fixture.api(), pageBuildID)
+		err := runHandbookReadBody(fixture.api(), pageBuildID, "")
 		cli.Stdout = previous
 		viper.Set("output-format", "")
 		if err != nil {
@@ -179,8 +179,24 @@ func TestReadBodyPrintsOnlyTheBody(t *testing.T) {
 		}
 	}
 
-	if err := runHandbookReadBody(fixture.api(), playbookBuildID); err == nil || !strings.Contains(err.Error(), "handbook version") {
+	if err := runHandbookReadBody(fixture.api(), playbookBuildID, ""); err == nil || !strings.Contains(err.Error(), "handbook version") {
 		t.Errorf("--body on a playbook should point at handbook version, got %v", err)
+	}
+}
+
+// "Build" names both a page and a playbook. --body reads a page, so the name
+// resolves to the page instead of reporting the ambiguity.
+func TestReadBodyResolvesAsAPage(t *testing.T) {
+	fixture := newHandbookFixture(t)
+
+	out := captureText(t, func() error { return runHandbookReadBody(fixture.api(), "Build", "") })
+	if want := "How a change reaches the product: issue, pull request, review, merge.\n"; out != want {
+		t.Errorf("read Build --body printed %q, want the page body %q", out, want)
+	}
+
+	err := runHandbookReadBody(fixture.api(), "Build", kindPlaybook)
+	if err == nil || !strings.Contains(err.Error(), "--type playbook") {
+		t.Errorf("--body --type playbook should be refused, got %v", err)
 	}
 }
 
@@ -378,15 +394,197 @@ func TestPlaybookReadOffersRunOnlyWhenRunnable(t *testing.T) {
 	if strings.Contains(archived, "wallfacer run ") {
 		t.Errorf("an archived playbook was offered a run:\n%s", archived)
 	}
+}
 
-	var unpublished textOut
-	renderHandbookRead(&handbookAPI{})(&unpublished, map[string]interface{}{
-		"reference": map[string]interface{}{"type": kindPlaybook, "id": playbookBuildID, "title": "Build", "state": "active"},
-		"data":      map[string]interface{}{"name": "Build", "draft": map[string]interface{}{"present": true}},
+// An unpublished playbook has no active version to read and, without a draft,
+// nothing to publish. Every result about one is built through the real
+// commands, follow_up included, and none of them prints a command that fails.
+func TestUnpublishedPlaybookOffersNoCommandThatFails(t *testing.T) {
+	fixture := newAuthoringFixture(t)
+	api := func() *handbookAPI { return fixture.api() }
+	// These IDs are outside the tree, so they are read as playbooks: an
+	// untyped ID would also be looked up among deleted pages, which this
+	// fixture does not paginate.
+
+	refusesActive := func(t *testing.T, what, out, id string) {
+		t.Helper()
+		for _, bad := range []string{
+			"wallfacer handbook version " + id + "\n",
+			"wallfacer handbook version " + id + " ",
+			"wallfacer run " + id,
+		} {
+			if strings.Contains(out, bad) {
+				t.Errorf("%s offered %q for a playbook with nothing published:\n%s", what, strings.TrimSpace(bad), out)
+			}
+		}
+	}
+
+	t.Run("with a draft", func(t *testing.T) {
+		id := playbookUnpublishedID
+
+		read := captureText(t, func() error { return runHandbookRead(api(), id, kindPlaybook) })
+		refusesActive(t, "read", read, id)
+		assertContains(t, read,
+			"Nothing published yet, so nothing starts this playbook",
+			"wallfacer handbook draft "+id,
+			"wallfacer handbook publish "+id,
+		)
+		if strings.Contains(read, "save-draft") {
+			t.Errorf("a playbook with a saved draft was told to save one:\n%s", read)
+		}
+
+		draft := captureText(t, func() error { return runHandbookDraft(api(), id) })
+		refusesActive(t, "draft", draft, id)
+		assertContains(t, draft, "Nothing is published yet.", "wallfacer handbook publish "+id)
+		if strings.Contains(draft, "diff-draft") {
+			t.Errorf("draft offered a comparison with an active version that does not exist:\n%s", draft)
+		}
+
+		versions := captureText(t, func() error { return runHandbookVersions(api(), id, 0, 0) })
+		refusesActive(t, "versions", versions, id)
+
+		discard := capture(t, func() error { return runPlaybookDiscardDraft(api(), id) })
+		if _, ok := discard["follow_up"].(map[string]interface{})["version"]; ok {
+			t.Errorf("discard-draft offered the active version of an unpublished playbook: %v", discard["follow_up"])
+		}
+
+		followUp := capture(t, func() error { return runHandbookRead(api(), id, kindPlaybook) })["follow_up"].(map[string]interface{})
+		for _, key := range []string{"version", "versions"} {
+			if _, ok := followUp[key]; ok {
+				t.Errorf("-o json follow_up names %q for an unpublished playbook: %v", key, followUp)
+			}
+		}
+		if followUp["draft"] != "wallfacer handbook draft "+id {
+			t.Errorf("-o json follow_up should name the saved draft, got %v", followUp)
+		}
 	})
-	assertContains(t, unpublished.String(), "Nothing published yet", "wallfacer handbook publish "+playbookBuildID)
-	if strings.Contains(unpublished.String(), "wallfacer run ") {
-		t.Errorf("an unpublished playbook was offered a run:\n%s", unpublished.String())
+
+	t.Run("without a draft", func(t *testing.T) {
+		id := playbookEmptyID
+
+		read := captureText(t, func() error { return runHandbookRead(api(), id, kindPlaybook) })
+		refusesActive(t, "read", read, id)
+		assertContains(t, read, "Nothing published and no draft saved; save one with `wallfacer handbook save-draft "+id+" --definition-file <file>`.")
+		for _, bad := range []string{"wallfacer handbook publish", "wallfacer handbook draft ", "wallfacer handbook versions", "Next:"} {
+			if strings.Contains(read, bad) {
+				t.Errorf("read of an empty playbook printed %q:\n%s", bad, read)
+			}
+		}
+
+		resolved := capture(t, func() error { return runHandbookResolve(api(), id, kindPlaybook) })
+		if followUp := resolved["follow_up"].(map[string]interface{}); len(followUp) != 1 || followUp["read"] == nil {
+			t.Errorf("resolve of an empty playbook should name only the read, got %v", followUp)
+		}
+
+		draft := captureText(t, func() error { return runHandbookDraft(api(), id) })
+		refusesActive(t, "draft", draft, id)
+		assertContains(t, draft, "nothing published and no draft saved", "save-draft "+id+" --definition-file <file>")
+
+		versions := capture(t, func() error { return runHandbookVersions(api(), id, 0, 0) })
+		if _, ok := versions["follow_up"].(map[string]interface{})["active"]; ok {
+			t.Errorf("versions offered the active version of an unpublished playbook: %v", versions["follow_up"])
+		}
+	})
+}
+
+// A version published with --activate=false leaves a playbook with versions and
+// none active. It is not "nothing published", and with no draft there is
+// nothing to publish as is.
+func TestPlaybookWithVersionsButNoneActive(t *testing.T) {
+	fixture := newAuthoringFixture(t)
+	id := playbookInactiveID
+
+	read := captureText(t, func() error { return runHandbookRead(fixture.api(), id, kindPlaybook) })
+	assertContains(t, read,
+		"No version is active, so nothing starts this playbook",
+		"active_version: none active (1 published)\n",
+		"None active; 1 version published. Publishing one again makes it active.",
+		"wallfacer handbook versions "+id,
+	)
+	for _, bad := range []string{"Nothing published", "none published", "no draft saved", "wallfacer run ", "wallfacer handbook draft "} {
+		if strings.Contains(read, bad) {
+			t.Errorf("read of a playbook with an inactive version printed %q:\n%s", bad, read)
+		}
+	}
+
+	draft := captureText(t, func() error { return runHandbookDraft(fixture.api(), id) })
+	assertContains(t, draft,
+		"No version is active (1 version published).",
+		"wallfacer handbook version "+id+" <n> > draft.yaml",
+		"#   versions  wallfacer handbook versions "+id,
+	)
+	if strings.Contains(draft, "Nothing is published") || strings.Contains(draft, "nothing published") {
+		t.Errorf("draft of a playbook with an inactive version said nothing is published:\n%s", draft)
+	}
+}
+
+// Playbooks resolved by name come from the tree, whose nodes carry
+// active_version and has_draft but no version count; the gating still holds.
+func TestUnpublishedPlaybookResolvedThroughTheTree(t *testing.T) {
+	fixture := newAuthoringFixture(t)
+	fixture.tree = `{"data":{"tree":[
+  {"type":"playbook","id":"` + playbookEmptyID + `","title":"Empty Playbook","description":null,"position":0,"disabled_at":null,"has_draft":false,"active_version":null,"task_count":0}
+]}}`
+
+	resolved := capture(t, func() error { return runHandbookResolve(fixture.api(), "Empty Playbook", "") })
+	if followUp := resolved["follow_up"].(map[string]interface{}); len(followUp) != 1 || followUp["read"] == nil {
+		t.Errorf("resolve through the tree should name only the read, got %v", followUp)
+	}
+
+	versions := capture(t, func() error { return runHandbookVersions(fixture.api(), "Empty Playbook", 0, 0) })
+	if _, ok := versions["follow_up"].(map[string]interface{})["active"]; ok {
+		t.Errorf("versions through the tree offered an active version: %v", versions["follow_up"])
+	}
+
+	draft := captureText(t, func() error { return runHandbookDraft(fixture.api(), "Empty Playbook") })
+	assertContains(t, draft, "nothing published and no draft saved")
+	if strings.Contains(draft, "wallfacer handbook version ") {
+		t.Errorf("draft through the tree offered an active version:\n%s", draft)
+	}
+}
+
+// --body resolves as a page, but a name that matches two pages is still
+// ambiguous: it must not be reported as the playbook that shares the name.
+func TestReadBodyReportsAnAmbiguousPageName(t *testing.T) {
+	fixture := newAuthoringFixture(t)
+	fixture.tree = `{"data":{"tree":[
+  {"type":"page","id":"` + pageEngineeringID + `","title":"Dup","description":null,"position":0,"has_body":true,"children":[]},
+  {"type":"page","id":"` + pageProductID + `","title":"Dup","description":null,"position":1,"has_body":true,"children":[]},
+  {"type":"playbook","id":"` + playbookBuildID + `","title":"Dup","description":null,"position":2,"disabled_at":null,"has_draft":false,"active_version":null,"task_count":0}
+]}}`
+
+	err := runHandbookReadBody(fixture.api(), "Dup", "")
+	if _, ok := err.(*ambiguousRefError); !ok {
+		t.Errorf("read Dup --body should report the two pages, got %T: %v", err, err)
+	}
+}
+
+func TestListNextPageKeepsFlags(t *testing.T) {
+	fixture := newHandbookFixture(t)
+
+	output := capture(t, func() error { return runHandbookList(fixture.api(), kindPage, 0, 2, true, false) })
+	want := "wallfacer handbook list --page <n> --type page --per-page 2 --include-deleted"
+	if got := output["follow_up"].(map[string]interface{})["next_page"]; got != want {
+		t.Errorf("list next_page = %v, want %q", got, want)
+	}
+}
+
+// A caller's page size carries into the next-page command; the next page at
+// the default size would skip or repeat records.
+func TestNextPageKeepsPerPage(t *testing.T) {
+	fixture := newHandbookFixture(t)
+
+	versions := captureText(t, func() error { return runHandbookVersions(fixture.api(), playbookBuildID, 0, 1) })
+	assertContains(t, versions, "wallfacer handbook versions "+playbookBuildID+" --page 2 --per-page 1")
+
+	revisions := capture(t, func() error { return runHandbookRevisions(fixture.api(), pageBuildID, 0, 10) })
+	if got, want := revisions["follow_up"].(map[string]interface{})["next_page"], "wallfacer handbook revisions "+pageBuildID+" --page <n> --per-page 10"; got != want {
+		t.Errorf("revisions next_page = %v, want %q", got, want)
+	}
+
+	unsized := capture(t, func() error { return runHandbookRevisions(fixture.api(), pageBuildID, 0, 0) })
+	if got := unsized["follow_up"].(map[string]interface{})["next_page"]; strings.Contains(got.(string), "--per-page") {
+		t.Errorf("an unsized listing added --per-page: %v", got)
 	}
 }
 

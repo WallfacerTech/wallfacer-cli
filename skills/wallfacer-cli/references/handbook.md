@@ -174,20 +174,20 @@ A task pins the playbook version that was active when it was created and keeps r
 
 Every command prints text by default and the structured payload with `-o json` (or `-o yaml`, or any `-q` query):
 
-- **Pages** (`read`, `revision`) print as a markdown file: YAML frontmatter with the ID, path, parent, and state, then `# Title` and the body. `read --body` prints the body alone, in any format, for `update --body-file`.
+- **Pages** (`read`, `revision`) print as a markdown file: YAML frontmatter with the ID, path, parent, and state, then `# Title` and the body. `read --body` prints the body alone, in any format, for `update --body-file`; its reference resolves as a page, so a name a page shares with a playbook reads the page.
 - **Playbooks** (`read`) print the frontmatter, the description, the triggers (marked as switched off when the playbook is disabled, or a note when nothing starts it on its own), and each step of the active version with its settings and instructions.
 - **Definitions** (`version`, `draft`) print as a YAML document with the version's details as `#` comments, so the output saves to a file, edits, and goes straight back through `save-draft --definition-file`.
 - **Diffs** (`diff`, `diff-draft`) print a unified diff of the two definitions as YAML.
 - **Lists** (`tree`, `list`, `search`, `revisions`, `versions`) print one entry per line with the ID the next command takes, and say where pagination stands with a concrete next-page command. Search ranks title matches, then description, then body, and shows the text around a body match.
-- **Writes** print one summary: what changed, where the entry is now, the server's notes about what the change means, and the reads that show it.
+- **Writes** print one summary: what changed, where the entry is now, and the server's notes about what the change means, followed by the commands for the record it touched when there are any.
 
-Every text result ends with `Next:`, the `follow_up` commands with each command labelled by the title of the entry it reads.
+A view of one record (a read, a resolve, a version, a draft, a `revisions` or `versions` listing, a write) ends with `Next:` when there is a command for that record, listing the `follow_up` commands each labelled by the title of the entry it reads. `tree`, `list` and `search` end with a one-line hint instead, since the ID on each line is what the next command takes.
 
 ## Following a result
 
-Every command returns a `follow_up` object naming the next command (the `Next:` block in text output). When the result names one record — a read, a resolve, a write, a `revisions` or `versions` listing — each entry names the exact command for a reference in it: the parent page, each child, each linked page of a playbook, its versions, its draft, a page's revisions. Those run as printed, with no placeholder left to fill in: that is why a read names `revisions` rather than a `revision` command it holds no id for, and why the `revisions` listing names a concrete `revision` command and `versions` a concrete `version` one.
+Every command returns a `follow_up` object naming the next command (the `Next:` block in a record's text view). When the result names one record — a read, a resolve, a write, a `revisions` or `versions` listing — each entry names the exact command for a reference in it: the parent page, each child, each linked page of a playbook, its versions, its draft, a page's revisions. The ids are filled in: that is why a read names `revisions` rather than a `revision` command it holds no id for, and why the `revisions` listing names a concrete `revision` command and `versions` a concrete `version` one. A command is named only when the record has what it reads: a playbook with no active version names no `version`, one with nothing published names no `versions`, and one without a saved draft names no `draft` or `publish`.
 
-`tree`, `list` and `search` name many records at once, so their entries carry a `<id>`, `<query>` or `<n>` placeholder you fill from the record you picked rather than an id the command is holding. `next_page` is a placeholder for the same reason: which page to ask for is the caller's choice. One result plus `--help` is enough to reach everything else. A write returns the updated resource plus the reads that show what it did, including the revisions command for the page it touched.
+`tree`, `list` and `search` name many records at once, so their entries carry a `<id>`, `<query>` or `<n>` placeholder you fill from the record you picked rather than an id the command is holding. `next_page` keeps a `<n>` placeholder for the same reason: which page to ask for is the caller's choice. It carries the flags you passed (`--per-page`, and for `list` also `--type` and the include flags), and the text view fills in the following page number. One result plus `--help` is enough to reach everything else. A write returns the updated resource plus the reads that show what it did, including the revisions command for the page it touched.
 
 `--query` projection and `-o yaml` work as they do everywhere else, and a query always produces structured output:
 

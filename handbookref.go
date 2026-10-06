@@ -288,6 +288,13 @@ type handbookRef struct {
 	versionHint string
 }
 
+// hasVersions reports whether a playbook has anything published, active or
+// not. A version published with --activate=false counts, which is why the
+// version count is consulted as well as the active version.
+func (r *handbookRef) hasVersions() bool {
+	return r.ActiveVersion != nil || (r.VersionCount != nil && *r.VersionCount > 0)
+}
+
 // handbookIndex is the handbook tree flattened into one lookup table. The tree
 // holds active entries only, which is exactly the set names and paths resolve
 // against.

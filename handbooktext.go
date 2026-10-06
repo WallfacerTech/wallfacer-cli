@@ -16,9 +16,9 @@ import (
 // Text views of the handbook commands. Each renderer reads the same payload
 // -o json prints. Pages come out as markdown files with YAML frontmatter;
 // playbook definitions come out as YAML that saves straight back into a draft;
-// lists come out one entry per line with the ID the next command takes. Every
-// view ends with the commands that follow from it, each labelled with the
-// entry it reaches.
+// lists come out one entry per line with the ID the next command takes. A view
+// of one record ends with a Next: block of the commands for that record, each
+// labelled with the entry it reaches.
 
 // annotator labels a follow-up command with the title of the entry it reads,
 // so a list of child commands says which child is which. The entry the result
@@ -142,9 +142,11 @@ func renderHandbookTree(under string) textRenderer {
 		t.gap()
 		if len(nodes) == 0 {
 			t.line("(nothing filed here)")
+			return
 		}
 		writeTreeNodes(t, nodes, 0)
-		t.next(p["follow_up"], nil)
+		t.gap()
+		t.line("Read one: wallfacer handbook read <id>")
 	}
 }
 
@@ -230,8 +232,10 @@ func renderHandbookList(listCommand func(page int) string) textRenderer {
 				t.line("More: %s", listCommand(nextPage))
 			}
 		}
-		t.gap()
-		t.line("Read one: wallfacer handbook read <id|path>   Whole tree: wallfacer handbook tree")
+		if len(entries) > 0 {
+			t.gap()
+			t.line("Read one: wallfacer handbook read <id>")
+		}
 	}
 }
 
@@ -289,7 +293,7 @@ func renderHandbookSearch(maxPages int) textRenderer {
 		if incomplete {
 			stopped()
 		}
-		t.line("Read one: wallfacer handbook read <id|path>   Browse instead: wallfacer handbook tree")
+		t.line("Read one: wallfacer handbook read <id>")
 	}
 }
 
@@ -416,15 +420,21 @@ func renderPlaybookRead(api *handbookAPI, t *textOut, p map[string]interface{}) 
 	definition := asMap(active["definition"])
 	draft := asMap(record["draft"])
 
+	hasDraft, _ := draft["present"].(bool)
+	// Versions can exist with none active: one published with --activate=false.
+	versionCount := atoi(scalar(record["version_count"]))
+
 	activeField := "none published yet"
 	if version := scalar(active["version"]); version != "" {
 		activeField = "v" + version
 		if count := scalar(record["version_count"]); count != "" {
 			activeField += " of " + count
 		}
+	} else if versionCount > 0 {
+		activeField = fmt.Sprintf("none active (%d published)", versionCount)
 	}
 	draftField := "none"
-	if present, _ := draft["present"].(bool); present {
+	if hasDraft {
 		draftField = "saved " + stamp(draft["updated_at"])
 	}
 
@@ -456,8 +466,10 @@ func renderPlaybookRead(api *handbookAPI, t *textOut, p map[string]interface{}) 
 	case archived:
 		t.line("Archived: nothing starts this playbook and it cannot be run. `wallfacer handbook restore-playbook %s` brings it back, disabled.", id)
 		t.gap()
+	case active == nil && versionCount > 0:
+		t.line("No version is active, so nothing starts this playbook and it cannot be run.")
 	case active == nil:
-		t.line("Nothing published yet, so nothing starts this playbook and it cannot be run. Publish a saved draft with `wallfacer handbook publish %s`.", id)
+		t.line("Nothing published yet, so nothing starts this playbook and it cannot be run.")
 	case len(triggers) == 0:
 		t.line("None. This playbook starts only by hand: `wallfacer run %s`.", id)
 	case disabled:
@@ -470,11 +482,24 @@ func renderPlaybookRead(api *handbookAPI, t *textOut, p map[string]interface{}) 
 
 	steps := asList(definition["steps"])
 	t.gap()
-	if active == nil {
+	switch {
+	case active == nil && versionCount > 0:
 		t.line("## Steps")
 		t.gap()
-		t.line("No published version. A saved draft, if any, reads with `wallfacer handbook draft %s`.", id)
-	} else {
+		if hasDraft {
+			t.line("None active; %s published, and a draft is saved.", plural(versionCount, "version", "versions"))
+		} else {
+			t.line("None active; %s published. Publishing one again makes it active.", plural(versionCount, "version", "versions"))
+		}
+	case active == nil && hasDraft:
+		t.line("## Steps")
+		t.gap()
+		t.line("None published yet; a draft is saved.")
+	case active == nil:
+		t.line("## Steps")
+		t.gap()
+		t.line("Nothing published and no draft saved; save one with `wallfacer handbook save-draft %s --definition-file <file>`.", id)
+	default:
 		t.line("## Steps (v%s)", scalar(active["version"]))
 	}
 	for i, item := range steps {
@@ -488,19 +513,24 @@ func renderPlaybookRead(api *handbookAPI, t *textOut, p map[string]interface{}) 
 		}
 	}
 
-	t.gap()
-	t.line("---")
-	if active != nil {
-		t.line("Full definition as editable YAML: wallfacer handbook version %s", id)
-	}
-	followUp := withoutKeys(p["follow_up"], "read")
+	// The editable-YAML line is the `version` command, labelled with what it
+	// prints.
+	followUp := withoutKeys(p["follow_up"], "read", "version")
 	switch {
 	case runnable:
 		followUp["run"] = fmt.Sprintf("wallfacer run %s", id)
 	case archived:
 		followUp["restore"] = fmt.Sprintf("wallfacer handbook restore-playbook %s", id)
-	default:
+	case hasDraft:
 		followUp["publish"] = fmt.Sprintf("wallfacer handbook publish %s", id)
+	}
+	if active == nil && len(nextLines(followUp, nil)) == 0 {
+		return
+	}
+	t.gap()
+	t.line("---")
+	if active != nil {
+		t.line("Full definition as editable YAML: wallfacer handbook version %s", id)
 	}
 	t.next(followUp, api.annotator(id))
 }
@@ -671,7 +701,13 @@ func renderHandbookVersions(api *handbookAPI) textRenderer {
 			t.text(line)
 		}
 		writePageOf(t, asMap(p["pagination"]), "versions")
-		t.next(dropSpentNextPage(p["follow_up"], asMap(p["pagination"])), api.annotator(scalar(ref["id"])))
+		followUp := dropSpentNextPage(p["follow_up"], asMap(p["pagination"]))
+		// When the newest version listed is the active one, `version` already
+		// reads it.
+		if activeVersion != "" && followUp["version"] == fmt.Sprintf("wallfacer handbook version %s %s", scalar(ref["id"]), activeVersion) {
+			delete(followUp, "active")
+		}
+		t.next(followUp, api.annotator(scalar(ref["id"])))
 	}
 }
 
@@ -708,23 +744,41 @@ func renderHandbookVersion(api *handbookAPI) textRenderer {
 	}
 }
 
-func renderHandbookDraft(api *handbookAPI) textRenderer {
+// renderHandbookDraft takes the playbook's version count from the command,
+// since the reference may come from a tree node, which carries none.
+func renderHandbookDraft(api *handbookAPI, versionCount int) textRenderer {
 	return func(t *textOut, p map[string]interface{}) {
 		ref := asMap(p["reference"])
 		data := asMap(p["data"])
 		id := scalar(ref["id"])
 		activeVersion := scalar(asMap(ref["active_version"])["version"])
 		running := "Nothing is published yet."
-		if activeVersion != "" {
+		switch {
+		case activeVersion != "":
 			running = fmt.Sprintf("Tasks still run the active version, v%s.", activeVersion)
+		case versionCount > 0:
+			running = fmt.Sprintf("No version is active (%s published).", plural(versionCount, "version", "versions"))
 		}
 
 		if present, _ := data["present"].(bool); !present {
-			t.comments(
-				fmt.Sprintf("Playbook %q (%s) has no saved draft. %s", scalar(ref["title"]), id, running),
-				fmt.Sprintf("Start one from the active definition: wallfacer handbook version %s > draft.yaml", id),
-			)
-			writeNextAsComments(t, p["follow_up"], api.annotator(id))
+			switch {
+			case activeVersion != "":
+				t.comments(
+					fmt.Sprintf("Playbook %q (%s) has no saved draft. %s", scalar(ref["title"]), id, running),
+					fmt.Sprintf("Start one from the active definition: wallfacer handbook version %s > draft.yaml", id),
+				)
+			case versionCount > 0:
+				t.comments(
+					fmt.Sprintf("Playbook %q (%s) has no saved draft. %s", scalar(ref["title"]), id, running),
+					fmt.Sprintf("Start one from a published version: wallfacer handbook version %s <n> > draft.yaml", id),
+				)
+				writeNextAsComments(t, p["follow_up"], api.annotator(id))
+			default:
+				t.comments(
+					fmt.Sprintf("Playbook %q (%s): nothing published and no draft saved.", scalar(ref["title"]), id),
+					fmt.Sprintf("Save one with: wallfacer handbook save-draft %s --definition-file <file>", id),
+				)
+			}
 			return
 		}
 
@@ -734,9 +788,15 @@ func renderHandbookDraft(api *handbookAPI) textRenderer {
 			fmt.Sprintf("Saved %s by user %s. %s", stamp(draft["updated_at"]), scalar(draft["updated_by"]), running),
 			"Drafts are not validated until they are published.",
 			"",
-			fmt.Sprintf("Compare with the active version: wallfacer handbook diff-draft %s", id),
-			fmt.Sprintf("Publish:                         wallfacer handbook publish %s", id),
 		)
+		if activeVersion != "" {
+			t.comments(
+				fmt.Sprintf("Compare with the active version: wallfacer handbook diff-draft %s", id),
+				fmt.Sprintf("Publish:                         wallfacer handbook publish %s", id),
+			)
+		} else {
+			t.comments(fmt.Sprintf("Publish: wallfacer handbook publish %s", id))
+		}
 		t.gap()
 		t.block(definitionYAML(draft["definition"]))
 		writeNextAsComments(t, p["follow_up"], api.annotator(id))
@@ -935,7 +995,8 @@ func renderHandbookWrite(api *handbookAPI, verb string) textRenderer {
 				t.line("%s", note)
 			}
 		}
-		t.next(p["follow_up"], api.annotator(scalar(ref["id"])))
+		// `tree` is the whole handbook, not something this write reaches.
+		t.next(withoutKeys(p["follow_up"], "tree"), api.annotator(scalar(ref["id"])))
 	}
 }
 
@@ -994,7 +1055,6 @@ func renderHandbookReorder(parentLabel string) textRenderer {
 			t.gap()
 			t.line("%s", note)
 		}
-		t.next(p["follow_up"], nil)
 	}
 }
 
