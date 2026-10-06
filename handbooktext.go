@@ -791,6 +791,7 @@ func renderHandbookDraft(api *handbookAPI, versionCount int) textRenderer {
 					fmt.Sprintf("Playbook %q (%s) has no saved draft. %s", scalar(ref["title"]), id, running),
 					fmt.Sprintf("Start one from the active definition: wallfacer handbook version %s > draft.yaml", id),
 				)
+				writeNextAsComments(t, p["follow_up"], api.annotator(id))
 			case versionCount > 0:
 				t.comments(
 					fmt.Sprintf("Playbook %q (%s) has no saved draft. %s", scalar(ref["title"]), id, running),

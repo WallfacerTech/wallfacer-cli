@@ -339,6 +339,19 @@ func TestDraftTextIsTheDraftDefinition(t *testing.T) {
 	)
 }
 
+// With an active version and no draft, the draft view still ends with the
+// follow-up the JSON carries, written as YAML comments.
+func TestDraftTextWithNoDraftEndsWithItsFollowUp(t *testing.T) {
+	fixture := newAuthoringFixture(t)
+
+	out := captureText(t, func() error { return runHandbookDraft(fixture.api(), playbookPublishedOnlyID) })
+	assertContains(t, out,
+		"has no saved draft. Tasks still run the active version, v2.",
+		"# Next:",
+		"wallfacer handbook version "+playbookPublishedOnlyID+"\n",
+	)
+}
+
 func TestWriteTextSummarizesTheResult(t *testing.T) {
 	fixture := newHandbookFixture(t)
 
