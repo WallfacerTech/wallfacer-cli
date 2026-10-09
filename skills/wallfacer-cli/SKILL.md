@@ -190,9 +190,10 @@ Use `--output-format` or `-o` (not `--output`). Values are `text`, `json`, and `
 wallfacer handbook read "Engineering/Build"            # text (the handbook default)
 wallfacer handbook read "Engineering/Build" -o json    # the structured payload
 wallfacer environments get <environment-id>            # JSON (API commands only print JSON or YAML)
+wallfacer messages list <task-id> <session-id> -o text # a session as a conversation
 ```
 
-`handbook` commands default to text; API commands default to JSON. `--query` always produces structured output, so `-q 'data.id' --raw` works the same on every command.
+`handbook` commands default to text; API commands default to JSON. `messages list` and `messages get` are the API commands with a text view, printed only when `-o text` asks for it; every other API command refuses `-o text` with an error rather than printing JSON. `--query` always produces structured output, so `-q 'data.id' --raw` works the same on every command.
 
 ## Destructive ops
 

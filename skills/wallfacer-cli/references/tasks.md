@@ -52,6 +52,20 @@ Message list is cursor-paginated (`--per-page`, max 100). Returns all transcript
 
 `messages get` is never trimmed, whatever `--view` says. Fetch the one message by id to get an elided block back.
 
+### Reading a session as text
+
+```bash
+wallfacer messages list <task-id> <session-id> -o text --per-page 100
+wallfacer messages list <task-id> <session-id> -o text --tools --markers
+wallfacer messages get <task-id> <session-id> <message-id> -o text
+```
+
+`-o text` prints the page as a conversation: each person's and agent's turns in the order the API returns them, under a `### <name> · <role> · <time> · #<message-id>` header. A user turn also names its channel (`slack`, `app`, ...). The name comes from the row's `actor`, and rows the platform wrote are attributed to `Platform`.
+
+Tool calls and results, and marker rows (`system`, `result`, `ai-title`, `session.complete`, ...), are left out unless `--tools` or `--markers` is passed. A `Not shown:` line counts what was left out. Thinking blocks are never shown: a page counts a turn that holds only thinking, and `messages get` prints its header with a placeholder. The text view fetches `view=trimmed` unless `--view` is given, so an oversize tool input or result prints as `[elided: N bytes; ...]`; `messages get <message-id> -o text` prints it whole. When there is another page, `Next:` gives the full command for it, cursor included.
+
+`--tools` and `--markers` only shape the text view, and are refused without `-o text`. JSON stays the default, so scripts that parse `messages list` are unaffected.
+
 ## Attachments
 
 Attachments are MCP-aligned resources attached to tasks. GitHub issue/PR URIs are resolved automatically.

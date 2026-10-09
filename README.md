@@ -66,6 +66,10 @@ wallfacer up <environment-id>
 # List a session's messages, eliding image data and large tool blobs
 wallfacer messages list <task-id> <session-id> --view trimmed
 
+# Read a session as a conversation: who said what, in order
+wallfacer messages list <task-id> <session-id> -o text --per-page 100
+wallfacer messages list <task-id> <session-id> -o text --tools --markers
+
 # Browse the handbook: pages and playbooks in one surface
 wallfacer handbook tree
 wallfacer handbook search "pull request"
