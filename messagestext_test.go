@@ -203,7 +203,7 @@ How do you read past sessions?
 ### Jin Wallfacer · assistant · 2026-10-09 13:00:05Z · #6
 With the messages list command.
 
-Not shown: 2 rows of tool calls and results (--tools), 2 marker rows (--markers).
+Not shown: 2 rows of tool calls and results (--tools), 2 marker rows (--markers), 1 turn with no text, such as thinking (-o json).
 
 Next:
   next page  wallfacer messages list task sess --per-page 7 -o text --cursor abc
@@ -227,8 +227,8 @@ func TestMessagesListTextShowsToolsAndMarkersOnRequest(t *testing.T) {
 		"### marker: result success · 3 turns · 4.2s · 2026-10-09 13:00:06Z · #7\n",
 		"wallfacer messages list task sess --markers --tools --view full -o text --cursor abc",
 	)
-	if strings.Contains(out, "Not shown") {
-		t.Errorf("nothing was hidden, so nothing should be counted:\n%s", out)
+	if !strings.Contains(out, "\nNot shown: 1 turn with no text, such as thinking (-o json).\n") || strings.Contains(out, "(--tools)") || strings.Contains(out, "(--markers)") {
+		t.Errorf("only the thinking-only turn should be counted:\n%s", out)
 	}
 	if strings.Index(out, "#2") > strings.Index(out, "#4") || strings.Index(out, "#4") > strings.Index(out, "#6") {
 		t.Errorf("rows should keep the order the API returned them in:\n%s", out)
@@ -290,6 +290,39 @@ func TestConversationViewDetails(t *testing.T) {
 			}},
 		})
 		if got, want := out.String(), "### Héctor Ramos · user · app · queued · #9\nShip it\n"; got != want {
+			t.Errorf("got:\n%s\nwant:\n%s", got, want)
+		}
+	})
+	t.Run("display text keeps the images sent with the turn", func(t *testing.T) {
+		out := &textOut{}
+		view.render(out, map[string]interface{}{
+			"id": float64(11), "type": "user", "channel": "app",
+			"author":       map[string]interface{}{"name": "Héctor Ramos"},
+			"display_text": "What is wrong here?",
+			"payload": map[string]interface{}{"message": map[string]interface{}{
+				"content": []interface{}{
+					map[string]interface{}{"type": "text", "text": "<attachments>...</attachments>\nWhat is wrong here?"},
+					map[string]interface{}{"type": "image", "source": map[string]interface{}{"type": "base64"}},
+				},
+			}},
+		})
+		if got, want := out.String(), "### Héctor Ramos · user · app · #11\nWhat is wrong here?\n\n[image]\n"; got != want {
+			t.Errorf("got:\n%s\nwant:\n%s", got, want)
+		}
+	})
+	t.Run("a thinking-only turn prints a placeholder when shown on its own", func(t *testing.T) {
+		out := &textOut{}
+		single := &conversationView{tools: true, markers: true, placeholders: true}
+		single.render(out, map[string]interface{}{
+			"id": float64(3), "type": "assistant", "created_at": "2026-10-09T13:00:02Z",
+			"actor": map[string]interface{}{"kind": "ai", "display_name": "Jin Wallfacer"},
+			"payload": map[string]interface{}{"message": map[string]interface{}{
+				"content": []interface{}{map[string]interface{}{"type": "thinking", "thinking": "", "signature": "abc"}},
+			}},
+		})
+		single.summary(out)
+		want := "### Jin Wallfacer · assistant · 2026-10-09 13:00:02Z · #3\n[no text: thinking and other hidden blocks are in -o json]\n"
+		if got := out.String(); got != want {
 			t.Errorf("got:\n%s\nwant:\n%s", got, want)
 		}
 	})

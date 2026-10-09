@@ -187,7 +187,7 @@ func runMessagesGetText(cmd *cobra.Command, ids, args []string) error {
 		return err
 	}
 
-	view := &conversationView{tools: true, markers: true}
+	view := &conversationView{tools: true, markers: true, placeholders: true}
 	t := &textOut{}
 	row := asMap(decoded["data"])
 	if row == nil {
@@ -227,10 +227,13 @@ func messagesNextPage(cmd *cobra.Command, args []string, cursor string) string {
 // answers, and counts the rows it left out.
 type conversationView struct {
 	tools, markers bool
+	// placeholders prints a row with no text instead of counting it.
+	placeholders bool
 
 	toolNames     map[string]string
 	hiddenTools   int
 	hiddenMarkers int
+	hiddenBlank   int
 }
 
 // render writes one row. A `user` or `assistant` row is a turn when it has
@@ -251,6 +254,7 @@ func (v *conversationView) render(t *textOut, row map[string]interface{}) {
 
 	var text []string
 	var tools []map[string]interface{}
+	images := 0
 	switch content := asMap(payload["message"])["content"].(type) {
 	case string:
 		text = append(text, content)
@@ -262,26 +266,36 @@ func (v *conversationView) render(t *textOut, row map[string]interface{}) {
 				text = append(text, scalar(block["text"]))
 			case "image":
 				text = append(text, "[image]")
+				images++
 			case "tool_use", "tool_result":
 				tools = append(tools, block)
 			}
 		}
 	}
+	// display_text replaces the text the platform prepended to a user turn,
+	// not the images the person sent with it.
 	if display := scalar(row["display_text"]); kind == "user" && display != "" {
 		text = []string{display}
+		for i := 0; i < images; i++ {
+			text = append(text, "[image]")
+		}
 	}
 
-	if body := strings.TrimSpace(strings.Join(text, "\n\n")); body != "" {
-		labels := []string{speaker(row), kind}
-		if kind == "user" {
-			labels = append(labels, scalar(row["channel"]))
-		}
+	labels := []string{speaker(row), kind}
+	if kind == "user" {
+		labels = append(labels, scalar(row["channel"]))
+	}
+	body := strings.TrimSpace(strings.Join(text, "\n\n"))
+	if body != "" {
 		t.gap()
 		t.text(header(labels, row))
 		t.block(body)
 	}
 
 	if len(tools) == 0 {
+		if body == "" {
+			v.blank(t, labels, row)
+		}
 		return
 	}
 	if !v.tools {
@@ -292,6 +306,19 @@ func (v *conversationView) render(t *textOut, row map[string]interface{}) {
 		t.gap()
 		v.tool(t, row, block)
 	}
+}
+
+// blank accounts for a turn with nothing to show as text, such as one that
+// holds only thinking. A page counts it; a single row prints its header and a
+// placeholder, so a lookup that found the row never prints nothing.
+func (v *conversationView) blank(t *textOut, labels []string, row map[string]interface{}) {
+	if !v.placeholders {
+		v.hiddenBlank++
+		return
+	}
+	t.gap()
+	t.text(header(labels, row))
+	t.block("[no text: thinking and other hidden blocks are in -o json]")
 }
 
 // tool writes one tool call or tool result.
@@ -327,6 +354,9 @@ func (v *conversationView) summary(t *textOut) {
 	}
 	if v.hiddenMarkers > 0 {
 		hidden = append(hidden, plural(v.hiddenMarkers, "marker row", "marker rows")+" (--markers)")
+	}
+	if v.hiddenBlank > 0 {
+		hidden = append(hidden, plural(v.hiddenBlank, "turn", "turns")+" with no text, such as thinking (-o json)")
 	}
 	if len(hidden) == 0 {
 		return
