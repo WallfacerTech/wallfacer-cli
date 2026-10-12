@@ -11,6 +11,7 @@ SPEC_URL ?= https://api.wallfacer.ai/v1/openapi.yaml
 sync-spec:
 	curl -fsSL "$(SPEC_URL)" -o openapi.yaml
 	perl -0pi -e 's/^([ \t]*)properties: \[\][ \t]*$$/$${1}properties: {  }/mg' openapi.yaml
+	git show HEAD:openapi.yaml | perl scripts/preserve-examples.pl openapi.yaml
 
 sync-spec-local:
 	cp -f ../sophon/storage/app/private/scribe/openapi.yaml openapi.yaml
