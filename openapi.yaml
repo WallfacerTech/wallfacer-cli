@@ -136,7 +136,7 @@ components:
           description: 'Human-readable account name, as chosen by the account owner.'
         activation_state:
           type: string
-          description: "Whether the account has been granted access to the product. New accounts start out awaiting review and cannot use product features until they are activated:\n\n- `pending`: the account is awaiting activation and cannot yet use the product.\n- `active`: the account has been activated and has full access.\n- `paused`: access was activated and later suspended.\n- `rejected`: the account was reviewed and not granted access."
+          description: "Whether the account has been granted access to the product. An account created by someone who already belongs to an active account is `active` from the start. Every other new account starts out awaiting review and cannot use product features until it is activated:\n\n- `pending`: the account is awaiting activation and cannot yet use the product.\n- `active`: the account has been activated and has full access.\n- `paused`: access was activated and later suspended.\n- `rejected`: the account was reviewed and not granted access."
           enum:
             - pending
             - active
@@ -2672,7 +2672,7 @@ paths:
     post:
       summary: 'Create an account'
       operationId: createAnAccount
-      description: "Creates a new account. The authenticated user is automatically attached as the `owner` of the new account.\n\nUse this when a single user needs to manage multiple accounts (for example, to separate billing or environments per organization)."
+      description: "Creates a new account. The authenticated user is automatically attached as the `owner` of the new account.\n\nUse this when a single user needs to manage multiple accounts (for example, to separate billing or environments per organization).\n\nIf you already belong to an active account, the new account is created `active` and is usable immediately. Otherwise it is created `pending`; see `activation_state`."
       parameters: []
       responses:
         201:
