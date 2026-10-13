@@ -136,7 +136,7 @@ components:
           description: 'Human-readable account name, as chosen by the account owner.'
         activation_state:
           type: string
-          description: "Whether the account has been granted access to the product. New accounts start out awaiting review and cannot use product features until they are activated:\n\n- `pending`: the account is awaiting activation and cannot yet use the product.\n- `active`: the account has been activated and has full access.\n- `paused`: access was activated and later suspended.\n- `rejected`: the account was reviewed and not granted access."
+          description: "Whether the account has been granted access to the product. An account created by someone who already belongs to an active account is `active` from the start. Every other new account starts out awaiting review and cannot use product features until it is activated:\n\n- `pending`: the account is awaiting activation and cannot yet use the product.\n- `active`: the account has been activated and has full access.\n- `paused`: access was activated and later suspended.\n- `rejected`: the account was reviewed and not granted access."
           enum:
             - pending
             - active
@@ -2672,7 +2672,7 @@ paths:
     post:
       summary: 'Create an account'
       operationId: createAnAccount
-      description: "Creates a new account. The authenticated user is automatically attached as the `owner` of the new account.\n\nUse this when a single user needs to manage multiple accounts (for example, to separate billing or environments per organization)."
+      description: "Creates a new account. The authenticated user is automatically attached as the `owner` of the new account.\n\nUse this when a single user needs to manage multiple accounts (for example, to separate billing or environments per organization).\n\nIf you already belong to an active account, the new account is created `active` and is usable immediately. Otherwise it is created `pending`; see `activation_state`."
       parameters: []
       responses:
         201:
@@ -6212,6 +6212,16 @@ paths:
             example: null
         -
           in: query
+          name: q
+          description: "Text search over each task's title, slug and prompt, matched the same way as global search: full-text, plus a case-insensitive substring match so short and prefix queries still return rows. Composes with the other filters. When set, results are ordered by relevance, then by id, instead of by recent activity. Up to 255 characters."
+          example: login
+          required: false
+          schema:
+            type: string
+            description: "Text search over each task's title, slug and prompt, matched the same way as global search: full-text, plus a case-insensitive substring match so short and prefix queries still return rows. Composes with the other filters. When set, results are ordered by relevance, then by id, instead of by recent activity. Up to 255 characters."
+            example: login
+        -
+          in: query
           name: archived
           description: 'Set to true to list soft-deleted tasks instead.'
           example: false
@@ -6394,6 +6404,18 @@ paths:
                           example: forbidden
       tags:
         - Tasks
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                q:
+                  type: string
+                  description: 'Must not be greater than 255 characters.'
+                  example: b
+                  nullable: true
     post:
       summary: 'Create a task'
       operationId: createATask

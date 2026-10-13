@@ -71,7 +71,7 @@ All commands are flat top-level groups (not nested). Write operations take JSON 
 | environments | `list`, `get <environment-id>` | `create`, `update <environment-id>`, `delete <environment-id>` |
 | snapshots | `list <environment-id>`, `get <environment-id> <snapshot-id>`, `logs <environment-id> <snapshot-id>`, `log <environment-id> <snapshot-id> <source>` | `create <environment-id>`, `delete <environment-id> <snapshot-id>` |
 | vms | `list`, `get <vm-id>`, `logs <vm-id>`, `log <vm-id> <source>`, `simulator <vm-id>`, `simulator-screenshot <vm-id>`, `simulator-logs <vm-id>`, `simulator-builds <vm-id>` | `create`, `delete <vm-id>`, `commands <vm-id>` |
-| tasks | `list`, `get <task-id>` | `create`, `update <task-id>`, `delete <task-id>` |
+| tasks | `list [--q <words>]`, `get <task-id>` | `create`, `update <task-id>`, `delete <task-id>` |
 | (top level, no group) | — | `chat <agent> [prompt]`, `run <playbook>` — the two entry points that create a task; they are not subcommands of `tasks` |
 | attachments | `list <task-id>`, `contents <task-id> <attachment-id>` | `create <task-id>`, `delete <task-id> <attachment-id>` |
 | sessions | `list <task-id>`, `get <task-id> <session-id>`, `logs <task-id> <session-id>`, `log <task-id> <session-id> <source>` | `create <task-id>`, `update <task-id> <session-id>` |
