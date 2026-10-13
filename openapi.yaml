@@ -160,6 +160,9 @@ components:
           enum:
             - selected
             - needs_repair
+        agent_credentials_enabled:
+          type: boolean
+          description: "Whether this account's agents may carry their own model provider credential, such as an API key or a subscription seat, instead of using the model access the platform supplies and meters. When `false`, attaching a credential to an agent is refused and a credential attached earlier is not used. Read-only: it cannot be changed through the API."
         created_at:
           type: string
           description: 'ISO 8601 timestamp of when the account was created.'
@@ -791,6 +794,84 @@ components:
         updated_at:
           type: string
           description: 'ISO 8601 timestamp of the most recent change, including a replaced value.'
+    Credential18:
+      type: object
+      properties:
+        id:
+          type: string
+          description: 'Stable identifier for the request.'
+        account_id:
+          type: string
+          description: 'The account the request was made on.'
+        agent:
+          type: object
+          properties:
+            id:
+              type: string
+            name:
+              type: string
+            avatar_url:
+              type: string
+          description: 'The agent that asked, as `{id, name, avatar_url}`. `id` is the id the credential grant route takes; resolving the request requires the credential to be granted to this agent.'
+        session_id:
+          type: string
+          nullable: true
+          description: 'The conversation waiting on the credential. It is told the credential name when the request is resolved.'
+        task_id:
+          type: string
+          nullable: true
+          description: 'The task the conversation belongs to.'
+        name:
+          type: string
+          description: 'The credential name the agent asked for. Create the credential under this name.'
+        reference:
+          type: string
+          description: 'The name the agent will reach the value by once it holds it.'
+        kind:
+          type: string
+          description: 'The kind of credential the agent asked for.'
+          enum:
+            - api_key
+            - login
+            - token
+            - totp
+        reason:
+          type: string
+          description: 'One line from the agent saying what it needs the credential for.'
+        status:
+          type: string
+          description: "Where the request is:\n\n- `pending`: nobody has supplied the credential yet.\n- `resolved`: the credential was stored and granted to the agent, and the agent was told its name.\n- `expired`: nobody answered within 24 hours. It can no longer be resolved; the agent has to ask again."
+          enum:
+            - pending
+            - resolved
+            - expired
+        url:
+          type: string
+          description: 'The link a person opens to enter the value. It identifies the request and carries no secret.'
+        can_resolve:
+          type: boolean
+          description: 'Whether you may answer this request: true when you have edit access to the computer the request came from and are not an agent. When false, do not offer to write a credential for it.'
+        credential_id:
+          type: string
+          nullable: true
+          description: 'The credential that answered the request. Null while it is pending.'
+        resolved_by_user_id:
+          type: string
+          nullable: true
+          description: 'The person who resolved the request. Null while it is pending.'
+        resolved_at:
+          type: string
+          nullable: true
+          description: 'ISO 8601 timestamp of when the request was resolved. Null while it is pending.'
+        expires_at:
+          type: string
+          description: 'ISO 8601 timestamp after which the request can no longer be resolved, 24 hours after the agent asked.'
+        created_at:
+          type: string
+          description: 'ISO 8601 timestamp of when the agent asked.'
+        updated_at:
+          type: string
+          description: 'ISO 8601 timestamp of the most recent change.'
     Credential4:
       type: object
       properties:
@@ -1021,6 +1102,8 @@ components:
               nullable: true
             collaboration_page_state:
               type: string
+            agent_credentials_enabled:
+              type: boolean
             created_at:
               type: string
             updated_at:
@@ -17870,6 +17953,560 @@ paths:
         required: true
         schema:
           type: integer
+  '/v1/accounts/{account_id}/credential-requests':
+    get:
+      summary: 'List credential requests'
+      operationId: listCredentialRequests
+      description: "Returns the credentials this account's agents have asked for, most recent first.\n\nFilter with `status` for only pending, resolved or expired requests, and with `session_id` for the requests one conversation made."
+      parameters:
+        -
+          in: query
+          name: status
+          description: 'Only requests in this state: `pending`, `resolved` or `expired`. A pending request past its deadline counts as expired.'
+          example: pending
+          required: false
+          schema:
+            type: string
+            description: 'Only requests in this state: `pending`, `resolved` or `expired`. A pending request past its deadline counts as expired.'
+            example: pending
+        -
+          in: query
+          name: session_id
+          description: 'Only requests made from this conversation.'
+          example: null
+          required: false
+          schema:
+            type: string
+            description: 'Only requests made from this conversation.'
+            example: null
+        -
+          in: query
+          name: per_page
+          description: 'Results per page (max 100).'
+          example: 25
+          required: false
+          schema:
+            type: integer
+            description: 'Results per page (max 100).'
+            example: 25
+      responses:
+        200:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  data:
+                    -
+                      id: 01a1376d-1ba6-713b-911b-67810234a3b7
+                      account_id: 01a1376d-1b97-70c2-9386-bac0b037d697
+                      agent:
+                        id: '102'
+                        name: 'AI Agent'
+                        avatar_url: 'https://www.gravatar.com/avatar/31b2b9f29f8ea9f3bf58b0359386635a?d=mp&s=200'
+                      session_id: null
+                      task_id: null
+                      name: 'Test nsBISW2B'
+                      reference: KEYCHAIN_TEST_NSBISW2B
+                      kind: api_key
+                      reason: 'To read the project board.'
+                      status: pending
+                      url: 'https://app.wallfacer.ai/accounts/01a1376d-1b97-70c2-9386-bac0b037d697/credential-requests/01a1376d-1ba6-713b-911b-67810234a3b7'
+                      can_resolve: false
+                      credential_id: null
+                      resolved_by_user_id: null
+                      resolved_at: null
+                      expires_at: '2026-10-14T22:40:59.000000Z'
+                      created_at: '2026-10-13T22:40:59.000000Z'
+                      updated_at: '2026-10-13T22:40:59.000000Z'
+                    -
+                      id: 01a1376d-1bb8-711a-8393-27c2c0567267
+                      account_id: 01a1376d-1baa-70c5-a794-3ebefad0a32e
+                      agent:
+                        id: '104'
+                        name: 'AI Agent'
+                        avatar_url: 'https://www.gravatar.com/avatar/4fd9f25ee48729c517c9e1745e916cf2?d=mp&s=200'
+                      session_id: null
+                      task_id: null
+                      name: 'Test 49hxA58p'
+                      reference: KEYCHAIN_TEST_49HXA58P
+                      kind: api_key
+                      reason: 'To read the project board.'
+                      status: pending
+                      url: 'https://app.wallfacer.ai/accounts/01a1376d-1baa-70c5-a794-3ebefad0a32e/credential-requests/01a1376d-1bb8-711a-8393-27c2c0567267'
+                      can_resolve: false
+                      credential_id: null
+                      resolved_by_user_id: null
+                      resolved_at: null
+                      expires_at: '2026-10-14T22:40:59.000000Z'
+                      created_at: '2026-10-13T22:40:59.000000Z'
+                      updated_at: '2026-10-13T22:40:59.000000Z'
+                  links:
+                    first: '/?page=1'
+                    last: '/?page=1'
+                    prev: null
+                    next: null
+                  meta:
+                    current_page: 1
+                    from: 1
+                    last_page: 1
+                    links:
+                      -
+                        url: null
+                        label: Previous
+                        page: null
+                        active: false
+                      -
+                        url: '/?page=1'
+                        label: '1'
+                        page: 1
+                        active: true
+                      -
+                        url: null
+                        label: Next
+                        page: null
+                        active: false
+                    path: /
+                    per_page: 25
+                    to: 2
+                    total: 2
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Credential18'
+                  links:
+                    $ref: '#/components/schemas/PaginationLinks'
+                  meta:
+                    $ref: '#/components/schemas/PaginationMeta8'
+        401:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: Unauthenticated.
+                      code: unauthenticated
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: Unauthenticated.
+                        code: unauthenticated
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: Unauthenticated.
+                        code:
+                          type: string
+                          example: unauthenticated
+        404:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: 'Resource not found.'
+                      code: not_found
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: 'Resource not found.'
+                        code: not_found
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: 'Resource not found.'
+                        code:
+                          type: string
+                          example: not_found
+      tags:
+        - Credentials
+    parameters:
+      -
+        in: path
+        name: account_id
+        description: 'The ID of the account.'
+        example: architecto
+        required: true
+        schema:
+          type: string
+  '/v1/accounts/{account_id}/credential-requests/{credentialRequest_id}':
+    get:
+      summary: 'Get a credential request'
+      operationId: getACredentialRequest
+      description: 'Returns one request: who asked, for what, why, and whether it has been answered.'
+      parameters: []
+      responses:
+        200:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  data:
+                    id: 01a1376d-1bd2-72b8-8360-4a9466545637
+                    account_id: 01a1376d-1bc3-71b8-90f4-399ebe4924cf
+                    agent:
+                      id: '106'
+                      name: 'AI Agent'
+                      avatar_url: 'https://www.gravatar.com/avatar/8c8c604ba5e62b3db79b0ff966462947?d=mp&s=200'
+                    session_id: null
+                    task_id: null
+                    name: 'Test BD9r2VxM'
+                    reference: KEYCHAIN_TEST_BD9R2VXM
+                    kind: api_key
+                    reason: 'To read the project board.'
+                    status: pending
+                    url: 'https://app.wallfacer.ai/accounts/01a1376d-1bc3-71b8-90f4-399ebe4924cf/credential-requests/01a1376d-1bd2-72b8-8360-4a9466545637'
+                    can_resolve: false
+                    credential_id: null
+                    resolved_by_user_id: null
+                    resolved_at: null
+                    expires_at: '2026-10-14T22:40:59.000000Z'
+                    created_at: '2026-10-13T22:40:59.000000Z'
+                    updated_at: '2026-10-13T22:40:59.000000Z'
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Credential18'
+        401:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: Unauthenticated.
+                      code: unauthenticated
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: Unauthenticated.
+                        code: unauthenticated
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: Unauthenticated.
+                        code:
+                          type: string
+                          example: unauthenticated
+        404:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: 'Resource not found.'
+                      code: not_found
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: 'Resource not found.'
+                        code: not_found
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: 'Resource not found.'
+                        code:
+                          type: string
+                          example: not_found
+      tags:
+        - Credentials
+    parameters:
+      -
+        in: path
+        name: account_id
+        description: 'The ID of the account.'
+        example: architecto
+        required: true
+        schema:
+          type: string
+      -
+        in: path
+        name: credentialRequest_id
+        description: 'The ID of the credentialRequest.'
+        example: architecto
+        required: true
+        schema:
+          type: string
+  '/v1/accounts/{account_id}/credential-requests/{credentialRequest_id}/resolve':
+    post:
+      summary: 'Resolve a credential request'
+      operationId: resolveACredentialRequest
+      description: "Marks the request answered by a credential you have already created and granted to the agent that asked. Requires edit access to the computer (environment) the request came from; the request's `can_resolve` says whether you have it. The agent is told the credential's name in the conversation that asked for it, never the value.\n\nCreate the credential under the requested name and grant it to the requesting agent first; this call checks both and writes neither. Safe to repeat with the same credential: the request is resolved once and the agent is told once. A request expires 24 hours after the agent asks and cannot be resolved after that."
+      parameters:
+        -
+          in: header
+          name: Idempotency-Key
+          description: ''
+          example: optional-unique-request-id
+          schema:
+            type: string
+      responses:
+        200:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  data:
+                    id: 01a1376d-1be7-710a-97ea-d4f3f021ef8c
+                    account_id: 01a1376d-1bd8-72f8-8446-7dac8e17b80c
+                    agent:
+                      id: '108'
+                      name: 'AI Agent'
+                      avatar_url: 'https://www.gravatar.com/avatar/d785668a62505d8171e555dfccc42a43?d=mp&s=200'
+                    session_id: null
+                    task_id: null
+                    name: 'Test Eo0j9LZX'
+                    reference: KEYCHAIN_TEST_EO0J9LZX
+                    kind: api_key
+                    reason: 'To read the project board.'
+                    status: pending
+                    url: 'https://app.wallfacer.ai/accounts/01a1376d-1bd8-72f8-8446-7dac8e17b80c/credential-requests/01a1376d-1be7-710a-97ea-d4f3f021ef8c'
+                    can_resolve: false
+                    credential_id: null
+                    resolved_by_user_id: null
+                    resolved_at: null
+                    expires_at: '2026-10-14T22:40:59.000000Z'
+                    created_at: '2026-10-13T22:40:59.000000Z'
+                    updated_at: '2026-10-13T22:40:59.000000Z'
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Credential18'
+        401:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: Unauthenticated.
+                      code: unauthenticated
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: Unauthenticated.
+                        code: unauthenticated
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: Unauthenticated.
+                        code:
+                          type: string
+                          example: unauthenticated
+        403:
+          description: 'You lack edit access to the computer the request came from, or you are an agent.'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: 'Only a person with edit access to the computer this request came from can answer it.'
+                      code: credential_request_forbidden
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: 'Only a person with edit access to the computer this request came from can answer it.'
+                        code: credential_request_forbidden
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: 'Only a person with edit access to the computer this request came from can answer it.'
+                        code:
+                          type: string
+                          example: credential_request_forbidden
+        404:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: 'Resource not found.'
+                      code: not_found
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: 'Resource not found.'
+                        code: not_found
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: 'Resource not found.'
+                        code:
+                          type: string
+                          example: not_found
+        409:
+          description: 'The request was already answered with a different credential (`credential_request_resolved`), or it expired (`credential_request_expired`).'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: 'This request was already answered with a different credential.'
+                      code: credential_request_resolved
+                      field: credential_id
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: 'This request was already answered with a different credential.'
+                        code: credential_request_resolved
+                        field: credential_id
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: 'This request was already answered with a different credential.'
+                        code:
+                          type: string
+                          example: credential_request_resolved
+                        field:
+                          type: string
+                          example: credential_id
+        422:
+          description: 'The credential does not exist on this account, does not carry the requested name, or is not granted to the requesting agent.'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: 'The credential has not been granted to the agent that asked for it. Grant it first, then resolve the request.'
+                      code: credential_not_granted
+                      field: credential_id
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: 'The credential has not been granted to the agent that asked for it. Grant it first, then resolve the request.'
+                        code: credential_not_granted
+                        field: credential_id
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: 'The credential has not been granted to the agent that asked for it. Grant it first, then resolve the request.'
+                        code:
+                          type: string
+                          example: credential_not_granted
+                        field:
+                          type: string
+                          example: credential_id
+        429:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: 'Too many requests.'
+                      code: rate_limited
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: 'Too many requests.'
+                        code: rate_limited
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: 'Too many requests.'
+                        code:
+                          type: string
+                          example: rate_limited
+      tags:
+        - Credentials
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                credential_id:
+                  type: string
+                  description: 'The credential that answers the request. It must carry the requested name and already be granted to the requesting agent. Resolving again with the same credential returns the resolved request; a different credential is refused. Must be a valid UUID.'
+                  example: No-example
+              required:
+                - credential_id
+    parameters:
+      -
+        in: path
+        name: account_id
+        description: 'The ID of the account.'
+        example: architecto
+        required: true
+        schema:
+          type: string
+      -
+        in: path
+        name: credentialRequest_id
+        description: 'The ID of the credentialRequest.'
+        example: architecto
+        required: true
+        schema:
+          type: string
   '/v1/accounts/{account_id}/people':
     get:
       summary: 'List the people this account knows'
