@@ -6212,6 +6212,16 @@ paths:
             example: null
         -
           in: query
+          name: q
+          description: "Text search over each task's title, slug and prompt, matched the same way as global search: full-text, plus a case-insensitive substring match so short and prefix queries still return rows. Composes with the other filters. When set, results are ordered by relevance, then by id, instead of by recent activity. Up to 255 characters."
+          example: login
+          required: false
+          schema:
+            type: string
+            description: "Text search over each task's title, slug and prompt, matched the same way as global search: full-text, plus a case-insensitive substring match so short and prefix queries still return rows. Composes with the other filters. When set, results are ordered by relevance, then by id, instead of by recent activity. Up to 255 characters."
+            example: login
+        -
+          in: query
           name: archived
           description: 'Set to true to list soft-deleted tasks instead.'
           example: false
@@ -6394,6 +6404,18 @@ paths:
                           example: forbidden
       tags:
         - Tasks
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                q:
+                  type: string
+                  description: 'Must not be greater than 255 characters.'
+                  example: b
+                  nullable: true
     post:
       summary: 'Create a task'
       operationId: createATask

@@ -5945,6 +5945,10 @@ func OpenapiListTasks(paramAccountId string, params *viper.Viper) (*gentleman.Re
 	if paramParentTaskId != "" {
 		req = req.AddQuery("parent_task_id", fmt.Sprintf("%v", paramParentTaskId))
 	}
+	paramQ := params.GetString("q")
+	if paramQ != "" {
+		req = req.AddQuery("q", fmt.Sprintf("%v", paramQ))
+	}
 	paramArchived := params.GetBool("archived")
 	if paramArchived != false {
 		req = req.AddQuery("archived", fmt.Sprintf("%v", paramArchived))
@@ -12562,7 +12566,7 @@ func openapiRegister(subcommand bool) {
 			cmd := &cobra.Command{
 				Use:     "list account-id",
 				Short:   "List tasks",
-				Long:    cli.Markdown("Returns tasks for the account. Without filters, ordered by most recent activity first (the latest of the task's own `updated_at` and any of its sessions' `last_activity_at`). The filters turn this list into the inbox: `needs_me=true` is the decision queue (tasks waiting on you), `awaiting_human=true` is every task waiting on a human, and the owner/status filters slice the rest."),
+				Long:    cli.Markdown("Returns tasks for the account. Without filters, ordered by most recent activity first (the latest of the task's own `updated_at` and any of its sessions' `last_activity_at`). The filters turn this list into the inbox: `needs_me=true` is the decision queue (tasks waiting on you), `awaiting_human=true` is every task waiting on a human, and the owner/status filters slice the rest.\n## Request Schema (application/json)\n\nproperties:\n  q:\n    description: Must not be greater than 255 characters.\n    example: b\n    nullable: true\n    type: string\ntype: object\n"),
 				Example: examples,
 				Args:    cobra.MinimumNArgs(1),
 				Run: func(cmd *cobra.Command, args []string) {
@@ -12590,6 +12594,7 @@ func openapiRegister(subcommand bool) {
 			cmd.Flags().String("pipeline-id", "", "Filter to tasks running against this pipeline.")
 			cmd.Flags().String("environment-id", "", "Filter to tasks whose steps run against this environment.")
 			cmd.Flags().String("parent-task-id", "", "Filter to subtasks of this parent task.")
+			cmd.Flags().String("q", "", "Text search over each task's title, slug and prompt, matched the same way as global search: full-text, plus a case-insensitive substring match so short and prefix queries still return rows. Composes with the other filters. When set, results are ordered by relevance, then by id, instead of by recent activity. Up to 255 characters.")
 			cmd.Flags().String("archived", "", "Set to true to list soft-deleted tasks instead.")
 			cmd.Flags().Int64("per-page", 0, "Results per page (max 100).")
 
