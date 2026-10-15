@@ -47,6 +47,9 @@ tags:
     name: Agents
     description: 'Agents are the identities your account runs autonomous work as. Each has a title, a job description (a handbook page), the single environment it works in, and the model that powers it. An automated step names the agent that runs it. Disabling an agent keeps its history but removes it from new work.'
   -
+    name: Analytics
+    description: 'Read-only reports on the work done in an account and the model usage behind it.'
+  -
     name: Attachments
     description: "Attachments carry arbitrary content along with a task, such as a ticket body, an external reference, or a file. Text content is prepended to the agent's first message; binary and URI-only content is referenced but not fetched."
   -
@@ -794,7 +797,7 @@ components:
         updated_at:
           type: string
           description: 'ISO 8601 timestamp of the most recent change, including a replaced value.'
-    Credential18:
+    Credential20:
       type: object
       properties:
         id:
@@ -838,9 +841,16 @@ components:
         reason:
           type: string
           description: 'One line from the agent saying what it needs the credential for.'
+        replacement:
+          type: boolean
+          description: 'Whether the agent already holds this credential and is asking for its value to be corrected. Answer a replacement by updating the value of `replaces_credential_id`, not by creating a credential, then resolve the request with that credential. The update overwrites the value for every agent the credential is granted to.'
+        replaces_credential_id:
+          type: string
+          nullable: true
+          description: 'The credential whose value a replacement overwrites: the one the agent holds under `reference`. Null when `replacement` is false.'
         status:
           type: string
-          description: "Where the request is:\n\n- `pending`: nobody has supplied the credential yet.\n- `resolved`: the credential was stored and granted to the agent, and the agent was told its name.\n- `expired`: nobody answered within 24 hours. It can no longer be resolved; the agent has to ask again."
+          description: "Where the request is:\n\n- `pending`: nobody has supplied the credential yet.\n- `resolved`: the credential was stored and granted to the agent, or for a replacement its value was updated, and the agent was told its name.\n- `expired`: nobody answered within 24 hours. It can no longer be resolved; the agent has to ask again."
           enum:
             - pending
             - resolved
@@ -979,7 +989,7 @@ components:
         base_snapshot:
           type: string
           nullable: true
-          description: "The environment's current base snapshot, or null if one has never been generated. When present and `ready`, new VMs boot from this snapshot in about 2 seconds instead of running setup from scratch. The object has four fields: `id` (snapshot ID, null until the snapshot actually exists), `status` (`generating`, `ready`, or `failed`), `created_at` (ISO 8601 timestamp, null while generating), and `error` (present only when `status` is `failed`: `{stage, message, failed_at}` describing which generation stage failed and why - read the `provisioning` source at `/environments/{env}/logs` for the full account, including infra-stage failures that produce no step logs). `error` is null unless the current attempt failed."
+          description: "The environment's current base snapshot, or null if one has never been generated. When present and `ready`, new VMs boot from this snapshot in about 2 seconds instead of running setup from scratch. The object has four fields: `id` (snapshot ID, null until the snapshot actually exists), `status` (`generating`, `ready`, or `failed`), `created_at` (ISO 8601 timestamp, null while generating), and `error` (`{stage, message, failed_at}` describing which generation stage failed and why - read the `provisioning` source at `/environments/{env}/logs` for the full account, including infra-stage failures that produce no step logs). `error` is null unless the latest attempt failed. A failed rebuild of an environment that already has a snapshot leaves `status` at `ready` on that snapshot and sets `error`, so new VMs keep booting from the last good snapshot; the failed attempt's step logs are on its `failed` entry in `GET /environments/{env}/snapshots`."
         created_at:
           type: string
           description: 'ISO 8601 timestamp of when the environment was created.'
@@ -6295,6 +6305,16 @@ paths:
             example: null
         -
           in: query
+          name: q
+          description: "Text search over each task's title, slug and prompt, matched the same way as global search: full-text, plus a case-insensitive substring match so short and prefix queries still return rows. Composes with the other filters. When set, results are ordered by relevance, then by id, instead of by recent activity. Up to 255 characters."
+          example: login
+          required: false
+          schema:
+            type: string
+            description: "Text search over each task's title, slug and prompt, matched the same way as global search: full-text, plus a case-insensitive substring match so short and prefix queries still return rows. Composes with the other filters. When set, results are ordered by relevance, then by id, instead of by recent activity. Up to 255 characters."
+            example: login
+        -
+          in: query
           name: archived
           description: 'Set to true to list soft-deleted tasks instead.'
           example: false
@@ -6477,6 +6497,18 @@ paths:
                           example: forbidden
       tags:
         - Tasks
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                q:
+                  type: string
+                  description: 'Must not be greater than 255 characters.'
+                  example: b
+                  nullable: true
     post:
       summary: 'Create a task'
       operationId: createATask
@@ -15346,6 +15378,290 @@ paths:
         required: true
         schema:
           type: integer
+  '/v1/accounts/{account_id}/analytics/autonomy':
+    get:
+      summary: ''
+      operationId: getV1AccountsAccount_idAnalyticsAutonomy
+      description: ''
+      parameters: []
+      responses: {  }
+      tags:
+        - Analytics
+    parameters:
+      -
+        in: path
+        name: account_id
+        description: 'The ID of the account.'
+        example: architecto
+        required: true
+        schema:
+          type: string
+  '/v1/accounts/{account_id}/analytics/handbooks':
+    get:
+      summary: ''
+      operationId: getV1AccountsAccount_idAnalyticsHandbooks
+      description: ''
+      parameters: []
+      responses: {  }
+      tags:
+        - Analytics
+    parameters:
+      -
+        in: path
+        name: account_id
+        description: 'The ID of the account.'
+        example: architecto
+        required: true
+        schema:
+          type: string
+  '/v1/accounts/{account_id}/analytics/bottlenecks':
+    get:
+      summary: ''
+      operationId: getV1AccountsAccount_idAnalyticsBottlenecks
+      description: ''
+      parameters: []
+      responses: {  }
+      tags:
+        - Analytics
+    parameters:
+      -
+        in: path
+        name: account_id
+        description: 'The ID of the account.'
+        example: architecto
+        required: true
+        schema:
+          type: string
+  '/v1/accounts/{account_id}/analytics/completion':
+    get:
+      summary: ''
+      operationId: getV1AccountsAccount_idAnalyticsCompletion
+      description: ''
+      parameters: []
+      responses: {  }
+      tags:
+        - Analytics
+    parameters:
+      -
+        in: path
+        name: account_id
+        description: 'The ID of the account.'
+        example: architecto
+        required: true
+        schema:
+          type: string
+  '/v1/accounts/{account_id}/analytics/agents':
+    get:
+      summary: 'Get AI employee performance'
+      operationId: getAIEmployeePerformance
+      description: "One row per AI employee in the account, offboarded employees included, with the tasks it ran, its sessions and tool turns, and its model cost for the period.\n\n`model_cost` is the employee's platform-paid model cost, including calls its sub-agents made on its behalf. Its `cost_usd` is null when the employee used models in the period and none of that usage could be priced. `spend_usd` is the priced model cost plus recorded voice call cost, rounded to cents; it counts unpriced usage as nothing, so read `model_cost` to tell whether it is complete."
+      parameters:
+        -
+          in: query
+          name: period
+          description: "The period to report:\n\n- `days`: the last `days` calendar days, today included (the default).\n- `month`: the current calendar month to date.\n\nDays are UTC."
+          example: days
+          required: false
+          schema:
+            type: string
+            description: "The period to report:\n\n- `days`: the last `days` calendar days, today included (the default).\n- `month`: the current calendar month to date.\n\nDays are UTC."
+            example: days
+            enum:
+              - days
+              - month
+        -
+          in: query
+          name: days
+          description: 'Length of a `days` period, from 1 to 180. Defaults to 30. Larger values are clamped to 180.'
+          example: 30
+          required: false
+          schema:
+            type: integer
+            description: 'Length of a `days` period, from 1 to 180. Defaults to 30. Larger values are clamped to 180.'
+            example: 30
+      responses:
+        403:
+          description: 'You do not belong to this account.'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: 'You do not belong to this account.'
+                      code: forbidden
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: 'You do not belong to this account.'
+                        code: forbidden
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: 'You do not belong to this account.'
+                        code:
+                          type: string
+                          example: forbidden
+      tags:
+        - Analytics
+    parameters:
+      -
+        in: path
+        name: account_id
+        description: 'The ID of the account.'
+        example: architecto
+        required: true
+        schema:
+          type: string
+  '/v1/accounts/{account_id}/analytics/agents/{agent_user_id}':
+    get:
+      summary: "Get one AI employee's performance"
+      operationId: getOneAIEmployeesPerformance
+      description: "The employee's row from the performance list, a daily series of tasks created and cost, and `model_usage`: its platform-paid model cost by day and by model, the tasks driving that cost, usage billed outside the platform, and how complete the figures are.\n\nModel cost includes calls the employee's sub-agents made on its behalf, and an offboarded employee's history stays readable."
+      parameters:
+        -
+          in: query
+          name: period
+          description: "The period to report:\n\n- `days`: the last `days` calendar days, today included (the default).\n- `month`: the current calendar month to date.\n\nDays are UTC."
+          example: days
+          required: false
+          schema:
+            type: string
+            description: "The period to report:\n\n- `days`: the last `days` calendar days, today included (the default).\n- `month`: the current calendar month to date.\n\nDays are UTC."
+            example: days
+            enum:
+              - days
+              - month
+        -
+          in: query
+          name: days
+          description: 'Length of a `days` period, from 1 to 180. Defaults to 30. Larger values are clamped to 180.'
+          example: 30
+          required: false
+          schema:
+            type: integer
+            description: 'Length of a `days` period, from 1 to 180. Defaults to 30. Larger values are clamped to 180.'
+            example: 30
+      responses:
+        404:
+          description: 'The employee is not in this account.'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: 'Resource not found.'
+                      code: not_found
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: 'Resource not found.'
+                        code: not_found
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: 'Resource not found.'
+                        code:
+                          type: string
+                          example: not_found
+      tags:
+        - Analytics
+    parameters:
+      -
+        in: path
+        name: account_id
+        description: 'The ID of the account.'
+        example: architecto
+        required: true
+        schema:
+          type: string
+      -
+        in: path
+        name: agent_user_id
+        description: 'The ID of the agent user.'
+        example: 16
+        required: true
+        schema:
+          type: integer
+  '/v1/accounts/{account_id}/analytics/usage':
+    get:
+      summary: 'Get account model usage'
+      operationId: getAccountModelUsage
+      description: "The account's model usage and cost for the period. Admins and owners only.\n\n`platform` is model cost the platform paid, in USD at the model provider's rate before any account-level credit. It measures consumption and is not an invoice. It is split by `by_category`:\n\n- `employee`: work an AI employee directed, including its sub-agents' calls. `by_employee` splits this by employee.\n- `human`: work a person started.\n- `overhead`: calls the platform made for the account itself, such as naming tasks and summarizing pages.\n- `unattributed`: usage that could not be tied to any of the above. It is kept so the totals still add up.\n\n`daily`, `by_model` and `tasks` (`top` + `other` + `without_task`) each add up to `platform`. Any figure's `cost_usd` is null when the group had usage and none of it could be priced; `unpriced_records` and `unpriced_tokens` count what is missing from a total that was partly priced.\n\n`external` is usage billed outside the platform, on the account's own provider key or a vendor subscription. It is reported as records and tokens, with no dollar figure, and is never part of `platform`.\n\n`coverage.complete` is false when the period starts before usage history begins, overlaps a stretch of history that was lost, or reaches past the last update. Read it before presenting a total as final."
+      parameters:
+        -
+          in: query
+          name: period
+          description: "The period to report:\n\n- `month`: the current calendar month to date (the default).\n- `days`: the last `days` calendar days, today included.\n\nDays are UTC."
+          example: month
+          required: false
+          schema:
+            type: string
+            description: "The period to report:\n\n- `month`: the current calendar month to date (the default).\n- `days`: the last `days` calendar days, today included.\n\nDays are UTC."
+            example: month
+            enum:
+              - month
+              - days
+        -
+          in: query
+          name: days
+          description: 'Length of a `days` period, from 1 to 180. Defaults to 30. Larger values are clamped to 180.'
+          example: 30
+          required: false
+          schema:
+            type: integer
+            description: 'Length of a `days` period, from 1 to 180. Defaults to 30. Larger values are clamped to 180.'
+            example: 30
+      responses:
+        403:
+          description: 'You are not an admin or owner of this account.'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: 'This action requires at least the admin role.'
+                      code: insufficient_role
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: 'This action requires at least the admin role.'
+                        code: insufficient_role
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: 'This action requires at least the admin role.'
+                        code:
+                          type: string
+                          example: insufficient_role
+      tags:
+        - Analytics
+    parameters:
+      -
+        in: path
+        name: account_id
+        description: 'The ID of the account.'
+        example: architecto
+        required: true
+        schema:
+          type: string
   '/v1/accounts/{account_id}/tasks/{task_id}/attachments':
     get:
       summary: 'List attachments for a task'
@@ -18075,7 +18391,7 @@ paths:
                   data:
                     type: array
                     items:
-                      $ref: '#/components/schemas/Credential18'
+                      $ref: '#/components/schemas/Credential20'
                   links:
                     $ref: '#/components/schemas/PaginationLinks'
                   meta:
@@ -18183,7 +18499,7 @@ paths:
                     updated_at: '2026-10-13T22:40:59.000000Z'
                 properties:
                   data:
-                    $ref: '#/components/schemas/Credential18'
+                    $ref: '#/components/schemas/Credential20'
         401:
           description: ''
           content:
@@ -18261,7 +18577,7 @@ paths:
     post:
       summary: 'Resolve a credential request'
       operationId: resolveACredentialRequest
-      description: "Marks the request answered by a credential you have already created and granted to the agent that asked. Requires edit access to the computer (environment) the request came from; the request's `can_resolve` says whether you have it. The agent is told the credential's name in the conversation that asked for it, never the value.\n\nCreate the credential under the requested name and grant it to the requesting agent first; this call checks both and writes neither. Safe to repeat with the same credential: the request is resolved once and the agent is told once. A request expires 24 hours after the agent asks and cannot be resolved after that."
+      description: "Marks the request answered by a credential you have already created and granted to the agent that asked. Requires edit access to the computer (environment) the request came from; the request's `can_resolve` says whether you have it. The agent is told the credential's name in the conversation that asked for it, never the value.\n\nCreate the credential under the requested name and grant it to the requesting agent first; this call checks both and writes neither. For a request with `replacement` true, update the value of `replaces_credential_id` instead, then resolve with that credential: the call checks the value was written after the agent asked, and the credential keeps its id and grants. Safe to repeat with the same credential: the request is resolved once and the agent is told once. A request expires 24 hours after the agent asks and cannot be resolved after that."
       parameters:
         -
           in: header
@@ -18302,7 +18618,7 @@ paths:
                     updated_at: '2026-10-13T22:40:59.000000Z'
                 properties:
                   data:
-                    $ref: '#/components/schemas/Credential18'
+                    $ref: '#/components/schemas/Credential20'
         401:
           description: ''
           content:
@@ -18417,7 +18733,7 @@ paths:
                           type: string
                           example: credential_id
         422:
-          description: 'The credential does not exist on this account, does not carry the requested name, or is not granted to the requesting agent.'
+          description: 'The credential does not exist on this account, does not carry the requested name, or is not granted to the requesting agent (`credential_not_granted`, `credential_mismatch`); or, for a replacement, its value has not been updated since the agent asked (`credential_not_replaced`).'
           content:
             application/json:
               schema:
@@ -18998,122 +19314,6 @@ paths:
     get:
       summary: ''
       operationId: getV1AccountsAccount_idAgentsAgent_user_idUsage
-      description: ''
-      parameters: []
-      responses: {  }
-      tags:
-        - Endpoints
-    parameters:
-      -
-        in: path
-        name: account_id
-        description: 'The ID of the account.'
-        example: architecto
-        required: true
-        schema:
-          type: string
-      -
-        in: path
-        name: agent_user_id
-        description: 'The ID of the agent user.'
-        example: 16
-        required: true
-        schema:
-          type: integer
-  '/v1/accounts/{account_id}/analytics/autonomy':
-    get:
-      summary: ''
-      operationId: getV1AccountsAccount_idAnalyticsAutonomy
-      description: ''
-      parameters: []
-      responses: {  }
-      tags:
-        - Endpoints
-    parameters:
-      -
-        in: path
-        name: account_id
-        description: 'The ID of the account.'
-        example: architecto
-        required: true
-        schema:
-          type: string
-  '/v1/accounts/{account_id}/analytics/handbooks':
-    get:
-      summary: ''
-      operationId: getV1AccountsAccount_idAnalyticsHandbooks
-      description: ''
-      parameters: []
-      responses: {  }
-      tags:
-        - Endpoints
-    parameters:
-      -
-        in: path
-        name: account_id
-        description: 'The ID of the account.'
-        example: architecto
-        required: true
-        schema:
-          type: string
-  '/v1/accounts/{account_id}/analytics/bottlenecks':
-    get:
-      summary: ''
-      operationId: getV1AccountsAccount_idAnalyticsBottlenecks
-      description: ''
-      parameters: []
-      responses: {  }
-      tags:
-        - Endpoints
-    parameters:
-      -
-        in: path
-        name: account_id
-        description: 'The ID of the account.'
-        example: architecto
-        required: true
-        schema:
-          type: string
-  '/v1/accounts/{account_id}/analytics/completion':
-    get:
-      summary: ''
-      operationId: getV1AccountsAccount_idAnalyticsCompletion
-      description: ''
-      parameters: []
-      responses: {  }
-      tags:
-        - Endpoints
-    parameters:
-      -
-        in: path
-        name: account_id
-        description: 'The ID of the account.'
-        example: architecto
-        required: true
-        schema:
-          type: string
-  '/v1/accounts/{account_id}/analytics/agents':
-    get:
-      summary: ''
-      operationId: getV1AccountsAccount_idAnalyticsAgents
-      description: ''
-      parameters: []
-      responses: {  }
-      tags:
-        - Endpoints
-    parameters:
-      -
-        in: path
-        name: account_id
-        description: 'The ID of the account.'
-        example: architecto
-        required: true
-        schema:
-          type: string
-  '/v1/accounts/{account_id}/analytics/agents/{agent_user_id}':
-    get:
-      summary: ''
-      operationId: getV1AccountsAccount_idAnalyticsAgentsAgent_user_id
       description: ''
       parameters: []
       responses: {  }
@@ -24604,7 +24804,7 @@ paths:
     post:
       summary: "Regenerate an environment's snapshot"
       operationId: regenerateAnEnvironmentsSnapshot
-      description: "Triggers a fresh snapshot-generation cycle. A VM boots from the environment's manifest, runs setup to completion, captures the result, and the new snapshot is promoted to the environment's `base_snapshot_id`. Returns 202 immediately; the `snapshot_id` is null while generation is bootstrapping. Poll `GET /environments/{env}` and wait for `base_snapshot_status` to flip to `ready` and `base_snapshot_id` to populate, then fetch the snapshot at `GET /environments/{env}/snapshots/{id}`. If `base_snapshot_status` flips to `failed`, read `GET /environments/{env}/logs`: the Wallfacer-authored `provisioning` source there is the authoritative account of what failed, at which stage, and whether to retry or fix your manifest, and it covers infra-stage failures (a pre-boot rejection that leaves no snapshot row at all, or a capture timeout) that produce no per-step logs. A failed setup step additionally appears in `GET /environments/{env}/snapshots` with `status: failed` and a `description`, and its stdout/stderr is at `GET /environments/{env}/snapshots/{id}/logs`."
+      description: "Triggers a fresh snapshot-generation cycle. A VM boots from the environment's manifest, runs setup to completion, captures the result, and the new snapshot is promoted to the environment's `base_snapshot_id`. Returns 202 immediately; the `snapshot_id` is null while generation is bootstrapping. Poll `GET /environments/{env}` and wait for `base_snapshot_status` to flip to `ready` and `base_snapshot_id` to populate, then fetch the snapshot at `GET /environments/{env}/snapshots/{id}`. A failed attempt sets `base_snapshot.error`. An environment that had no snapshot flips to `failed`; one that already had a snapshot returns to `ready` on that same `base_snapshot_id`, so it keeps booting while you fix the cause, and `base_snapshot.error` is the account of what failed. On `failed`, read `GET /environments/{env}/logs`: the Wallfacer-authored `provisioning` source there is the authoritative account of what failed, at which stage, and whether to retry or fix your manifest, and it covers infra-stage failures (a pre-boot rejection that leaves no snapshot row at all, or a capture timeout) that produce no per-step logs. A failed setup step additionally appears in `GET /environments/{env}/snapshots` with `status: failed` and a `description`, and its stdout/stderr is at `GET /environments/{env}/snapshots/{id}/logs`."
       parameters:
         -
           in: header

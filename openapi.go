@@ -1823,9 +1823,9 @@ func OpenapiGetV1AccountsAccountIdAgentsAgentUserIdUsage(paramAccountId string, 
 	return resp, decoded, nil
 }
 
-// OpenapiGetV1AccountsAccountIdAnalyticsAgents getV1AccountsAccount_idAnalyticsAgents
-func OpenapiGetV1AccountsAccountIdAnalyticsAgents(paramAccountId string, params *viper.Viper) (*gentleman.Response, interface{}, error) {
-	handlerPath := "getv1accountsaccount-idanalyticsagents"
+// OpenapiGetAIEmployeePerformance Get AI employee performance
+func OpenapiGetAIEmployeePerformance(paramAccountId string, params *viper.Viper) (*gentleman.Response, interface{}, error) {
+	handlerPath := "getaiemployeeperformance"
 	if openapiSubcommand {
 		handlerPath = "openapi " + handlerPath
 	}
@@ -1839,6 +1839,15 @@ func OpenapiGetV1AccountsAccountIdAnalyticsAgents(paramAccountId string, params 
 	url = strings.Replace(url, "{account_id}", paramAccountId, 1)
 
 	req := cli.Client.Get().URL(url)
+
+	paramPeriod := params.GetString("period")
+	if paramPeriod != "" {
+		req = req.AddQuery("period", fmt.Sprintf("%v", paramPeriod))
+	}
+	paramDays := params.GetInt64("days")
+	if paramDays != 0 {
+		req = req.AddQuery("days", fmt.Sprintf("%v", paramDays))
+	}
 
 	cli.HandleBefore(handlerPath, params, req)
 
@@ -1865,9 +1874,9 @@ func OpenapiGetV1AccountsAccountIdAnalyticsAgents(paramAccountId string, params 
 	return resp, decoded, nil
 }
 
-// OpenapiGetV1AccountsAccountIdAnalyticsAgentsAgentUserId getV1AccountsAccount_idAnalyticsAgentsAgent_user_id
-func OpenapiGetV1AccountsAccountIdAnalyticsAgentsAgentUserId(paramAccountId string, paramAgentUserId string, params *viper.Viper) (*gentleman.Response, interface{}, error) {
-	handlerPath := "getv1accountsaccount-idanalyticsagentsagent-user-id"
+// OpenapiGetOneAIEmployeesPerformance Get one AI employee's performance
+func OpenapiGetOneAIEmployeesPerformance(paramAccountId string, paramAgentUserId string, params *viper.Viper) (*gentleman.Response, interface{}, error) {
+	handlerPath := "getoneaiemployeesperformance"
 	if openapiSubcommand {
 		handlerPath = "openapi " + handlerPath
 	}
@@ -1882,6 +1891,15 @@ func OpenapiGetV1AccountsAccountIdAnalyticsAgentsAgentUserId(paramAccountId stri
 	url = strings.Replace(url, "{agent_user_id}", paramAgentUserId, 1)
 
 	req := cli.Client.Get().URL(url)
+
+	paramPeriod := params.GetString("period")
+	if paramPeriod != "" {
+		req = req.AddQuery("period", fmt.Sprintf("%v", paramPeriod))
+	}
+	paramDays := params.GetInt64("days")
+	if paramDays != 0 {
+		req = req.AddQuery("days", fmt.Sprintf("%v", paramDays))
+	}
 
 	cli.HandleBefore(handlerPath, params, req)
 
@@ -2050,6 +2068,57 @@ func OpenapiGetV1AccountsAccountIdAnalyticsHandbooks(paramAccountId string, para
 	url = strings.Replace(url, "{account_id}", paramAccountId, 1)
 
 	req := cli.Client.Get().URL(url)
+
+	cli.HandleBefore(handlerPath, params, req)
+
+	resp, err := req.Do()
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "Request failed")
+	}
+
+	var decoded interface{}
+
+	if resp.StatusCode < 400 {
+		if err := cli.UnmarshalResponse(resp, &decoded); err != nil {
+			return nil, nil, errors.Wrap(err, "Unmarshalling response failed")
+		}
+	} else {
+		return nil, nil, errors.Errorf("HTTP %d: %s", resp.StatusCode, resp.String())
+	}
+
+	after := cli.HandleAfter(handlerPath, params, resp, decoded)
+	if after != nil {
+		decoded = after
+	}
+
+	return resp, decoded, nil
+}
+
+// OpenapiGetAccountModelUsage Get account model usage
+func OpenapiGetAccountModelUsage(paramAccountId string, params *viper.Viper) (*gentleman.Response, interface{}, error) {
+	handlerPath := "getaccountmodelusage"
+	if openapiSubcommand {
+		handlerPath = "openapi " + handlerPath
+	}
+
+	server := viper.GetString("server")
+	if server == "" {
+		server = openapiServers()[viper.GetInt("server-index")]["url"]
+	}
+
+	url := server + "/v1/accounts/{account_id}/analytics/usage"
+	url = strings.Replace(url, "{account_id}", paramAccountId, 1)
+
+	req := cli.Client.Get().URL(url)
+
+	paramPeriod := params.GetString("period")
+	if paramPeriod != "" {
+		req = req.AddQuery("period", fmt.Sprintf("%v", paramPeriod))
+	}
+	paramDays := params.GetInt64("days")
+	if paramDays != 0 {
+		req = req.AddQuery("days", fmt.Sprintf("%v", paramDays))
+	}
 
 	cli.HandleBefore(handlerPath, params, req)
 
@@ -6095,6 +6164,10 @@ func OpenapiListTasks(paramAccountId string, params *viper.Viper) (*gentleman.Re
 	if paramParentTaskId != "" {
 		req = req.AddQuery("parent_task_id", fmt.Sprintf("%v", paramParentTaskId))
 	}
+	paramQ := params.GetString("q")
+	if paramQ != "" {
+		req = req.AddQuery("q", fmt.Sprintf("%v", paramQ))
+	}
 	paramArchived := params.GetBool("archived")
 	if paramArchived != false {
 		req = req.AddQuery("archived", fmt.Sprintf("%v", paramArchived))
@@ -8927,6 +9000,43 @@ func openapiRegister(subcommand bool) {
 			var examples string
 
 			cmd := &cobra.Command{
+				Use:     "analytics-usage account-id",
+				Short:   "Get account model usage",
+				Long:    cli.Markdown("The account's model usage and cost for the period. Admins and owners only.\n\n`platform` is model cost the platform paid, in USD at the model provider's rate before any account-level credit. It measures consumption and is not an invoice. It is split by `by_category`:\n\n- `employee`: work an AI employee directed, including its sub-agents' calls. `by_employee` splits this by employee.\n- `human`: work a person started.\n- `overhead`: calls the platform made for the account itself, such as naming tasks and summarizing pages.\n- `unattributed`: usage that could not be tied to any of the above. It is kept so the totals still add up.\n\n`daily`, `by_model` and `tasks` (`top` + `other` + `without_task`) each add up to `platform`. Any figure's `cost_usd` is null when the group had usage and none of it could be priced; `unpriced_records` and `unpriced_tokens` count what is missing from a total that was partly priced.\n\n`external` is usage billed outside the platform, on the account's own provider key or a vendor subscription. It is reported as records and tokens, with no dollar figure, and is never part of `platform`.\n\n`coverage.complete` is false when the period starts before usage history begins, overlaps a stretch of history that was lost, or reaches past the last update. Read it before presenting a total as final."),
+				Example: examples,
+				Args:    cobra.MinimumNArgs(1),
+				Run: func(cmd *cobra.Command, args []string) {
+
+					_, decoded, err := OpenapiGetAccountModelUsage(args[0], params)
+					if err != nil {
+						log.Fatal().Err(err).Msg("Error calling operation")
+					}
+
+					if err := cli.Formatter.Format(decoded); err != nil {
+						log.Fatal().Err(err).Msg("Formatting failed")
+					}
+
+				},
+			}
+			groupCmd.AddCommand(cmd)
+
+			cmd.Flags().String("period", "", "The period to report:\n\n- `month`: the current calendar month to date (the default).\n- `days`: the last `days` calendar days, today included.\n\nDays are UTC.")
+			cmd.Flags().Int64("days", 0, "Length of a `days` period, from 1 to 180. Defaults to 30. Larger values are clamped to 180.")
+
+			cli.SetCustomFlags(cmd)
+
+			if cmd.Flags().HasFlags() {
+				params.BindPFlags(cmd.Flags())
+			}
+
+		}()
+
+		func() {
+			params := viper.New()
+
+			var examples string
+
+			cmd := &cobra.Command{
 				Use:     "audit account-id",
 				Short:   "List audit events",
 				Long:    cli.Markdown("Returns events from all three streams interleaved by `occurred_at`, newest first. Pass `stream=` to filter to one or more streams."),
@@ -9673,13 +9783,13 @@ func openapiRegister(subcommand bool) {
 
 			cmd := &cobra.Command{
 				Use:     "analytic-list account-id",
-				Short:   "getV1AccountsAccount_idAnalyticsAgents",
-				Long:    cli.Markdown(""),
+				Short:   "Get AI employee performance",
+				Long:    cli.Markdown("One row per AI employee in the account, offboarded employees included, with the tasks it ran, its sessions and tool turns, and its model cost for the period.\n\n`model_cost` is the employee's platform-paid model cost, including calls its sub-agents made on its behalf. Its `cost_usd` is null when the employee used models in the period and none of that usage could be priced. `spend_usd` is the priced model cost plus recorded voice call cost, rounded to cents; it counts unpriced usage as nothing, so read `model_cost` to tell whether it is complete."),
 				Example: examples,
 				Args:    cobra.MinimumNArgs(1),
 				Run: func(cmd *cobra.Command, args []string) {
 
-					_, decoded, err := OpenapiGetV1AccountsAccountIdAnalyticsAgents(args[0], params)
+					_, decoded, err := OpenapiGetAIEmployeePerformance(args[0], params)
 					if err != nil {
 						log.Fatal().Err(err).Msg("Error calling operation")
 					}
@@ -9691,6 +9801,9 @@ func openapiRegister(subcommand bool) {
 				},
 			}
 			groupCmd.AddCommand(cmd)
+
+			cmd.Flags().String("period", "", "The period to report:\n\n- `days`: the last `days` calendar days, today included (the default).\n- `month`: the current calendar month to date.\n\nDays are UTC.")
+			cmd.Flags().Int64("days", 0, "Length of a `days` period, from 1 to 180. Defaults to 30. Larger values are clamped to 180.")
 
 			cli.SetCustomFlags(cmd)
 
@@ -9707,13 +9820,13 @@ func openapiRegister(subcommand bool) {
 
 			cmd := &cobra.Command{
 				Use:     "analytic-get account-id agent-user-id",
-				Short:   "getV1AccountsAccount_idAnalyticsAgentsAgent_user_id",
-				Long:    cli.Markdown(""),
+				Short:   "Get one AI employee's performance",
+				Long:    cli.Markdown("The employee's row from the performance list, a daily series of tasks created and cost, and `model_usage`: its platform-paid model cost by day and by model, the tasks driving that cost, usage billed outside the platform, and how complete the figures are.\n\nModel cost includes calls the employee's sub-agents made on its behalf, and an offboarded employee's history stays readable."),
 				Example: examples,
 				Args:    cobra.MinimumNArgs(2),
 				Run: func(cmd *cobra.Command, args []string) {
 
-					_, decoded, err := OpenapiGetV1AccountsAccountIdAnalyticsAgentsAgentUserId(args[0], args[1], params)
+					_, decoded, err := OpenapiGetOneAIEmployeesPerformance(args[0], args[1], params)
 					if err != nil {
 						log.Fatal().Err(err).Msg("Error calling operation")
 					}
@@ -9725,6 +9838,9 @@ func openapiRegister(subcommand bool) {
 				},
 			}
 			groupCmd.AddCommand(cmd)
+
+			cmd.Flags().String("period", "", "The period to report:\n\n- `days`: the last `days` calendar days, today included (the default).\n- `month`: the current calendar month to date.\n\nDays are UTC.")
+			cmd.Flags().Int64("days", 0, "Length of a `days` period, from 1 to 180. Defaults to 30. Larger values are clamped to 180.")
 
 			cli.SetCustomFlags(cmd)
 
@@ -11200,7 +11316,7 @@ func openapiRegister(subcommand bool) {
 			cmd := &cobra.Command{
 				Use:     "resolve account-id credentialrequest-id",
 				Short:   "Resolve a credential request",
-				Long:    cli.Markdown("Marks the request answered by a credential you have already created and granted to the agent that asked. Requires edit access to the computer (environment) the request came from; the request's `can_resolve` says whether you have it. The agent is told the credential's name in the conversation that asked for it, never the value.\n\nCreate the credential under the requested name and grant it to the requesting agent first; this call checks both and writes neither. Safe to repeat with the same credential: the request is resolved once and the agent is told once. A request expires 24 hours after the agent asks and cannot be resolved after that.\n## Request Schema (application/json)\n\nproperties:\n  credential_id:\n    description: The credential that answers the request. It must carry the requested\n      name and already be granted to the requesting agent. Resolving again with the\n      same credential returns the resolved request; a different credential is refused.\n      Must be a valid UUID.\n    example: No-example\n    type: string\nrequired:\n- credential_id\ntype: object\n"),
+				Long:    cli.Markdown("Marks the request answered by a credential you have already created and granted to the agent that asked. Requires edit access to the computer (environment) the request came from; the request's `can_resolve` says whether you have it. The agent is told the credential's name in the conversation that asked for it, never the value.\n\nCreate the credential under the requested name and grant it to the requesting agent first; this call checks both and writes neither. For a request with `replacement` true, update the value of `replaces_credential_id` instead, then resolve with that credential: the call checks the value was written after the agent asked, and the credential keeps its id and grants. Safe to repeat with the same credential: the request is resolved once and the agent is told once. A request expires 24 hours after the agent asks and cannot be resolved after that.\n## Request Schema (application/json)\n\nproperties:\n  credential_id:\n    description: The credential that answers the request. It must carry the requested\n      name and already be granted to the requesting agent. Resolving again with the\n      same credential returns the resolved request; a different credential is refused.\n      Must be a valid UUID.\n    example: No-example\n    type: string\nrequired:\n- credential_id\ntype: object\n"),
 				Example: examples,
 				Args:    cobra.MinimumNArgs(2),
 				Run: func(cmd *cobra.Command, args []string) {
@@ -12172,7 +12288,7 @@ func openapiRegister(subcommand bool) {
 			cmd := &cobra.Command{
 				Use:     "create account-id environment-id",
 				Short:   "Regenerate an environment's snapshot",
-				Long:    cli.Markdown("Triggers a fresh snapshot-generation cycle. A VM boots from the environment's manifest, runs setup to completion, captures the result, and the new snapshot is promoted to the environment's `base_snapshot_id`. Returns 202 immediately; the `snapshot_id` is null while generation is bootstrapping. Poll `GET /environments/{env}` and wait for `base_snapshot_status` to flip to `ready` and `base_snapshot_id` to populate, then fetch the snapshot at `GET /environments/{env}/snapshots/{id}`. If `base_snapshot_status` flips to `failed`, read `GET /environments/{env}/logs`: the Wallfacer-authored `provisioning` source there is the authoritative account of what failed, at which stage, and whether to retry or fix your manifest, and it covers infra-stage failures (a pre-boot rejection that leaves no snapshot row at all, or a capture timeout) that produce no per-step logs. A failed setup step additionally appears in `GET /environments/{env}/snapshots` with `status: failed` and a `description`, and its stdout/stderr is at `GET /environments/{env}/snapshots/{id}/logs`."),
+				Long:    cli.Markdown("Triggers a fresh snapshot-generation cycle. A VM boots from the environment's manifest, runs setup to completion, captures the result, and the new snapshot is promoted to the environment's `base_snapshot_id`. Returns 202 immediately; the `snapshot_id` is null while generation is bootstrapping. Poll `GET /environments/{env}` and wait for `base_snapshot_status` to flip to `ready` and `base_snapshot_id` to populate, then fetch the snapshot at `GET /environments/{env}/snapshots/{id}`. A failed attempt sets `base_snapshot.error`. An environment that had no snapshot flips to `failed`; one that already had a snapshot returns to `ready` on that same `base_snapshot_id`, so it keeps booting while you fix the cause, and `base_snapshot.error` is the account of what failed. On `failed`, read `GET /environments/{env}/logs`: the Wallfacer-authored `provisioning` source there is the authoritative account of what failed, at which stage, and whether to retry or fix your manifest, and it covers infra-stage failures (a pre-boot rejection that leaves no snapshot row at all, or a capture timeout) that produce no per-step logs. A failed setup step additionally appears in `GET /environments/{env}/snapshots` with `status: failed` and a `description`, and its stdout/stderr is at `GET /environments/{env}/snapshots/{id}/logs`."),
 				Example: examples,
 				Args:    cobra.MinimumNArgs(2),
 				Run: func(cmd *cobra.Command, args []string) {
@@ -12833,7 +12949,7 @@ func openapiRegister(subcommand bool) {
 			cmd := &cobra.Command{
 				Use:     "list account-id",
 				Short:   "List tasks",
-				Long:    cli.Markdown("Returns tasks for the account. Without filters, ordered by most recent activity first (the latest of the task's own `updated_at` and any of its sessions' `last_activity_at`). The filters turn this list into the inbox: `needs_me=true` is the decision queue (tasks waiting on you), `awaiting_human=true` is every task waiting on a human, and the owner/status filters slice the rest."),
+				Long:    cli.Markdown("Returns tasks for the account. Without filters, ordered by most recent activity first (the latest of the task's own `updated_at` and any of its sessions' `last_activity_at`). The filters turn this list into the inbox: `needs_me=true` is the decision queue (tasks waiting on you), `awaiting_human=true` is every task waiting on a human, and the owner/status filters slice the rest.\n## Request Schema (application/json)\n\nproperties:\n  q:\n    description: Must not be greater than 255 characters.\n    example: b\n    nullable: true\n    type: string\ntype: object\n"),
 				Example: examples,
 				Args:    cobra.MinimumNArgs(1),
 				Run: func(cmd *cobra.Command, args []string) {
@@ -12861,6 +12977,7 @@ func openapiRegister(subcommand bool) {
 			cmd.Flags().String("pipeline-id", "", "Filter to tasks running against this pipeline.")
 			cmd.Flags().String("environment-id", "", "Filter to tasks whose steps run against this environment.")
 			cmd.Flags().String("parent-task-id", "", "Filter to subtasks of this parent task.")
+			cmd.Flags().String("q", "", "Text search over each task's title, slug and prompt, matched the same way as global search: full-text, plus a case-insensitive substring match so short and prefix queries still return rows. Composes with the other filters. When set, results are ordered by relevance, then by id, instead of by recent activity. Up to 255 characters.")
 			cmd.Flags().String("archived", "", "Set to true to list soft-deleted tasks instead.")
 			cmd.Flags().Int64("per-page", 0, "Results per page (max 100).")
 
