@@ -39,7 +39,18 @@ sub examples {
             my $parent = join '/', map { $_->[1] } @stack;
             my $counter = $parent . '@' . $indent;
             my $index = $next_index{$counter}++;
-            push @stack, [$indent, "[$index]"];
+            my $item_key = "[$index]";
+            if ($parent =~ m{(?:^|/)parameters$}) {
+                my $child_indent = $indent + 2;
+                for (my $j = $i + 1; $j < @$lines; $j++) {
+                    last if $lines->[$j] =~ /^([ ]*)\S/ && length($1) <= $indent;
+                    if ($lines->[$j] =~ /^ {$child_indent}name:\s*(\S.*?)\s*$/) {
+                        $item_key = "[name=$1]";
+                        last;
+                    }
+                }
+            }
+            push @stack, [$indent, $item_key];
             push @stack, [$indent + 2, $1] if $item =~ /^([^:]+):(?:\s|$)/;
         } elsif ($line =~ /^([ ]*)([^:#][^:]*):(?:\s|$)/) {
             my ($indent, $key) = (length($1), $2);
