@@ -20,6 +20,20 @@ wallfacer tasks delete <task-id>
 
 If `prompt` is provided on create, a session starts immediately and the prompt becomes the first message. Omit `prompt` to create the task without starting a session.
 
+### Finding a task by title
+
+```bash
+wallfacer tasks list --q "login redirect" -o json
+wallfacer tasks list --q login --owner-user-id <user-id> --status done --per-page 20
+wallfacer tasks list --q login --owner-user-id <user-id> --status done --per-page 20 --cursor <meta.next_cursor>
+```
+
+`--q` searches each task's title, slug and prompt the way `wallfacer search` does: full-text, plus a case-insensitive substring match, so a short or partial word still finds rows. It narrows the listing server-side and combines with every other filter (`--status`, `--owner-user-id`, `--created-by`, `--needs-me`, ...), never widening what you can see. With `--q` set, rows come back by relevance, then id, instead of by recent activity.
+
+Spell it with two dashes. `-q` is the global `--query` JMESPath projection, so `tasks list -q login` evaluates `login` as a JMESPath expression and searches nothing.
+
+The listing is cursor-paginated (25 per page, `--per-page` up to 100). When `meta.next_cursor` is non-null, pass it back as `--cursor` with the same `--q` and filters to fetch the next page.
+
 Optional fields: `environment_id` (default env for sessions), `idle_timeout_seconds` (60-900, default 300), `attachments` (array of MCP-aligned attachment objects), `created_by` (user ID).
 
 ## Sessions
@@ -51,6 +65,20 @@ Message list is cursor-paginated (`--per-page`, max 100). Returns all transcript
 `--view` controls how much of each `payload` comes back. `full` is the default and returns the stored transcript entry untouched. `trimmed` returns the same entry with its oversize blocks replaced in place by `{"elided": true, "byte_size": N}` markers: image data always, and a `tool_use` input or `tool_result` content over 4 KB. Reach for it when you only need the shape of a long or image-heavy session, where a listing that would run to megabytes comes back in kilobytes. Any other value is a 422, not a fallback to `full`.
 
 `messages get` is never trimmed, whatever `--view` says. Fetch the one message by id to get an elided block back.
+
+### Reading a session as text
+
+```bash
+wallfacer messages list <task-id> <session-id> -o text --per-page 100
+wallfacer messages list <task-id> <session-id> -o text --tools --markers
+wallfacer messages get <task-id> <session-id> <message-id> -o text
+```
+
+`-o text` prints the page as a conversation: each person's and agent's turns in the order the API returns them, under a `### <name> · <role> · <time> · #<message-id>` header. A user turn also names its channel (`slack`, `app`, ...). The name comes from the row's `actor`, and rows the platform wrote are attributed to `Platform`.
+
+Tool calls and results, and marker rows (`system`, `result`, `ai-title`, `session.complete`, ...), are left out unless `--tools` or `--markers` is passed. A `Not shown:` line counts what was left out. Thinking blocks are never shown: a page counts a turn that holds only thinking, and `messages get` prints its header with a placeholder. The text view fetches `view=trimmed` unless `--view` is given, so an oversize tool input or result prints as `[elided: N bytes; ...]`; `messages get <message-id> -o text` prints it whole. When there is another page, `Next:` gives the full command for it, cursor included.
+
+`--tools` and `--markers` only shape the text view, and are refused without `-o text`. JSON stays the default, so scripts that parse `messages list` are unaffected.
 
 ## Attachments
 

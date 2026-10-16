@@ -30,13 +30,15 @@ const (
 // configureOutputFormat moves the global -o default from json to unset, so a
 // command can tell "the caller asked for JSON" from "the caller asked for
 // nothing". The generated formatter treats anything other than yaml as JSON,
-// so generated commands print exactly what they did before.
+// so generated commands print exactly what they did before. The few that also
+// have a text view print it only when -o text asks; the rest refuse it.
 func configureOutputFormat() {
 	viper.SetDefault("output-format", "")
 	flag := cli.Root.PersistentFlags().Lookup("output-format")
 	flag.DefValue = ""
 	_ = flag.Value.Set("")
-	flag.Usage = "Output format [text, json, yaml]. Handbook commands print text unless asked; API commands print JSON. --query implies JSON"
+	flag.Usage = "Output format [text, json, yaml]. Handbook commands print text unless asked; API commands print JSON, and only messages list and messages get also print text. --query implies JSON"
+	cli.PreRun = requireTextView
 }
 
 // outputFormat resolves the format a text-capable command prints in.

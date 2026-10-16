@@ -213,7 +213,8 @@ func main() {
 	}
 
 	registerAuthCommands(baseURL, token)
-	openapiRegister(false)
+	registerGenerated(cli.Root, func() { openapiRegister(false) })
+	registerTaskListPaging(cli.Root)
 	registerExecCommand(accountID)
 	registerUpCommand(accountID)
 	registerHandbookCommands(accountID)
@@ -224,6 +225,7 @@ func main() {
 	if accountID != "" {
 		injectAccountID(cli.Root, accountID)
 	}
+	registerSessionTextViews(cli.Root, accountID)
 
 	configureOutputFormat()
 	configureRootHelp(cli.Root)
