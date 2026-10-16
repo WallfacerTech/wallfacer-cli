@@ -2038,7 +2038,7 @@ components:
             - failed
         ready:
           type: boolean
-          description: 'Whether the VM has completed boot and the in-VM agent is accepting requests. Poll this after `POST /vms`. It flips to `true` once the agent reports ready. Once the VM has been destroyed it stays `false`.'
+          description: 'Whether the VM has completed boot and the in-VM agent is accepting requests. Poll this after `POST /vms`. It flips to `true` once the agent reports ready, and back to `false` if the VM later fails, stops, or is destroyed. A VM whose command path stopped answering is reported `failed` with `ready: false` and the reason in `error`.'
         ready_at:
           type: string
           nullable: true
@@ -3971,6 +3971,44 @@ paths:
                               items:
                                 type: string
                   -
+                    description: 'A manifest source names a branch its repo does not have. An empty repo accepts any branch.'
+                    type: object
+                    example:
+                      errors:
+                        -
+                          message: 'This computer has too many secrets to copy.'
+                          code: too_many_secrets
+                          limit: 50
+                    properties:
+                      errors:
+                        type: array
+                        example:
+                          -
+                            message: 'This computer has too many secrets to copy.'
+                            code: too_many_secrets
+                            limit: 50
+                        items:
+                          type: object
+                          properties:
+                            message:
+                              type: string
+                              example: 'This computer has too many secrets to copy.'
+                            code:
+                              type: string
+                              example: too_many_secrets
+                            repo:
+                              type: string
+                              example: acme/web
+                            branch:
+                              type: string
+                              example: main
+                            branches:
+                              type: array
+                              example:
+                                - develop
+                              items:
+                                type: string
+                  -
                     description: 'The computer being copied holds more secrets than one copy will carry.'
                     type: object
                     example:
@@ -4434,6 +4472,44 @@ paths:
                               type: array
                               example:
                                 - WALLFACER_PORT_URL_WEB
+                              items:
+                                type: string
+                  -
+                    description: 'A manifest source names a branch its repo does not have. An empty repo accepts any branch.'
+                    type: object
+                    example:
+                      errors:
+                        -
+                          message: 'The mcp_servers field serializes to 82260 bytes for HARNESS_MCP_JSON once its ${secrets.NAME} references are substituted, which must not exceed 32768 bytes. Use fewer references to large secrets, or remove servers.'
+                          code: mcp_servers_too_large_after_secrets
+                          field: mcp_servers
+                    properties:
+                      errors:
+                        type: array
+                        example:
+                          -
+                            message: 'The mcp_servers field serializes to 82260 bytes for HARNESS_MCP_JSON once its ${secrets.NAME} references are substituted, which must not exceed 32768 bytes. Use fewer references to large secrets, or remove servers.'
+                            code: mcp_servers_too_large_after_secrets
+                            field: mcp_servers
+                        items:
+                          type: object
+                          properties:
+                            message:
+                              type: string
+                              example: 'The mcp_servers field serializes to 82260 bytes for HARNESS_MCP_JSON once its ${secrets.NAME} references are substituted, which must not exceed 32768 bytes. Use fewer references to large secrets, or remove servers.'
+                            code:
+                              type: string
+                              example: mcp_servers_too_large_after_secrets
+                            repo:
+                              type: string
+                              example: acme/web
+                            branch:
+                              type: string
+                              example: main
+                            branches:
+                              type: array
+                              example:
+                                - develop
                               items:
                                 type: string
                   -
@@ -24926,52 +25002,99 @@ paths:
                           type: string
                           example: not_found
         422:
-          description: 'The environment manifest references one or more secrets that have not been configured. Generation is not started.'
+          description: ''
           content:
             application/json:
               schema:
-                type: object
-                example:
-                  errors:
-                    -
-                      message: 'Manifest references secrets that are not configured on this environment.'
-                      code: missing_secrets
-                      missing_secrets:
-                        - DB_PASSWORD
-                      field_paths:
-                        - 'env.DATABASE_URL: ${secrets.DB_PASSWORD}'
-                properties:
-                  errors:
-                    type: array
+                oneOf:
+                  -
+                    description: 'The environment manifest references one or more secrets that have not been configured. Generation is not started.'
+                    type: object
                     example:
-                      -
-                        message: 'Manifest references secrets that are not configured on this environment.'
-                        code: missing_secrets
-                        missing_secrets:
-                          - DB_PASSWORD
-                        field_paths:
-                          - 'env.DATABASE_URL: ${secrets.DB_PASSWORD}'
-                    items:
-                      type: object
-                      properties:
-                        message:
-                          type: string
-                          example: 'Manifest references secrets that are not configured on this environment.'
-                        code:
-                          type: string
-                          example: missing_secrets
-                        missing_secrets:
-                          type: array
-                          example:
+                      errors:
+                        -
+                          message: 'Manifest references secrets that are not configured on this environment.'
+                          code: missing_secrets
+                          missing_secrets:
                             - DB_PASSWORD
-                          items:
-                            type: string
-                        field_paths:
-                          type: array
-                          example:
+                          field_paths:
                             - 'env.DATABASE_URL: ${secrets.DB_PASSWORD}'
-                          items:
-                            type: string
+                    properties:
+                      errors:
+                        type: array
+                        example:
+                          -
+                            message: 'Manifest references secrets that are not configured on this environment.'
+                            code: missing_secrets
+                            missing_secrets:
+                              - DB_PASSWORD
+                            field_paths:
+                              - 'env.DATABASE_URL: ${secrets.DB_PASSWORD}'
+                        items:
+                          type: object
+                          properties:
+                            message:
+                              type: string
+                              example: 'Manifest references secrets that are not configured on this environment.'
+                            code:
+                              type: string
+                              example: missing_secrets
+                            missing_secrets:
+                              type: array
+                              example:
+                                - DB_PASSWORD
+                              items:
+                                type: string
+                            field_paths:
+                              type: array
+                              example:
+                                - 'env.DATABASE_URL: ${secrets.DB_PASSWORD}'
+                              items:
+                                type: string
+                  -
+                    description: "A manifest source names a branch its repo no longer has and that a person chose, so it is not replaced with the repo's default. The computer's snapshot is marked failed with the same message."
+                    type: object
+                    example:
+                      errors:
+                        -
+                          message: "Branch 'main' does not exist in acme/web. Its branches are: develop. Change the branch of this source in the computer's manifest."
+                          code: missing_branch
+                          repo: acme/web
+                          branch: main
+                          branches:
+                            - develop
+                    properties:
+                      errors:
+                        type: array
+                        example:
+                          -
+                            message: "Branch 'main' does not exist in acme/web. Its branches are: develop. Change the branch of this source in the computer's manifest."
+                            code: missing_branch
+                            repo: acme/web
+                            branch: main
+                            branches:
+                              - develop
+                        items:
+                          type: object
+                          properties:
+                            message:
+                              type: string
+                              example: "Branch 'main' does not exist in acme/web. Its branches are: develop. Change the branch of this source in the computer's manifest."
+                            code:
+                              type: string
+                              example: missing_branch
+                            repo:
+                              type: string
+                              example: acme/web
+                            branch:
+                              type: string
+                              example: main
+                            branches:
+                              type: array
+                              example:
+                                - develop
+                              items:
+                                type: string
       tags:
         - Snapshots
     get:
