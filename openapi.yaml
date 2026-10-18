@@ -2030,7 +2030,7 @@ components:
           description: 'Account that owns this VM.'
         status:
           type: string
-          description: "Lifecycle status:\n\n- `creating`: provisioning is in flight.\n- `running`: the VM is booted and reachable.\n- `stopped`: the VM exists but is not running.\n- `failed`: the boot pipeline aborted. Check `error` for the reason.\n\nNote that `destroyed_at` is a separate signal; it becomes non-null once a VM has been torn down, regardless of the status at teardown."
+          description: "Lifecycle status:\n\n- `creating`: provisioning is in flight.\n- `running`: the VM is booted and reachable.\n- `stopped`: the VM exists but is not running.\n- `failed`: the VM failed during boot or runtime. Check `error` for the reason.\n\nNote that `destroyed_at` is a separate signal; it becomes non-null once a VM has been torn down, regardless of the status at teardown."
           enum:
             - creating
             - running
@@ -2042,7 +2042,7 @@ components:
         ready_at:
           type: string
           nullable: true
-          description: 'ISO 8601 timestamp of when `ready` flipped to `true`. Null while still booting.'
+          description: 'ISO 8601 timestamp of when the VM first became ready. It remains available if the VM later fails, stops, or is destroyed. Null if the VM has never been ready.'
         phase:
           type: string
           nullable: true
@@ -2050,7 +2050,7 @@ components:
         error:
           type: string
           nullable: true
-          description: 'Human-readable error message when the VM failed to boot. Null on success and while still booting.'
+          description: 'Human-readable reason when the VM fails during boot or after it was ready. A failure may contain a fallback reason when no specific reason was reported. Null when no failure reason is available.'
         port_mappings:
           type: array
           items:
@@ -7329,7 +7329,7 @@ paths:
                   example: 600
                 status:
                   type: string
-                  description: "Move the task to a new lifecycle status:\n\n- `paused`: stop the task where it is; no further steps run. Abort any in-flight turn first if you want it to stop immediately.\n- `active`: resume a paused task, re-running the interrupted step.\n- `done`: finish the task by hand, for when its goal was reached outside the platform. Counts as a real completion.\n- `cancelled`: close the task because it is no longer needed. Ends the task without counting as a completion.\n\nFinishing a task with `done` or `cancelled` cancels whatever step it was on and ends any session still running against it. Only the task owner or an account admin can do it, and only while the task is still `active` or `paused`; a task that has already finished returns 409."
+                  description: "Move the task to a new lifecycle status:\n\n- `paused`: stop the task where it is; no further steps run. Abort any in-flight turn first if you want it to stop immediately. Pausing releases the sandbox VM unless a running session still uses it. Resuming after release boots a fresh one.\n- `active`: resume a paused task, re-running the interrupted step.\n- `done`: finish the task by hand, for when its goal was reached outside the platform. Counts as a real completion.\n- `cancelled`: close the task because it is no longer needed. Ends the task without counting as a completion.\n\nFinishing a task with `done` or `cancelled` cancels whatever step it was on and ends any session still running against it. Only the task owner or an account admin can do it, and only while the task is still `active` or `paused`; a task that has already finished returns 409."
                   example: done
                   enum:
                     - active
