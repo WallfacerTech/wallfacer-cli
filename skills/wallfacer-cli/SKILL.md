@@ -71,7 +71,7 @@ All commands are flat top-level groups (not nested). Write operations take JSON 
 | environments | `list`, `get <environment-id>` | `create`, `update <environment-id>`, `delete <environment-id>` |
 | snapshots | `list <environment-id>`, `get <environment-id> <snapshot-id>`, `logs <environment-id> <snapshot-id>`, `log <environment-id> <snapshot-id> <source>` | `create <environment-id>`, `delete <environment-id> <snapshot-id>` |
 | vms | `list`, `get <vm-id>`, `logs <vm-id>`, `log <vm-id> <source>`, `simulator <vm-id>`, `simulator-screenshot <vm-id>`, `simulator-logs <vm-id>`, `simulator-builds <vm-id>` | `create`, `delete <vm-id>`, `commands <vm-id>` |
-| tasks | `list`, `get <task-id>` | `create`, `update <task-id>`, `delete <task-id>` |
+| tasks | `list [--q <words>]`, `get <task-id>` | `create`, `update <task-id>`, `delete <task-id>` |
 | (top level, no group) | — | `chat <agent> [prompt]`, `run <playbook>` — the two entry points that create a task; they are not subcommands of `tasks` |
 | attachments | `list <task-id>`, `contents <task-id> <attachment-id>` | `create <task-id>`, `delete <task-id> <attachment-id>` |
 | sessions | `list <task-id>`, `get <task-id> <session-id>`, `logs <task-id> <session-id>`, `log <task-id> <session-id> <source>` | `create <task-id>`, `update <task-id> <session-id>` |
@@ -190,9 +190,10 @@ Use `--output-format` or `-o` (not `--output`). Values are `text`, `json`, and `
 wallfacer handbook read "Engineering/Build"            # text (the handbook default)
 wallfacer handbook read "Engineering/Build" -o json    # the structured payload
 wallfacer environments get <environment-id>            # JSON (API commands only print JSON or YAML)
+wallfacer messages list <task-id> <session-id> -o text # a session as a conversation
 ```
 
-`handbook` commands default to text; API commands default to JSON. `--query` always produces structured output, so `-q 'data.id' --raw` works the same on every command.
+`handbook` commands default to text; API commands default to JSON. `messages list` and `messages get` are the API commands with a text view, printed only when `-o text` asks for it; every other API command refuses `-o text` with an error rather than printing JSON. `--query` always produces structured output, so `-q 'data.id' --raw` works the same on every command.
 
 ## Destructive ops
 
