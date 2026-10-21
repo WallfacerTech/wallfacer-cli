@@ -2572,7 +2572,7 @@ components:
           description: "Device model. Defaults to the platform's configured device when omitted.\nA selected device is preserved when the environment is saved and booted."
         runtime:
           type: string
-          description: "iOS runtime version, or latest to use the runtime in the macOS base image\nat VM boot. Defaults to latest when omitted. A selected version is preserved."
+          description: "iOS runtime version, or latest for the newest iOS runtime installed in\nthe VM. Defaults to latest when omitted. A selected version is preserved."
         bundle_id:
           type: string
           description: "App bundle identifier. Used to verify the app launched in the simulator\nafter a build or run. Exposed to scripts as $IOS_BUNDLE_ID."
