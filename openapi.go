@@ -1300,6 +1300,105 @@ func OpenapiUpdateOrCloseAnObjective(paramAccountId string, paramAgentUserId str
 	return resp, decoded, nil
 }
 
+// OpenapiListQuietThreadReplies List quiet thread replies
+func OpenapiListQuietThreadReplies(paramAccountId string, paramAgentUserId string, params *viper.Viper) (*gentleman.Response, map[string]interface{}, error) {
+	handlerPath := "listquietthreadreplies"
+	if openapiSubcommand {
+		handlerPath = "openapi " + handlerPath
+	}
+
+	server := viper.GetString("server")
+	if server == "" {
+		server = openapiServers()[viper.GetInt("server-index")]["url"]
+	}
+
+	url := server + "/v1/accounts/{account_id}/agents/{agent_user_id}/quiet-replies"
+	url = strings.Replace(url, "{account_id}", paramAccountId, 1)
+	url = strings.Replace(url, "{agent_user_id}", paramAgentUserId, 1)
+
+	req := cli.Client.Get().URL(url)
+
+	paramNearMisses := params.GetBool("near-misses")
+	if paramNearMisses != false {
+		req = req.AddQuery("near_misses", fmt.Sprintf("%v", paramNearMisses))
+	}
+	paramPerPage := params.GetInt64("per-page")
+	if paramPerPage != 0 {
+		req = req.AddQuery("per_page", fmt.Sprintf("%v", paramPerPage))
+	}
+
+	cli.HandleBefore(handlerPath, params, req)
+
+	resp, err := req.Do()
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "Request failed")
+	}
+
+	var decoded map[string]interface{}
+
+	if resp.StatusCode < 400 {
+		if err := cli.UnmarshalResponse(resp, &decoded); err != nil {
+			return nil, nil, errors.Wrap(err, "Unmarshalling response failed")
+		}
+	} else {
+		return nil, nil, errors.Errorf("HTTP %d: %s", resp.StatusCode, resp.String())
+	}
+
+	after := cli.HandleAfter(handlerPath, params, resp, decoded)
+	if after != nil {
+		decoded = after.(map[string]interface{})
+	}
+
+	return resp, decoded, nil
+}
+
+// OpenapiReplayQuietThreadReplies Replay quiet thread replies
+func OpenapiReplayQuietThreadReplies(paramAccountId string, paramAgentUserId string, params *viper.Viper, body string) (*gentleman.Response, map[string]interface{}, error) {
+	handlerPath := "replayquietthreadreplies"
+	if openapiSubcommand {
+		handlerPath = "openapi " + handlerPath
+	}
+
+	server := viper.GetString("server")
+	if server == "" {
+		server = openapiServers()[viper.GetInt("server-index")]["url"]
+	}
+
+	url := server + "/v1/accounts/{account_id}/agents/{agent_user_id}/replays"
+	url = strings.Replace(url, "{account_id}", paramAccountId, 1)
+	url = strings.Replace(url, "{agent_user_id}", paramAgentUserId, 1)
+
+	req := cli.Client.Post().URL(url)
+
+	if body != "" {
+		req = req.AddHeader("Content-Type", "application/json").BodyString(body)
+	}
+
+	cli.HandleBefore(handlerPath, params, req)
+
+	resp, err := req.Do()
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "Request failed")
+	}
+
+	var decoded map[string]interface{}
+
+	if resp.StatusCode < 400 {
+		if err := cli.UnmarshalResponse(resp, &decoded); err != nil {
+			return nil, nil, errors.Wrap(err, "Unmarshalling response failed")
+		}
+	} else {
+		return nil, nil, errors.Errorf("HTTP %d: %s", resp.StatusCode, resp.String())
+	}
+
+	after := cli.HandleAfter(handlerPath, params, resp, decoded)
+	if after != nil {
+		decoded = after.(map[string]interface{})
+	}
+
+	return resp, decoded, nil
+}
+
 // OpenapiListAnAgentsReveries List an agent's reveries
 func OpenapiListAnAgentsReveries(paramAccountId string, paramAgentUserId string, params *viper.Viper) (*gentleman.Response, map[string]interface{}, error) {
 	handlerPath := "listanagentsreveries"
@@ -9640,7 +9739,7 @@ func openapiRegister(subcommand bool) {
 			cmd := &cobra.Command{
 				Use:     "update account-id agent-user-id",
 				Short:   "Update an agent",
-				Long:    cli.Markdown("Updates an agent's handle, title, role, environment, model, reasoning effort, mail policy, or paused state. Changing the handle, environment, model, effort, role, mail policy, or paused state is recorded in the audit log.\n\nAdmin-only, with one exception: `paused` may be sent by any member of the account, and a request carrying nothing but `paused` is accepted from any member. Sending `paused` alongside any other field makes the request admin-only like every other update. Offboarding (DELETE) stays admin-only.\n\n`paused` is the reversible kill switch. Pausing stops the agent: it starts no new work from any entry point, and the sessions it is currently running are aborted, with their harness VMs destroyed and their tokens rotated. Those turns do not come back: their tasks and playbook steps end terminal, and resuming restores only the agent's ability to take new work. Unlike offboarding, pausing keeps the agent's Google and Slack accounts, so resuming needs no reprovisioning. Idempotent in both directions.\n\n`mail_policy` is a value object and is replaced wholesale: a request that sends it must send all of its fields, and one that leaves it out changes none of them. Every other field is patched partially, as usual.\n\nChanging the handle renames the agent on every system it holds an account on, and does not wait for them: the response comes back as soon as the change is accepted, and each account reports its own outcome under the agent's identities. Google keeps the old email address working as an alias, so mail, shared documents and calendar invitations survive the rename, and the new address can take up to ten minutes to appear everywhere.\n\nIf one system takes the new name and another does not, the one that did not carries the reason in its `error`, and its `details.handle_synced` is false. Send the same handle again to retry it.\n## Request Schema (application/json)\n\nproperties:\n  anthropic_api_key:\n    description: 'Anthropic credential the agent authenticates Claude calls with.\n      Write-only: stored encrypted and never returned (the response reports `anthropic_connected`\n      and `anthropic_credential_kind`). When `anthropic_credential_kind` is `subscription`\n      this is the OAuth token from `claude setup-token`; otherwise a metered API key.\n      Send null to clear it.'\n    example: null\n    nullable: true\n    type: string\n  anthropic_credential_kind:\n    description: 'Type of the Anthropic credential: `api_key` (default) or `subscription`\n      (Claude Pro/Max). Defaults to `api_key` when a key is set without one.'\n    enum:\n    - api_key\n    - subscription\n    example: api_key\n    nullable: true\n    type: string\n  display_name:\n    description: Name shown wherever this agent acts. Must not be greater than 120\n      characters.\n    example: Support Engineer\n    type: string\n  effort:\n    description: Reasoning effort the agent works at, in its harness's own vocabulary\n      (`low`/`medium`/`high` for claude; `minimal`/`low`/`medium`/`high`/`xhigh` for\n      codex). Call `GET /models` for each harness's options and default. A value the\n      agent's harness does not offer falls back to that harness's default when a session\n      starts. Send null to clear it. Must not be greater than 40 characters.\n    example: high\n    nullable: true\n    type: string\n  environment_id:\n    description: Id of the single environment the agent works in. Send null to clear\n      it. Must be a valid UUID.\n    example: null\n    nullable: true\n    type: string\n  handle:\n    description: 'The name the agent answers to everywhere: the part before the @\n      in its email address, and the name people type after the @ in Slack. Lowercase\n      letters, numbers, periods, hyphens and underscores, 2 to 64 characters, starting\n      and ending with a letter or a number. It has to be free in this account and\n      in your Google domain, and it is never reused once an agent has had it. Changing\n      it renames the agent on every system it holds an account on. The old email address\n      keeps delivering as an alias, so mail, shared documents and calendar invitations\n      survive, and the change can take up to ten minutes to appear everywhere. Send\n      the handle the agent already has to retry a rename a system did not accept the\n      first time.'\n    example: saul\n    type: string\n  mail_policy:\n    description: 'The agent''s email policy. Replaced wholesale: send all four fields,\n      or leave the object out to change none of them. Governs which mail becomes a\n      message; mail it refuses is still recorded as an event you can trigger a playbook\n      on.'\n    example: null\n    properties:\n      allowed_senders:\n        description: \"\"\n        example:\n        - architecto\n        items:\n          type: string\n        type: array\n      directable_by:\n        description: 'Who may direct this agent by mail: `members` (verified members\n          of the account, and nobody this agent adds) or `members_and_allowed` (also\n          the verified senders in `allowed_senders`).'\n        enum:\n        - members\n        - members_and_allowed\n        example: members\n        type: string\n      may_start_work:\n        description: Whether a message may open a new task. False lets the agent keep\n          answering threads it is already in without taking a cold email as a new\n          job.\n        example: true\n        type: boolean\n      replies:\n        description: 'How far automatic replies reach: `thread` (only the thread''s\n          authenticated participants) or `none` (never reply).'\n        enum:\n        - thread\n        - none\n        example: thread\n        type: string\n    type: object\n  model:\n    description: The model the agent runs on. Must not be greater than 120 characters.\n    example: null\n    nullable: true\n    type: string\n  openai_api_key:\n    description: 'OpenAI credential the agent authenticates codex calls with. Write-only:\n      stored encrypted and never returned (the response reports `openai_connected`\n      and `openai_credential_kind`). When `openai_credential_kind` is `subscription`\n      this is the verbatim contents of the codex CLI `auth.json`; otherwise a metered\n      API key. Send null to clear it.'\n    example: null\n    nullable: true\n    type: string\n  openai_credential_kind:\n    description: 'Type of the OpenAI credential: `api_key` (default) or `subscription`\n      (ChatGPT seat). Defaults to `api_key` when a key is set without one.'\n    enum:\n    - api_key\n    - subscription\n    example: api_key\n    nullable: true\n    type: string\n  paused:\n    description: 'Whether the agent is paused. Pausing stops the agent: it starts\n      no new work from any door, and the sessions it is running are aborted, their\n      harness VMs destroyed and their tokens rotated. The work that stops is not resumed\n      by anything: its task and playbook step end terminal, and resuming only lets\n      the agent take new work. Unlike offboarding this is reversible, keeps the agent''s\n      Google and Slack accounts, and needs no reprovisioning. Idempotent in both directions,\n      audited, and settable by any member of the account.'\n    example: true\n    type: boolean\n  role_page_id:\n    description: Id of the handbook page that serves as the agent's job description.\n      Send null to clear it. Must be a valid UUID.\n    example: null\n    nullable: true\n    type: string\n  title:\n    description: Display title describing the role the agent fills. Must not be greater\n      than 120 characters.\n    example: Support Engineer\n    nullable: true\n    type: string\n  vendor:\n    description: The AI vendor that powers the agent. Must not be greater than 120\n      characters.\n    example: claude\n    nullable: true\n    type: string\n  voice:\n    description: The voice the agent speaks with on a call. One of `alloy`, `ash`,\n      `ballad`, `coral`, `echo`, `sage`, `shimmer`, `verse`, `marin`, `cedar`. Send\n      null for the default voice.\n    enum:\n    - alloy\n    - ash\n    - ballad\n    - coral\n    - echo\n    - sage\n    - shimmer\n    - verse\n    - marin\n    - cedar\n    example: cedar\n    nullable: true\n    type: string\n  xai_api_key:\n    description: 'xAI credential the agent authenticates grok calls with. Write-only:\n      stored encrypted and never returned (the response reports `xai_connected` and\n      `xai_credential_kind`). When `xai_credential_kind` is `subscription` this is\n      the verbatim contents of the Grok CLI `auth.json` for a SuperGrok / X Premium+\n      seat; otherwise a metered xAI API key. Send null to clear it.'\n    example: null\n    nullable: true\n    type: string\n  xai_credential_kind:\n    description: 'Type of the xAI credential: `api_key` (default) or `subscription`\n      (a SuperGrok / X Premium+ seat). Defaults to `api_key` when a key is set without\n      one.'\n    enum:\n    - api_key\n    - subscription\n    example: api_key\n    nullable: true\n    type: string\ntype: object\n"),
+				Long:    cli.Markdown("Updates an agent's handle, title, role, environment, model, reasoning effort, mail policy, or paused state. Changing the handle, environment, model, effort, role, mail policy, or paused state is recorded in the audit log.\n\nAdmin-only, with one exception: `paused` may be sent by any member of the account, and a request carrying nothing but `paused` is accepted from any member. Sending `paused` alongside any other field makes the request admin-only like every other update. Offboarding (DELETE) stays admin-only.\n\n`paused` is the reversible kill switch. Pausing stops the agent: it starts no new work from any entry point, and the sessions it is currently running are aborted, with their harness VMs destroyed and their tokens rotated. Those turns do not come back: their tasks and playbook steps end terminal, and resuming restores only the agent's ability to take new work. Unlike offboarding, pausing keeps the agent's Google and Slack accounts, so resuming needs no reprovisioning. Idempotent in both directions.\n\n`mail_policy` is a value object and is replaced wholesale: a request that sends it must send all of its fields, and one that leaves it out changes none of them. Every other field is patched partially, as usual.\n\nChanging the handle renames the agent on every system it holds an account on, and does not wait for them: the response comes back as soon as the change is accepted, and each account reports its own outcome under the agent's identities. Google keeps the old email address working as an alias, so mail, shared documents and calendar invitations survive the rename, and the new address can take up to ten minutes to appear everywhere.\n\nIf one system takes the new name and another does not, the one that did not carries the reason in its `error`, and its `details.handle_synced` is false. Send the same handle again to retry it.\n## Request Schema (application/json)\n\nproperties:\n  anthropic_api_key:\n    description: 'Anthropic credential the agent authenticates Claude calls with.\n      Write-only: stored encrypted and never returned (the response reports `anthropic_connected`\n      and `anthropic_credential_kind`). When `anthropic_credential_kind` is `subscription`\n      this is the OAuth token from `claude setup-token`; otherwise a metered API key.\n      Send null to clear it.'\n    example: null\n    nullable: true\n    type: string\n  anthropic_credential_kind:\n    description: 'Type of the Anthropic credential: `api_key` (default) or `subscription`\n      (Claude Pro/Max). Defaults to `api_key` when a key is set without one.'\n    enum:\n    - api_key\n    - subscription\n    example: api_key\n    nullable: true\n    type: string\n  display_name:\n    description: Name shown wherever this agent acts. Must not be greater than 120\n      characters.\n    example: Support Engineer\n    type: string\n  effort:\n    description: Reasoning effort the agent works at, in its harness's own vocabulary\n      (`low`/`medium`/`high` for claude; `minimal`/`low`/`medium`/`high`/`xhigh` for\n      codex). Call `GET /models` for each harness's options and default. A value the\n      agent's harness does not offer falls back to that harness's default when a session\n      starts. Send null to clear it. Must not be greater than 40 characters.\n    example: high\n    nullable: true\n    type: string\n  environment_id:\n    description: Id of the single environment the agent works in. Send null to clear\n      it. Must be a valid UUID.\n    example: null\n    nullable: true\n    type: string\n  handle:\n    description: 'The name the agent answers to everywhere: the part before the @\n      in its email address, and the name people type after the @ in Slack. Lowercase\n      letters, numbers, periods, hyphens and underscores, 2 to 64 characters, starting\n      and ending with a letter or a number. It has to be free in this account and\n      in your Google domain, and it is never reused once an agent has had it. Changing\n      it renames the agent on every system it holds an account on. The old email address\n      keeps delivering as an alias, so mail, shared documents and calendar invitations\n      survive, and the change can take up to ten minutes to appear everywhere. Send\n      the handle the agent already has to retry a rename a system did not accept the\n      first time.'\n    example: saul\n    type: string\n  mail_policy:\n    description: 'The agent''s email policy. Replaced wholesale: send all four fields,\n      or leave the object out to change none of them. Governs which mail becomes a\n      message; mail it refuses is still recorded as an event you can trigger a playbook\n      on.'\n    example: null\n    properties:\n      allowed_senders:\n        description: \"\"\n        example:\n        - architecto\n        items:\n          type: string\n        type: array\n      directable_by:\n        description: 'Who may direct this agent by mail: `members` (verified members\n          of the account, and nobody this agent adds) or `members_and_allowed` (also\n          the verified senders in `allowed_senders`).'\n        enum:\n        - members\n        - members_and_allowed\n        example: members\n        type: string\n      may_start_work:\n        description: Whether a message may open a new task. False lets the agent keep\n          answering threads it is already in without taking a cold email as a new\n          job.\n        example: true\n        type: boolean\n      replies:\n        description: 'How far automatic replies reach: `thread` (only the thread''s\n          authenticated participants) or `none` (never reply).'\n        enum:\n        - thread\n        - none\n        example: thread\n        type: string\n    type: object\n  model:\n    description: The model the agent runs on. Must not be greater than 120 characters.\n    example: null\n    nullable: true\n    type: string\n  openai_api_key:\n    description: 'OpenAI credential the agent authenticates codex calls with. Write-only:\n      stored encrypted and never returned (the response reports `openai_connected`\n      and `openai_credential_kind`). When `openai_credential_kind` is `subscription`\n      this is the verbatim contents of the codex CLI `auth.json`; otherwise a metered\n      API key. Send null to clear it.'\n    example: null\n    nullable: true\n    type: string\n  openai_credential_kind:\n    description: 'Type of the OpenAI credential: `api_key` (default) or `subscription`\n      (ChatGPT seat). Defaults to `api_key` when a key is set without one.'\n    enum:\n    - api_key\n    - subscription\n    example: api_key\n    nullable: true\n    type: string\n  paused:\n    description: 'Whether the agent is paused. Pausing stops the agent: it starts\n      no new work from any door, and the sessions it is running are aborted, their\n      harness VMs destroyed and their tokens rotated. The work that stops is not resumed\n      by anything: its task and playbook step end terminal, and resuming only lets\n      the agent take new work. Unlike offboarding this is reversible, keeps the agent''s\n      Google and Slack accounts, and needs no reprovisioning. Idempotent in both directions,\n      audited, and settable by any member of the account.'\n    example: true\n    type: boolean\n  role_page_id:\n    description: Id of the handbook page that serves as the agent's job description.\n      Send null to clear it. Must be a valid UUID.\n    example: null\n    nullable: true\n    type: string\n  silence_threshold:\n    description: 'How sure the agent must be that a reply in a Slack thread it is\n      part of is not meant for it before it stays quiet without reading it. Between\n      0.5 and 1: higher means the agent stays quiet less often. Applies only to thread\n      replies that do not mention the agent; a mention or a direct message always\n      gets an answer. Takes effect only once quiet thread replies are turned on for\n      the account. Send null for the platform default. Must be between 0.5 and 1.'\n    example: 0.9\n    nullable: true\n    type: number\n  title:\n    description: Display title describing the role the agent fills. Must not be greater\n      than 120 characters.\n    example: Support Engineer\n    nullable: true\n    type: string\n  vendor:\n    description: The AI vendor that powers the agent. Must not be greater than 120\n      characters.\n    example: claude\n    nullable: true\n    type: string\n  voice:\n    description: The voice the agent speaks with on a call. One of `alloy`, `ash`,\n      `ballad`, `coral`, `echo`, `sage`, `shimmer`, `verse`, `marin`, `cedar`. Send\n      null for the default voice.\n    enum:\n    - alloy\n    - ash\n    - ballad\n    - coral\n    - echo\n    - sage\n    - shimmer\n    - verse\n    - marin\n    - cedar\n    example: cedar\n    nullable: true\n    type: string\n  xai_api_key:\n    description: 'xAI credential the agent authenticates grok calls with. Write-only:\n      stored encrypted and never returned (the response reports `xai_connected` and\n      `xai_credential_kind`). When `xai_credential_kind` is `subscription` this is\n      the verbatim contents of the Grok CLI `auth.json` for a SuperGrok / X Premium+\n      seat; otherwise a metered xAI API key. Send null to clear it.'\n    example: null\n    nullable: true\n    type: string\n  xai_credential_kind:\n    description: 'Type of the xAI credential: `api_key` (default) or `subscription`\n      (a SuperGrok / X Premium+ seat). Defaults to `api_key` when a key is set without\n      one.'\n    enum:\n    - api_key\n    - subscription\n    example: api_key\n    nullable: true\n    type: string\ntype: object\n"),
 				Example: examples,
 				Args:    cobra.MinimumNArgs(2),
 				Run: func(cmd *cobra.Command, args []string) {
@@ -9722,6 +9821,81 @@ func openapiRegister(subcommand bool) {
 					}
 
 					_, decoded, err := OpenapiAttachorReplaceTheGitTokenOneAgentAuthenticatesWithTheTokenIsValidatedByTheFormRequestStoredEncryptedAndNeverReturnedTheGitUsernameIsResolvedFromTheTokenForDisplay(args[0], args[1], params, body)
+					if err != nil {
+						log.Fatal().Err(err).Msg("Error calling operation")
+					}
+
+					if err := cli.Formatter.Format(decoded); err != nil {
+						log.Fatal().Err(err).Msg("Formatting failed")
+					}
+
+				},
+			}
+			groupCmd.AddCommand(cmd)
+
+			cli.SetCustomFlags(cmd)
+
+			if cmd.Flags().HasFlags() {
+				params.BindPFlags(cmd.Flags())
+			}
+
+		}()
+
+		func() {
+			params := viper.New()
+
+			var examples string
+
+			cmd := &cobra.Command{
+				Use:     "quiet-replies account-id agent-user-id",
+				Short:   "List quiet thread replies",
+				Long:    cli.Markdown("Returns the Slack thread replies the agent heard and did not answer, most recent first.\n\nWhen somebody replies in a Slack thread the agent is part of without mentioning it, the agent first judges whether the reply is for it, and stays quiet when it is sure to at least its `silence_threshold` that it was not. Each reply here is one it stayed quiet on, or, while quiet thread replies are not yet turned on for the account, one it would have stayed quiet on. It still answered those.\n\nSend `near_misses=1` for the replies that nearly went the other way instead: those that scored within 0.1 of the threshold they were judged at, either side. That includes replies the agent answered by a small margin as well as ones it stayed quiet on by a small margin, and it is the rule replay uses for `near_miss`. Those are the replies a small change to the threshold or the role page would decide differently, and the ones to read first when the agent seems to be ignoring people or answering talk that was not for it. To try a different threshold or role page over them, replay them."),
+				Example: examples,
+				Args:    cobra.MinimumNArgs(2),
+				Run: func(cmd *cobra.Command, args []string) {
+
+					_, decoded, err := OpenapiListQuietThreadReplies(args[0], args[1], params)
+					if err != nil {
+						log.Fatal().Err(err).Msg("Error calling operation")
+					}
+
+					if err := cli.Formatter.Format(decoded); err != nil {
+						log.Fatal().Err(err).Msg("Formatting failed")
+					}
+
+				},
+			}
+			groupCmd.AddCommand(cmd)
+
+			cmd.Flags().String("near-misses", "", "Instead of the replies the agent did not answer, the replies that scored within 0.1 of the threshold they were judged at, either side.")
+			cmd.Flags().Int64("per-page", 0, "Results per page (max 100).")
+
+			cli.SetCustomFlags(cmd)
+
+			if cmd.Flags().HasFlags() {
+				params.BindPFlags(cmd.Flags())
+			}
+
+		}()
+
+		func() {
+			params := viper.New()
+
+			var examples string
+
+			cmd := &cobra.Command{
+				Use:     "replays account-id agent-user-id",
+				Short:   "Replay quiet thread replies",
+				Long:    cli.Markdown("Shows what the agent would have done with its recent Slack thread replies at a different silence threshold, or with an edited role page, before you save either.\n\nWhen somebody replies in a Slack thread the agent is part of without mentioning it, the agent first judges whether the reply is for it. It stays quiet only when it is sure enough that the reply was not meant for it: sure to at least its `silence_threshold`. Every judged reply is kept with the judgment, and this replays them.\n\nSend a `silence_threshold` to see how many replies the agent would answer and how many it would stay quiet on at that value. Send a `role_page` to judge the replies again against edited wording of the agent's job. Replies within 0.1 of the threshold are flagged as near misses, the ones a small change decides differently.\n\nNothing is saved. To keep a threshold, set `silence_threshold` on the agent; to keep the wording, edit its role page.\n## Request Schema (application/json)\n\nproperties:\n  limit:\n    description: How many of the agent's most recent judged thread replies to replay,\n      newest first. Between 1 and 100. Defaults to 50. Must be between 1 and 100.\n    example: 50\n    type: integer\n  role_page:\n    description: An edited version of the agent's role page, in markdown, to judge\n      the replies against instead of the saved page. Nothing is saved. When sent,\n      each reply is judged again, which takes longer than replaying a threshold alone.\n      Must not be greater than 100000 characters.\n    example: null\n    nullable: true\n    type: string\n  silence_threshold:\n    description: A silence threshold to try, between 0.5 and 1. Nothing is saved.\n      Omit it or send null to replay at the agent's current threshold. Must be between\n      0.5 and 1.\n    example: 0.9\n    nullable: true\n    type: number\ntype: object\n"),
+				Example: examples,
+				Args:    cobra.MinimumNArgs(2),
+				Run: func(cmd *cobra.Command, args []string) {
+					body, err := cli.GetBody("application/json", args[2:])
+					if err != nil {
+						log.Fatal().Err(err).Msg("Unable to get body")
+					}
+
+					_, decoded, err := OpenapiReplayQuietThreadReplies(args[0], args[1], params, body)
 					if err != nil {
 						log.Fatal().Err(err).Msg("Error calling operation")
 					}
@@ -14386,7 +14560,7 @@ func openapiRegister(subcommand bool) {
 			cmd := &cobra.Command{
 				Use:     "create account-id task-id",
 				Short:   "Create a session",
-				Long:    cli.Markdown("Starts a new coding session for a task. A VM is provisioned and the AI agent boots automatically. The prompt is sent as the first message; if omitted, it falls back to the task prompt.\n## Request Schema (application/json)\n\nproperties:\n  auto_commit:\n    description: Whether the agent should auto-commit changes.\n    example: true\n    nullable: true\n    type: boolean\n  base_branch:\n    description: Branch to cut the working branch from. When omitted, the repo's default\n      branch is detected via GitHub and used. Must not be greater than 255 characters.\n    example: main\n    nullable: true\n    type: string\n  branch_name:\n    description: Git branch to create for this session. When omitted, a name is generated\n      from the creator's initials, the task's first linked issue number (if any),\n      the session title, and a short hash of the session id, so distinct sessions\n      of the same task produce distinct branches. Must not be greater than 255 characters.\n    example: fix/auth-jwt\n    nullable: true\n    type: string\n  env_vars:\n    description: Environment variables merged into the VM at boot, on top of the manifest's\n      `env` block. Tasks do not carry `env_vars`, so these apply only to this session.\n    example: null\n    nullable: true\n    properties: {}\n    type: object\n  environment_id:\n    description: Environment to boot this session in. When omitted, falls back to\n      the task's default environment. Pass an explicit value to run sibling sessions\n      of the same task in different environments (for example, a backend session and\n      a frontend session that together close one ticket). Must be a valid UUID.\n    example: 019d8e44-e110-71f6-864b-8e91470dcc4a\n    nullable: true\n    type: string\n  idle_timeout_seconds:\n    description: Override the task-level idle timeout for this session. When omitted,\n      the task value applies. Must be between 60 and 900.\n    example: 120\n    type: integer\n  images:\n    description: \"\"\n    example: null\n    items:\n      properties:\n        data:\n          description: Base64-encoded image data. Must not be greater than 15000000\n            characters.\n          example: No-example\n          type: string\n        media_type:\n          description: The MIME type of the image.\n          enum:\n          - image/jpeg\n          - image/png\n          - image/gif\n          - image/webp\n          example: image/png\n          type: string\n      required:\n      - data\n      - media_type\n      type: object\n    type: array\n  inputs:\n    description: \"\"\n    example: null\n    items:\n      properties:\n        content_base64:\n          description: The content as base64, for callers that would rather not embed\n            raw text in JSON. Must decode to valid UTF-8. Provide exactly one of `text`,\n            `content_base64`, or `upload_id`. This field is required when none of\n            <code>inputs.*.text</code> and <code>inputs.*.upload_id</code> are present.\n          example: null\n          type: string\n        encoding:\n          description: Character encoding of the content. Only `utf-8` is accepted,\n            which is also the default.\n          enum:\n          - utf-8\n          example: utf-8\n          nullable: true\n          type: string\n        media_type:\n          description: Media type of the content. Any `text/*` type, or one of application/json,\n            application/x-ndjson, application/xml, application/yaml. Defaults to text/plain.\n            Ignored when you pass `upload_id`. Must not be greater than 128 characters.\n          example: text/plain\n          nullable: true\n          type: string\n        name:\n          description: 'Name for this input, which is also its filename in the sandbox.\n            Letters, digits, dot, dash, and underscore; no path separators. Must be\n            unique within the request. Omit it when you pass `upload_id`: the name\n            you gave the upload is used. This field is required when <code>inputs.*.upload_id</code>\n            is not present. Must match the regex /^[A-Za-z0-9][A-Za-z0-9._-]*$/. Must\n            not be greater than 128 characters.'\n          example: server-log.txt\n          type: string\n        text:\n          description: The UTF-8 text content. Provide exactly one of `text`, `content_base64`,\n            or `upload_id`. This field is required when none of <code>inputs.*.content_base64</code>\n            and <code>inputs.*.upload_id</code> are present.\n          example: null\n          type: string\n        upload_id:\n          description: The id of a ready upload, for material larger than the inline\n            limit. The file is bound to this request and cannot be used again; its\n            recorded name, size, media type, and SHA-256 are used as they were verified\n            at upload time. Provide exactly one of `text`, `content_base64`, or `upload_id`.\n            This field is required when none of <code>inputs.*.text</code> and <code>inputs.*.content_base64</code>\n            are present. Must be a valid UUID.\n          example: null\n          type: string\n      type: object\n    type: array\n  prompt:\n    description: Instructions for the AI agent, sent as the first message. Falls back\n      to the task prompt if omitted.\n    example: Refactor the auth middleware to use JWT\n    type: string\n  title:\n    description: Session title. When omitted, a title is generated from the prompt,\n      or the task title is used as a fallback. Must not be greater than 255 characters.\n    example: JWT refactor attempt 2\n    nullable: true\n    type: string\ntype: object\n"),
+				Long:    cli.Markdown("Starts a new coding session for a task. A VM is provisioned and the AI agent boots automatically. The prompt is sent as the first message; if omitted, it falls back to the task prompt.\n## Request Schema (application/json)\n\nproperties:\n  auto_commit:\n    description: Whether the agent should auto-commit changes.\n    example: true\n    nullable: true\n    type: boolean\n  base_branch:\n    description: Branch to cut the working branch from. When omitted, the repo's default\n      branch is detected via GitHub and used. Must not be greater than 255 characters.\n    example: main\n    nullable: true\n    type: string\n  branch_name:\n    description: 'Git branch to create for this session. When omitted, the name is\n      `{handle}/{hash}`: the handle of the agent the session runs as, or of the person\n      it runs for, and the last 8 hex characters of the session id, so distinct sessions\n      of the same task produce distinct branches. Must not be greater than 255 characters.'\n    example: fix/auth-jwt\n    nullable: true\n    type: string\n  env_vars:\n    description: Environment variables merged into the VM at boot, on top of the manifest's\n      `env` block. Tasks do not carry `env_vars`, so these apply only to this session.\n    example: null\n    nullable: true\n    properties: {}\n    type: object\n  environment_id:\n    description: Environment to boot this session in. When omitted, falls back to\n      the task's default environment. Pass an explicit value to run sibling sessions\n      of the same task in different environments (for example, a backend session and\n      a frontend session that together close one ticket). Must be a valid UUID.\n    example: 019d8e44-e110-71f6-864b-8e91470dcc4a\n    nullable: true\n    type: string\n  idle_timeout_seconds:\n    description: Override the task-level idle timeout for this session. When omitted,\n      the task value applies. Must be between 60 and 900.\n    example: 120\n    type: integer\n  images:\n    description: \"\"\n    example: null\n    items:\n      properties:\n        data:\n          description: Base64-encoded image data. Must not be greater than 15000000\n            characters.\n          example: No-example\n          type: string\n        media_type:\n          description: The MIME type of the image.\n          enum:\n          - image/jpeg\n          - image/png\n          - image/gif\n          - image/webp\n          example: image/png\n          type: string\n      required:\n      - data\n      - media_type\n      type: object\n    type: array\n  inputs:\n    description: \"\"\n    example: null\n    items:\n      properties:\n        content_base64:\n          description: The content as base64, for callers that would rather not embed\n            raw text in JSON. Must decode to valid UTF-8. Provide exactly one of `text`,\n            `content_base64`, or `upload_id`. This field is required when none of\n            <code>inputs.*.text</code> and <code>inputs.*.upload_id</code> are present.\n          example: null\n          type: string\n        encoding:\n          description: Character encoding of the content. Only `utf-8` is accepted,\n            which is also the default.\n          enum:\n          - utf-8\n          example: utf-8\n          nullable: true\n          type: string\n        media_type:\n          description: Media type of the content. Any `text/*` type, or one of application/json,\n            application/x-ndjson, application/xml, application/yaml. Defaults to text/plain.\n            Ignored when you pass `upload_id`. Must not be greater than 128 characters.\n          example: text/plain\n          nullable: true\n          type: string\n        name:\n          description: 'Name for this input, which is also its filename in the sandbox.\n            Letters, digits, dot, dash, and underscore; no path separators. Must be\n            unique within the request. Omit it when you pass `upload_id`: the name\n            you gave the upload is used. This field is required when <code>inputs.*.upload_id</code>\n            is not present. Must match the regex /^[A-Za-z0-9][A-Za-z0-9._-]*$/. Must\n            not be greater than 128 characters.'\n          example: server-log.txt\n          type: string\n        text:\n          description: The UTF-8 text content. Provide exactly one of `text`, `content_base64`,\n            or `upload_id`. This field is required when none of <code>inputs.*.content_base64</code>\n            and <code>inputs.*.upload_id</code> are present.\n          example: null\n          type: string\n        upload_id:\n          description: The id of a ready upload, for material larger than the inline\n            limit. The file is bound to this request and cannot be used again; its\n            recorded name, size, media type, and SHA-256 are used as they were verified\n            at upload time. Provide exactly one of `text`, `content_base64`, or `upload_id`.\n            This field is required when none of <code>inputs.*.text</code> and <code>inputs.*.content_base64</code>\n            are present. Must be a valid UUID.\n          example: null\n          type: string\n      type: object\n    type: array\n  prompt:\n    description: Instructions for the AI agent, sent as the first message. Falls back\n      to the task prompt if omitted.\n    example: Refactor the auth middleware to use JWT\n    type: string\n  title:\n    description: Session title. When omitted, a title is generated from the prompt,\n      or the task title is used as a fallback. Must not be greater than 255 characters.\n    example: JWT refactor attempt 2\n    nullable: true\n    type: string\ntype: object\n"),
 				Example: examples,
 				Args:    cobra.MinimumNArgs(2),
 				Run: func(cmd *cobra.Command, args []string) {

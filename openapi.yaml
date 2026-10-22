@@ -367,6 +367,9 @@ components:
             replies:
               type: string
           description: "The agent's email policy: `directable_by` (`members`, or `members_and_allowed` to widen direction to the senders below), `allowed_senders` (addresses and `*@domain` patterns, matched against the verified sender), `may_start_work`, and `replies` (`thread` or `none`). Always present; an agent that has never been configured reports the shipped defaults. It governs which mail becomes a message; mail it refuses is still recorded as an event a playbook can trigger on."
+        silence_threshold:
+          type: number
+          description: 'How sure the agent must be that a reply in a Slack thread it is part of is not meant for it before it stays quiet without reading it, between 0.5 and 1. Always present: an agent that has never been configured reports the platform default. Higher means the agent stays quiet less often. A reply that mentions the agent, and a direct message, always get an answer. Takes effect only once quiet thread replies are turned on for the account; until then every reply is judged and the agent answers as before.'
         created_at:
           type: string
           nullable: true
@@ -1299,6 +1302,21 @@ components:
           type: integer
         last_page:
           type: integer
+    PaginationMeta6:
+      type: object
+      properties:
+        current_page:
+          type: integer
+        from:
+          type: integer
+        last_page:
+          type: integer
+        per_page:
+          type: integer
+        to:
+          type: integer
+        total:
+          type: integer
     PaginationMeta8:
       type: object
       properties:
@@ -1506,7 +1524,7 @@ components:
           description: 'Display name for `harness_effort` ("Extra High" for codex `xhigh`). Render this rather than title-casing the id. Null whenever `harness_effort` is null.'
         branch_name:
           type: string
-          description: "The git branch this session is working on. Sessions (not tasks) own branch identity, so a task with multiple sessions produces multiple distinct branches. Auto-generated at create time from the creator's initials, the task's first linked issue number (if any), the session title, and a short hash of the session id."
+          description: 'The git branch this session is working on. Sessions (not tasks) own branch identity, so a task with multiple sessions produces multiple distinct branches. Auto-generated at create time as `{handle}/{hash}`: the handle of the agent the session runs as, or of the person it runs for, and the last 8 hex characters of the session id (e.g. `steve/b8dae0f6`).'
           nullable: true
         base_branch:
           type: string
@@ -1523,6 +1541,7 @@ components:
                 type: string
               head_branch:
                 type: string
+                nullable: true
               base_branch:
                 type: string
               base_commit_sha:
@@ -1532,11 +1551,29 @@ components:
                 type: boolean
               commit_count:
                 type: integer
+              file_count:
+                type: integer
+                nullable: true
               lines_added:
                 type: integer
               lines_removed:
                 type: integer
-          description: "Per-source git state. One entry per repo the session is working on. Always returned as an array; single-source sessions return a one-element array so clients have one rendering path.\n\nFields per source:\n\n- `repo`: the git repo URL.\n- `workspace`: absolute path to the cloned workspace inside the VM.\n- `head_branch`: the branch checked out in this source. The session's working branch for most sources; a source pinned to a `pull_request` attachment reports that PR's head branch instead, so it can differ across sources.\n- `base_branch`: the branch this source was cut from. Can differ across sources when the environment's manifest tracks different defaults per repo.\n- `base_commit_sha`: the commit the working branch diverged from on this source. Cached on push; null until the first push or VM boot.\n- `has_changes`: whether the workspace has uncommitted changes as of the last check.\n- `commit_count`: number of commits on the working branch ahead of `base_commit_sha`.\n- `lines_added` / `lines_removed`: summed line deltas across all commits on the working branch for this source."
+          description: "Per-source git state. One entry per repo the session is working on. Always returned as an array; single-source sessions return a one-element array so clients have one rendering path.\n\nFields per source:\n\n- `repo`: the git repo URL.\n- `workspace`: absolute path to the cloned workspace inside the VM.\n- `head_branch`: the branch checked out in this source. The session's working branch for most sources; a source pinned to a `pull_request` attachment reports that PR's head branch instead, so it can differ across sources.\n- `base_branch`: the branch this source was cut from. Can differ across sources when the environment's manifest tracks different defaults per repo.\n- `base_commit_sha`: the commit the working branch diverged from on this source. Cached on push; null until the first push or VM boot.\n- `has_changes`: whether the workspace has uncommitted changes as of the last check.\n- `commit_count`: number of commits on the working branch ahead of `base_commit_sha`.\n- `file_count`: number of files changed on the working branch for this source. Null until this source has been measured, so read null as unknown rather than as zero.\n- `lines_added` / `lines_removed`: summed line deltas across all commits on the working branch for this source."
+        diff_summary:
+          type: object
+          nullable: true
+          description: "The session's code changes across all of its sources, as `{ file_count, lines_added, lines_removed }`. Each value is the sum of the same field over the measured entries of `sources`. Use it to show a change count without listing files; call the session diffs endpoint for the files themselves.\n\nNull until the session has been measured, which happens shortly after its VM starts and again whenever a turn ends. Read null as unknown rather than as no changes: zeros are only reported once every source has been measured and found unchanged. The last measured values stay available after the VM is destroyed."
+          additionalProperties: false
+          properties:
+            file_count:
+              type: integer
+              description: 'Files changed, summed across sources.'
+            lines_added:
+              type: integer
+              description: 'Lines added, summed across sources.'
+            lines_removed:
+              type: integer
+              description: 'Lines removed, summed across sources.'
         close_reason:
           type: string
           nullable: true
@@ -8152,7 +8189,7 @@ paths:
                   nullable: true
                 branch_name:
                   type: string
-                  description: "Git branch to create for this session. When omitted, a name is generated from the creator's initials, the task's first linked issue number (if any), the session title, and a short hash of the session id, so distinct sessions of the same task produce distinct branches. Must not be greater than 255 characters."
+                  description: 'Git branch to create for this session. When omitted, the name is `{handle}/{hash}`: the handle of the agent the session runs as, or of the person it runs for, and the last 8 hex characters of the session id, so distinct sessions of the same task produce distinct branches. Must not be greater than 255 characters.'
                   example: fix/auth-jwt
                   nullable: true
                 base_branch:
@@ -15341,6 +15378,11 @@ paths:
                   type: boolean
                   description: "Whether the agent is paused. Pausing stops the agent: it starts no new work from any door, and the sessions it is running are aborted, their harness VMs destroyed and their tokens rotated. The work that stops is not resumed by anything: its task and playbook step end terminal, and resuming only lets the agent take new work. Unlike offboarding this is reversible, keeps the agent's Google and Slack accounts, and needs no reprovisioning. Idempotent in both directions, audited, and settable by any member of the account."
                   example: true
+                silence_threshold:
+                  type: number
+                  description: 'How sure the agent must be that a reply in a Slack thread it is part of is not meant for it before it stays quiet without reading it. Between 0.5 and 1: higher means the agent stays quiet less often. Applies only to thread replies that do not mention the agent; a mention or a direct message always gets an answer. Takes effect only once quiet thread replies are turned on for the account. Send null for the platform default. Must be between 0.5 and 1.'
+                  example: 0.9
+                  nullable: true
     delete:
       summary: 'Disable an agent'
       operationId: disableAnAgent
@@ -15408,6 +15450,580 @@ paths:
                         code:
                           type: string
                           example: forbidden
+        404:
+          description: 'Agent not found.'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: 'Resource not found.'
+                      code: not_found
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: 'Resource not found.'
+                        code: not_found
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: 'Resource not found.'
+                        code:
+                          type: string
+                          example: not_found
+      tags:
+        - Agents
+    parameters:
+      -
+        in: path
+        name: account_id
+        description: 'The ID of the account.'
+        example: architecto
+        required: true
+        schema:
+          type: string
+      -
+        in: path
+        name: agent_user_id
+        description: 'The ID of the agent user.'
+        example: 16
+        required: true
+        schema:
+          type: integer
+  '/v1/accounts/{account_id}/agents/{agent_user_id}/replays':
+    post:
+      summary: 'Replay quiet thread replies'
+      operationId: replayQuietThreadReplies
+      description: "Shows what the agent would have done with its recent Slack thread replies at a different silence threshold, or with an edited role page, before you save either.\n\nWhen somebody replies in a Slack thread the agent is part of without mentioning it, the agent first judges whether the reply is for it. It stays quiet only when it is sure enough that the reply was not meant for it: sure to at least its `silence_threshold`. Every judged reply is kept with the judgment, and this replays them.\n\nSend a `silence_threshold` to see how many replies the agent would answer and how many it would stay quiet on at that value. Send a `role_page` to judge the replies again against edited wording of the agent's job. Replies within 0.1 of the threshold are flagged as near misses, the ones a small change decides differently.\n\nNothing is saved. To keep a threshold, set `silence_threshold` on the agent; to keep the wording, edit its role page."
+      parameters: []
+      responses:
+        200:
+          description: 'What the agent would have answered and stayed quiet on.'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  data:
+                    silence_threshold: 0.9
+                    role_page_edited: false
+                    replayed: 2
+                    would_answer: 1
+                    would_stay_quiet: 1
+                    near_misses: 1
+                    unavailable: 0
+                    replies:
+                      -
+                        event_id: 019e9b6c-1a2b-7c3d-8e4f-5a6b7c8d9e0f
+                        occurred_at: '2026-10-21T17:04:12.000000Z'
+                        verdict: ambient
+                        confidence: 0.96
+                        distribution:
+                          addressed: 0.01
+                          mid_exchange: 0.03
+                          ambient: 0.96
+                        ambient_score: 0.96
+                        would_stay_quiet: true
+                        near_miss: false
+                        unavailable: false
+                        recorded_verdict: ambient
+                        recorded_stayed_quiet: false
+                      -
+                        event_id: 019e9b6b-0f1e-7d2c-9b3a-4f5e6d7c8b9a
+                        occurred_at: '2026-10-21T16:58:40.000000Z'
+                        verdict: ambient
+                        confidence: 0.84
+                        distribution:
+                          addressed: 0.04
+                          mid_exchange: 0.12
+                          ambient: 0.84
+                        ambient_score: 0.84
+                        would_stay_quiet: false
+                        near_miss: true
+                        unavailable: false
+                        recorded_verdict: ambient
+                        recorded_stayed_quiet: false
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      silence_threshold:
+                        type: number
+                        example: 0.9
+                      role_page_edited:
+                        type: boolean
+                        example: false
+                      replayed:
+                        type: integer
+                        example: 2
+                      would_answer:
+                        type: integer
+                        example: 1
+                      would_stay_quiet:
+                        type: integer
+                        example: 1
+                      near_misses:
+                        type: integer
+                        example: 1
+                      unavailable:
+                        type: integer
+                        example: 0
+                      replies:
+                        type: array
+                        example:
+                          -
+                            event_id: 019e9b6c-1a2b-7c3d-8e4f-5a6b7c8d9e0f
+                            occurred_at: '2026-10-21T17:04:12.000000Z'
+                            verdict: ambient
+                            confidence: 0.96
+                            distribution:
+                              addressed: 0.01
+                              mid_exchange: 0.03
+                              ambient: 0.96
+                            ambient_score: 0.96
+                            would_stay_quiet: true
+                            near_miss: false
+                            unavailable: false
+                            recorded_verdict: ambient
+                            recorded_stayed_quiet: false
+                          -
+                            event_id: 019e9b6b-0f1e-7d2c-9b3a-4f5e6d7c8b9a
+                            occurred_at: '2026-10-21T16:58:40.000000Z'
+                            verdict: ambient
+                            confidence: 0.84
+                            distribution:
+                              addressed: 0.04
+                              mid_exchange: 0.12
+                              ambient: 0.84
+                            ambient_score: 0.84
+                            would_stay_quiet: false
+                            near_miss: true
+                            unavailable: false
+                            recorded_verdict: ambient
+                            recorded_stayed_quiet: false
+                        items:
+                          type: object
+                          properties:
+                            event_id:
+                              type: string
+                              example: 019e9b6c-1a2b-7c3d-8e4f-5a6b7c8d9e0f
+                            occurred_at:
+                              type: string
+                              example: '2026-10-21T17:04:12.000000Z'
+                            verdict:
+                              type: string
+                              example: ambient
+                            confidence:
+                              type: number
+                              example: 0.96
+                            distribution:
+                              type: object
+                              properties:
+                                addressed:
+                                  type: number
+                                  example: 0.01
+                                mid_exchange:
+                                  type: number
+                                  example: 0.03
+                                ambient:
+                                  type: number
+                                  example: 0.96
+                            ambient_score:
+                              type: number
+                              example: 0.96
+                            would_stay_quiet:
+                              type: boolean
+                              example: true
+                            near_miss:
+                              type: boolean
+                              example: false
+                            unavailable:
+                              type: boolean
+                              example: false
+                            recorded_verdict:
+                              type: string
+                              example: ambient
+                            recorded_stayed_quiet:
+                              type: boolean
+                              example: false
+        401:
+          description: 'Missing or invalid API token.'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: Unauthenticated.
+                      code: unauthenticated
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: Unauthenticated.
+                        code: unauthenticated
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: Unauthenticated.
+                        code:
+                          type: string
+                          example: unauthenticated
+        403:
+          description: 'Replaying is limited to account admins.'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: 'This action requires at least the admin role.'
+                      code: insufficient_role
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: 'This action requires at least the admin role.'
+                        code: insufficient_role
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: 'This action requires at least the admin role.'
+                        code:
+                          type: string
+                          example: insufficient_role
+        404:
+          description: 'No such agent on this account.'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: 'Not found.'
+                      code: not_found
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: 'Not found.'
+                        code: not_found
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: 'Not found.'
+                        code:
+                          type: string
+                          example: not_found
+        422:
+          description: 'A field is out of range.'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: 'The silence threshold field must be between 0.5 and 1.'
+                      code: validation_error
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: 'The silence threshold field must be between 0.5 and 1.'
+                        code: validation_error
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: 'The silence threshold field must be between 0.5 and 1.'
+                        code:
+                          type: string
+                          example: validation_error
+      tags:
+        - Agents
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                silence_threshold:
+                  type: number
+                  description: "A silence threshold to try, between 0.5 and 1. Nothing is saved. Omit it or send null to replay at the agent's current threshold. Must be between 0.5 and 1."
+                  example: 0.9
+                  nullable: true
+                role_page:
+                  type: string
+                  description: "An edited version of the agent's role page, in markdown, to judge the replies against instead of the saved page. Nothing is saved. When sent, each reply is judged again, which takes longer than replaying a threshold alone. Must not be greater than 100000 characters."
+                  example: null
+                  nullable: true
+                limit:
+                  type: integer
+                  description: "How many of the agent's most recent judged thread replies to replay, newest first. Between 1 and 100. Defaults to 50. Must be between 1 and 100."
+                  example: 50
+    parameters:
+      -
+        in: path
+        name: account_id
+        description: 'The ID of the account.'
+        example: architecto
+        required: true
+        schema:
+          type: string
+      -
+        in: path
+        name: agent_user_id
+        description: 'The ID of the agent user.'
+        example: 16
+        required: true
+        schema:
+          type: integer
+  '/v1/accounts/{account_id}/agents/{agent_user_id}/quiet-replies':
+    get:
+      summary: 'List quiet thread replies'
+      operationId: listQuietThreadReplies
+      description: "Returns the Slack thread replies the agent heard and did not answer, most recent first.\n\nWhen somebody replies in a Slack thread the agent is part of without mentioning it, the agent first judges whether the reply is for it, and stays quiet when it is sure to at least its `silence_threshold` that it was not. Each reply here is one it stayed quiet on, or, while quiet thread replies are not yet turned on for the account, one it would have stayed quiet on. It still answered those.\n\nSend `near_misses=1` for the replies that nearly went the other way instead: those that scored within 0.1 of the threshold they were judged at, either side. That includes replies the agent answered by a small margin as well as ones it stayed quiet on by a small margin, and it is the rule replay uses for `near_miss`. Those are the replies a small change to the threshold or the role page would decide differently, and the ones to read first when the agent seems to be ignoring people or answering talk that was not for it. To try a different threshold or role page over them, replay them."
+      parameters:
+        -
+          in: query
+          name: near_misses
+          description: 'Instead of the replies the agent did not answer, the replies that scored within 0.1 of the threshold they were judged at, either side.'
+          example: false
+          required: false
+          schema:
+            type: boolean
+            description: 'Instead of the replies the agent did not answer, the replies that scored within 0.1 of the threshold they were judged at, either side.'
+            example: false
+        -
+          in: query
+          name: per_page
+          description: 'Results per page (max 100).'
+          example: 25
+          required: false
+          schema:
+            type: integer
+            description: 'Results per page (max 100).'
+            example: 25
+      responses:
+        200:
+          description: 'The replies the agent did not answer.'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  data:
+                    -
+                      event_id: 019e9b6b-0f1e-7d2c-9b3a-4f5e6d7c8b9a
+                      occurred_at: '2026-10-21T16:58:40.000000Z'
+                      sender:
+                        display_name: 'Ada Lovelace'
+                        user_id: 12
+                        external_id: U0123ABCD
+                      channel:
+                        id: C0456EFGH
+                        name: engineering
+                      thread_key: 'slack:T0789:C0456EFGH:1792617800.000100'
+                      text: 'Paul, are you around for the deploy?'
+                      verdict: ambient
+                      confidence: 0.91
+                      ambient_score: 0.91
+                      threshold: 0.85
+                      mode: shadow
+                      silenced: false
+                      would_silence: true
+                      near_miss: true
+                      session_id: 019e9b60-1a2b-7c3d-8e4f-5a6b7c8d9e0f
+                      task_id: 019e9b5f-0a1b-7c2d-8e3f-4a5b6c7d8e9f
+                      permalink: 'https://acme.slack.com/archives/C0456EFGH/p1792617920000200?thread_ts=1792617800.000100'
+                  links:
+                    first: 'https://api.wallfacer.ai/v1/accounts/019e9b00-0000-7000-8000-000000000000/agents/7/quiet-replies?page=1'
+                    last: 'https://api.wallfacer.ai/v1/accounts/019e9b00-0000-7000-8000-000000000000/agents/7/quiet-replies?page=1'
+                    prev: null
+                    next: null
+                  meta:
+                    current_page: 1
+                    from: 1
+                    last_page: 1
+                    per_page: 25
+                    to: 1
+                    total: 1
+                properties:
+                  data:
+                    type: array
+                    example:
+                      -
+                        event_id: 019e9b6b-0f1e-7d2c-9b3a-4f5e6d7c8b9a
+                        occurred_at: '2026-10-21T16:58:40.000000Z'
+                        sender:
+                          display_name: 'Ada Lovelace'
+                          user_id: 12
+                          external_id: U0123ABCD
+                        channel:
+                          id: C0456EFGH
+                          name: engineering
+                        thread_key: 'slack:T0789:C0456EFGH:1792617800.000100'
+                        text: 'Paul, are you around for the deploy?'
+                        verdict: ambient
+                        confidence: 0.91
+                        ambient_score: 0.91
+                        threshold: 0.85
+                        mode: shadow
+                        silenced: false
+                        would_silence: true
+                        near_miss: true
+                        session_id: 019e9b60-1a2b-7c3d-8e4f-5a6b7c8d9e0f
+                        task_id: 019e9b5f-0a1b-7c2d-8e3f-4a5b6c7d8e9f
+                        permalink: 'https://acme.slack.com/archives/C0456EFGH/p1792617920000200?thread_ts=1792617800.000100'
+                    items:
+                      type: object
+                      properties:
+                        event_id:
+                          type: string
+                          example: 019e9b6b-0f1e-7d2c-9b3a-4f5e6d7c8b9a
+                        occurred_at:
+                          type: string
+                          example: '2026-10-21T16:58:40.000000Z'
+                        sender:
+                          type: object
+                          properties:
+                            display_name:
+                              type: string
+                              example: 'Ada Lovelace'
+                            user_id:
+                              type: integer
+                              example: 12
+                            external_id:
+                              type: string
+                              example: U0123ABCD
+                        channel:
+                          type: object
+                          properties:
+                            id:
+                              type: string
+                              example: C0456EFGH
+                            name:
+                              type: string
+                              example: engineering
+                        thread_key:
+                          type: string
+                          example: 'slack:T0789:C0456EFGH:1792617800.000100'
+                        text:
+                          type: string
+                          example: 'Paul, are you around for the deploy?'
+                        verdict:
+                          type: string
+                          example: ambient
+                        confidence:
+                          type: number
+                          example: 0.91
+                        ambient_score:
+                          type: number
+                          example: 0.91
+                        threshold:
+                          type: number
+                          example: 0.85
+                        mode:
+                          type: string
+                          example: shadow
+                        silenced:
+                          type: boolean
+                          example: false
+                        would_silence:
+                          type: boolean
+                          example: true
+                        near_miss:
+                          type: boolean
+                          example: true
+                        session_id:
+                          type: string
+                          example: 019e9b60-1a2b-7c3d-8e4f-5a6b7c8d9e0f
+                        task_id:
+                          type: string
+                          example: 019e9b5f-0a1b-7c2d-8e3f-4a5b6c7d8e9f
+                        permalink:
+                          type: string
+                          example: 'https://acme.slack.com/archives/C0456EFGH/p1792617920000200?thread_ts=1792617800.000100'
+                  links:
+                    $ref: '#/components/schemas/PaginationLinks'
+                  meta:
+                    $ref: '#/components/schemas/PaginationMeta6'
+        401:
+          description: 'Missing or invalid API token.'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: Unauthenticated.
+                      code: unauthenticated
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: Unauthenticated.
+                        code: unauthenticated
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: Unauthenticated.
+                        code:
+                          type: string
+                          example: unauthenticated
+        403:
+          description: 'Reading quiet replies is limited to account admins.'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: 'This action requires at least the admin role.'
+                      code: insufficient_role
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: 'This action requires at least the admin role.'
+                        code: insufficient_role
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: 'This action requires at least the admin role.'
+                        code:
+                          type: string
+                          example: insufficient_role
         404:
           description: 'Agent not found.'
           content:
@@ -16614,26 +17230,7 @@ paths:
                           type: string
                           example: '2026-05-27T18:52:44.000000Z'
                   meta:
-                    type: object
-                    properties:
-                      current_page:
-                        type: integer
-                        example: 1
-                      per_page:
-                        type: integer
-                        example: 25
-                      total:
-                        type: integer
-                        example: 1
-                      last_page:
-                        type: integer
-                        example: 1
-                      from:
-                        type: integer
-                        example: 1
-                      to:
-                        type: integer
-                        example: 1
+                    $ref: '#/components/schemas/PaginationMeta6'
                   links:
                     $ref: '#/components/schemas/PaginationLinks'
         403:
