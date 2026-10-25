@@ -1,4 +1,4 @@
-.PHONY: all build generate build-generator sync-spec sync-spec-local
+.PHONY: all build generate build-generator sync-spec sync-spec-local normalize-spec
 
 all: build-generator sync-spec generate build
 
@@ -10,11 +10,18 @@ SPEC_URL ?= https://api.wallfacer.ai/v1/openapi.yaml
 
 sync-spec:
 	curl -fsSL "$(SPEC_URL)" -o openapi.yaml
-	perl -0pi -e 's/^([ \t]*)properties: \[\][ \t]*$$/$${1}properties: {  }/mg' openapi.yaml
+	$(MAKE) normalize-spec
 
 sync-spec-local:
 	cp -f ../sophon/storage/app/private/scribe/openapi.yaml openapi.yaml
+	$(MAKE) normalize-spec
+
+# Two spec quirks the generator cannot digest: an empty `properties` list, and
+# a summary that wraps onto a second line (the generator writes summaries into
+# a Go comment and a string literal, both of which break on a newline).
+normalize-spec:
 	perl -0pi -e 's/^([ \t]*)properties: \[\][ \t]*$$/$${1}properties: {  }/mg' openapi.yaml
+	perl -pi -e 's/\\n/ /g if /^[ \t]*summary: "/' openapi.yaml
 
 VERSION ?= dev
 
