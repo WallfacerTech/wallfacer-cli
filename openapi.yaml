@@ -5120,6 +5120,35 @@ paths:
                                 - 'services[0].run: ${secrets.STRIPE_KEY}'
                               items:
                                 type: string
+                  -
+                    description: 'The pinned `snapshot_id` cannot be restored on any host right now. Without `snapshot_id`, an unrestorable environment snapshot falls back to a fresh boot instead of failing.'
+                    type: object
+                    example:
+                      errors:
+                        -
+                          message: "The requested snapshot cannot be restored right now. Retry later, or omit snapshot_id to boot from the environment's current snapshot."
+                          code: snapshot_unavailable
+                          snapshot_id: snap-019d8e44-a1b2
+                    properties:
+                      errors:
+                        type: array
+                        example:
+                          -
+                            message: "The requested snapshot cannot be restored right now. Retry later, or omit snapshot_id to boot from the environment's current snapshot."
+                            code: snapshot_unavailable
+                            snapshot_id: snap-019d8e44-a1b2
+                        items:
+                          type: object
+                          properties:
+                            message:
+                              type: string
+                              example: "The requested snapshot cannot be restored right now. Retry later, or omit snapshot_id to boot from the environment's current snapshot."
+                            code:
+                              type: string
+                              example: snapshot_unavailable
+                            snapshot_id:
+                              type: string
+                              example: snap-019d8e44-a1b2
         429:
           description: 'Rate limit exceeded. Check Retry-After header.'
           content:
