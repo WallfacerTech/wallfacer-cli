@@ -6339,6 +6339,676 @@ paths:
         required: true
         schema:
           type: string
+  /v1/tasks:
+    get:
+      summary: 'List tasks across your accounts'
+      operationId: listTasksAcrossYourAccounts
+      description: "Returns tasks from every account you belong to as one list, ordered by most recent activity. Use it for a task history that spans accounts, instead of listing each account's tasks and merging them.\n\nBy default (`scope=mine`) the list holds the tasks you own: those whose `owner_user_id` is you. `scope=visible` returns every task you can see in those accounts, which is the same set each account's own task list returns. Accounts still waiting on activation are left out. Narrow the list to one account with `account_id`.\n\n**Order.** Rows are sorted by `last_activity_at`, newest first, then by `id` descending, so tasks with the same activity time keep a fixed order. `q` filters the list and keeps this order.\n\n**Paging.** When more rows exist, `meta.next_cursor` holds an opaque cursor; pass it back as `cursor` with the same `scope`, `account_id`, `q` and `archived` to get the next page, and start again without a cursor when any of those change. On a list that is not changing, following cursors returns every row exactly once. A task that sees new activity while you page moves ahead of the cursor: later pages skip it, and the first page shows it at its new place. Access is checked on every request, so a cursor never returns tasks from an account you no longer belong to.\n\nEach row carries `account_id` and the account's `name`, which is everything needed to open it at `GET /v1/accounts/{account_id}/tasks/{id}`."
+      parameters:
+        -
+          in: query
+          name: scope
+          description: "Which tasks to return:\n\n- `mine`: tasks you own. The default.\n- `visible`: every task you can see in your accounts, whoever owns it."
+          example: mine
+          required: false
+          schema:
+            type: string
+            description: "Which tasks to return:\n\n- `mine`: tasks you own. The default.\n- `visible`: every task you can see in your accounts, whoever owns it."
+            example: mine
+            enum:
+              - mine
+              - visible
+        -
+          in: query
+          name: account_id
+          description: 'Return only tasks from this account. It must be an account you belong to; any other value returns 404, whether or not the account exists.'
+          example: null
+          required: false
+          schema:
+            type: string
+            description: 'Return only tasks from this account. It must be an account you belong to; any other value returns 404, whether or not the account exists.'
+            example: null
+        -
+          in: query
+          name: q
+          description: "Text search over each task's title, slug and prompt, run across the whole list rather than the rows already fetched. Matched the same way as global search: full-text, plus a case-insensitive substring match so short and prefix queries still return rows. Up to 255 characters."
+          example: login
+          required: false
+          schema:
+            type: string
+            description: "Text search over each task's title, slug and prompt, run across the whole list rather than the rows already fetched. Matched the same way as global search: full-text, plus a case-insensitive substring match so short and prefix queries still return rows. Up to 255 characters."
+            example: login
+        -
+          in: query
+          name: archived
+          description: 'Set to true to list archived (deleted) tasks instead of active ones.'
+          example: false
+          required: false
+          schema:
+            type: boolean
+            description: 'Set to true to list archived (deleted) tasks instead of active ones.'
+            example: false
+        -
+          in: query
+          name: per_page
+          description: 'Results per page, from 1 to 100. Defaults to 25.'
+          example: 25
+          required: false
+          schema:
+            type: integer
+            description: 'Results per page, from 1 to 100. Defaults to 25.'
+            example: 25
+        -
+          in: query
+          name: cursor
+          description: 'The `meta.next_cursor` value from the previous page.'
+          example: null
+          required: false
+          schema:
+            type: string
+            description: 'The `meta.next_cursor` value from the previous page.'
+            example: null
+      responses:
+        200:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  data:
+                    -
+                      id: 01a187c6-56c7-7306-823b-3b1e2e6b38f6
+                      account_id: 01a187c6-56a8-7207-a98d-993e292c214a
+                      account:
+                        id: 01a187c6-56a8-7207-a98d-993e292c214a
+                        name: 'Considine LLC'
+                      environment_id: 01a187c6-56c3-70e0-b2ba-30940757e4d0
+                      title: 'Et animi quos velit et fugiat.'
+                      prompt: 'Accusantium harum mollitia modi deserunt aut ab. Perspiciatis quo omnis nostrum aut adipisci quidem nostrum qui. Incidunt iure odit et et modi ipsum.'
+                      attachments: []
+                      status: active
+                      pipeline_id: null
+                      pipeline_version_id: null
+                      pipeline_version: null
+                      origin:
+                        kind: manual
+                        source: null
+                        type: null
+                        trigger_event_id: null
+                        playbook_name: null
+                      current_step_id: null
+                      current_step_index: null
+                      current_step_title: null
+                      steps_total: null
+                      is_agent_responding: false
+                      fields: []
+                      owner_user_id: null
+                      performer_user_id: null
+                      responsible_user_id: null
+                      parent_task_id: null
+                      paused_at: null
+                      done_at: null
+                      error_details: null
+                      done_details: null
+                      binding_constraint: null
+                      vm_state: stopped
+                      last_activity_at: '2026-10-29T13:08:04.000000Z'
+                      last_event_at: null
+                      last_message_preview: null
+                      idle_timeout_seconds: 300
+                      created_by: 9
+                      created_at: '2026-10-29T13:08:04.000000Z'
+                      updated_at: '2026-10-29T13:08:04.000000Z'
+                    -
+                      id: 01a187c6-56f2-7298-b6b2-7c9f0fbba76b
+                      account_id: 01a187c6-56d7-7312-b3e6-e4cd5a42a0e7
+                      account:
+                        id: 01a187c6-56d7-7312-b3e6-e4cd5a42a0e7
+                        name: 'Kreiger, Labadie and Halvorson'
+                      environment_id: 01a187c6-56f0-71b4-9902-60fc3de78125
+                      title: 'Fugit qui repudiandae laboriosam est alias.'
+                      prompt: 'Impedit molestiae ut rem est esse. Aut molestiae sunt suscipit doloribus fugiat. Aut deserunt et error neque recusandae et. Dolorem et ut dicta.'
+                      attachments: []
+                      status: active
+                      pipeline_id: null
+                      pipeline_version_id: null
+                      pipeline_version: null
+                      origin:
+                        kind: manual
+                        source: null
+                        type: null
+                        trigger_event_id: null
+                        playbook_name: null
+                      current_step_id: null
+                      current_step_index: null
+                      current_step_title: null
+                      steps_total: null
+                      is_agent_responding: false
+                      fields: []
+                      owner_user_id: null
+                      performer_user_id: null
+                      responsible_user_id: null
+                      parent_task_id: null
+                      paused_at: null
+                      done_at: null
+                      error_details: null
+                      done_details: null
+                      binding_constraint: null
+                      vm_state: stopped
+                      last_activity_at: '2026-10-29T13:08:04.000000Z'
+                      last_event_at: null
+                      last_message_preview: null
+                      idle_timeout_seconds: 300
+                      created_by: 13
+                      created_at: '2026-10-29T13:08:04.000000Z'
+                      updated_at: '2026-10-29T13:08:04.000000Z'
+                  links:
+                    first: null
+                    last: null
+                    prev: null
+                    next: null
+                  meta:
+                    path: /
+                    per_page: 25
+                    next_cursor: null
+                    prev_cursor: null
+                properties:
+                  data:
+                    type: array
+                    example:
+                      -
+                        id: 01a187c6-56c7-7306-823b-3b1e2e6b38f6
+                        account_id: 01a187c6-56a8-7207-a98d-993e292c214a
+                        account:
+                          id: 01a187c6-56a8-7207-a98d-993e292c214a
+                          name: 'Considine LLC'
+                        environment_id: 01a187c6-56c3-70e0-b2ba-30940757e4d0
+                        title: 'Et animi quos velit et fugiat.'
+                        prompt: 'Accusantium harum mollitia modi deserunt aut ab. Perspiciatis quo omnis nostrum aut adipisci quidem nostrum qui. Incidunt iure odit et et modi ipsum.'
+                        attachments: []
+                        status: active
+                        pipeline_id: null
+                        pipeline_version_id: null
+                        pipeline_version: null
+                        origin:
+                          kind: manual
+                          source: null
+                          type: null
+                          trigger_event_id: null
+                          playbook_name: null
+                        current_step_id: null
+                        current_step_index: null
+                        current_step_title: null
+                        steps_total: null
+                        is_agent_responding: false
+                        fields: []
+                        owner_user_id: null
+                        performer_user_id: null
+                        responsible_user_id: null
+                        parent_task_id: null
+                        paused_at: null
+                        done_at: null
+                        error_details: null
+                        done_details: null
+                        binding_constraint: null
+                        vm_state: stopped
+                        last_activity_at: '2026-10-29T13:08:04.000000Z'
+                        last_event_at: null
+                        last_message_preview: null
+                        idle_timeout_seconds: 300
+                        created_by: 9
+                        created_at: '2026-10-29T13:08:04.000000Z'
+                        updated_at: '2026-10-29T13:08:04.000000Z'
+                      -
+                        id: 01a187c6-56f2-7298-b6b2-7c9f0fbba76b
+                        account_id: 01a187c6-56d7-7312-b3e6-e4cd5a42a0e7
+                        account:
+                          id: 01a187c6-56d7-7312-b3e6-e4cd5a42a0e7
+                          name: 'Kreiger, Labadie and Halvorson'
+                        environment_id: 01a187c6-56f0-71b4-9902-60fc3de78125
+                        title: 'Fugit qui repudiandae laboriosam est alias.'
+                        prompt: 'Impedit molestiae ut rem est esse. Aut molestiae sunt suscipit doloribus fugiat. Aut deserunt et error neque recusandae et. Dolorem et ut dicta.'
+                        attachments: []
+                        status: active
+                        pipeline_id: null
+                        pipeline_version_id: null
+                        pipeline_version: null
+                        origin:
+                          kind: manual
+                          source: null
+                          type: null
+                          trigger_event_id: null
+                          playbook_name: null
+                        current_step_id: null
+                        current_step_index: null
+                        current_step_title: null
+                        steps_total: null
+                        is_agent_responding: false
+                        fields: []
+                        owner_user_id: null
+                        performer_user_id: null
+                        responsible_user_id: null
+                        parent_task_id: null
+                        paused_at: null
+                        done_at: null
+                        error_details: null
+                        done_details: null
+                        binding_constraint: null
+                        vm_state: stopped
+                        last_activity_at: '2026-10-29T13:08:04.000000Z'
+                        last_event_at: null
+                        last_message_preview: null
+                        idle_timeout_seconds: 300
+                        created_by: 13
+                        created_at: '2026-10-29T13:08:04.000000Z'
+                        updated_at: '2026-10-29T13:08:04.000000Z'
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                          example: 01a187c6-56c7-7306-823b-3b1e2e6b38f6
+                          description: 'Task ID.'
+                        account_id:
+                          type: string
+                          example: 01a187c6-56a8-7207-a98d-993e292c214a
+                          description: 'Account that owns this task.'
+                        account:
+                          type: object
+                          properties:
+                            id:
+                              type: string
+                              example: 01a187c6-56a8-7207-a98d-993e292c214a
+                            name:
+                              type: string
+                              example: 'Considine LLC'
+                          description: "The account that owns this task, so a list spanning several accounts can label each row:\n\n- `id`: the account ID, the same value as `account_id`.\n- `name`: the account's display name.\n\nPresent only on the cross-account task list (`GET /v1/tasks`); omitted elsewhere."
+                        environment_id:
+                          type: string
+                          example: 01a187c6-56c3-70e0-b2ba-30940757e4d0
+                          description: "Environment the task's steps run against. Defaults to the task agent's own environment at create time unless an explicit environment is given."
+                          nullable: true
+                        title:
+                          type: string
+                          example: 'Et animi quos velit et fugiat.'
+                          description: "Human-readable title. Rendered from the trigger's task_title_template, or supplied at manual create."
+                          nullable: true
+                        prompt:
+                          type: string
+                          example: 'Accusantium harum mollitia modi deserunt aut ab. Perspiciatis quo omnis nostrum aut adipisci quidem nostrum qui. Incidunt iure odit et et modi ipsum.'
+                          description: 'Legacy chat prompt. Set when the task was created via the chat composer.'
+                          nullable: true
+                        attachments:
+                          type: array
+                          example: []
+                          description: 'MCP-aligned attachments hanging off this task.'
+                        status:
+                          type: string
+                          example: active
+                          description: "Task lifecycle status:\n\n- `active`: walking through the pipeline's steps.\n- `paused`: a human has paused the walk; no steps advance.\n- `done`: the task is finished, either because every step completed successfully or because a person marked it done.\n- `error`: a step failed; the pipeline stopped.\n- `cancelled`: the task ended before finishing, either closed by a person or cancelled at the step it was on."
+                          enum:
+                            - active
+                            - paused
+                            - done
+                            - error
+                            - cancelled
+                        pipeline_id:
+                          type: string
+                          example: null
+                          description: 'Pipeline this task is running against.'
+                          nullable: true
+                        pipeline_version_id:
+                          type: string
+                          example: null
+                          description: 'Specific pipeline version pinned at task create. Stays pinned even when the pipeline publishes newer versions.'
+                          nullable: true
+                        pipeline_version:
+                          type: string
+                          example: null
+                          description: 'Convenience integer mirror of the pinned version.'
+                          nullable: true
+                        origin:
+                          type: object
+                          properties:
+                            kind:
+                              type: string
+                              example: manual
+                            source:
+                              type: string
+                              example: null
+                              nullable: true
+                            type:
+                              type: string
+                              example: null
+                              nullable: true
+                            trigger_event_id:
+                              type: string
+                              example: null
+                              nullable: true
+                            playbook_name:
+                              type: string
+                              example: null
+                              nullable: true
+                          description: "Where this task came from, for the provenance chip in the list.\n\n- `kind`: how the task was started, one of `event`, `schedule`, `manual`.\n- `source`: the external system that raised the triggering event (for example `github`). Present for `event` and `schedule`; null for `manual`.\n- `type`: the kind of triggering event (for example `pull_request`). Present for `event` and `schedule`; null for `manual`.\n- `trigger_event_id`: ID of the event that started the task, or null when a person created it by hand.\n- `playbook_name`: name of the playbook the task is running, or null when the task is not running one."
+                        current_step_id:
+                          type: string
+                          example: null
+                          description: 'The step the task is currently on or last completed. Null before the first step kicks off.'
+                          nullable: true
+                        current_step_index:
+                          type: string
+                          example: null
+                          description: "Zero-based index of `current_step_id` in the playbook's steps. Null while no step is in flight."
+                          nullable: true
+                        current_step_title:
+                          type: string
+                          example: null
+                          description: 'Human-readable title of the current step, taken from the playbook. Null before the first step kicks off or when the task is not running a playbook.'
+                          nullable: true
+                        steps_total:
+                          type: string
+                          example: null
+                          description: 'Total number of steps in the playbook this task is running. Null when the task is not running a playbook.'
+                          nullable: true
+                        is_agent_responding:
+                          type: boolean
+                          example: false
+                          description: 'True while the agent is actively working a turn on this task. Goes false the moment the turn settles, so a row can stop animating the instant work pauses.'
+                        fields:
+                          type: array
+                          example: []
+                          description: 'Arbitrary key-value bag carried with the task. Read by step templates as `task.fields.X`. Shallow-merged on PATCH.'
+                        owner_user_id:
+                          type: string
+                          example: null
+                          description: 'User who currently owns the task. Null when no one has claimed it.'
+                          nullable: true
+                        performer_user_id:
+                          type: string
+                          example: null
+                          description: "The AI employee doing this task's work, stamped at spawn when the trigger routes work from the event (e.g. to the issue's assignee) and sticky for the task's life. Null when no event-derived performer was resolved; the task then runs as its default execution identity."
+                          nullable: true
+                        responsible_user_id:
+                          type: string
+                          example: null
+                          description: 'The human accountable for this task: its owner. Null when unclaimed - such a task has no responsible human and surfaces through the shared "needs someone" queue rather than routing to anyone. (created_by is the task''s agent, never a human, so it is not a fallback here.)'
+                          nullable: true
+                        parent_task_id:
+                          type: string
+                          example: null
+                          description: 'Parent task when this task is a subtask.'
+                          nullable: true
+                        paused_at:
+                          type: string
+                          example: null
+                          description: 'ISO 8601 timestamp of when the task was paused.'
+                          nullable: true
+                        done_at:
+                          type: string
+                          example: null
+                          description: 'ISO 8601 timestamp of when the task settled (done/error/cancelled).'
+                          nullable: true
+                        error_details:
+                          type: string
+                          example: null
+                          description: 'When status=error, the diagnostic block from the failed step.'
+                          nullable: true
+                        done_details:
+                          type: string
+                          example: null
+                          description: "Why the task finished, when a person finished it rather than the playbook running to its end:\n\n- `reason`: always `closed_manually`.\n- `closed_by_user_id`: the user who finished it.\n\nNull for every task that settled on its own."
+                          nullable: true
+                        binding_constraint:
+                          type: string
+                          example: null
+                          description: "What's blocking the task from advancing. Null while the task is advancing freely.\n\n- `kind`: what the task is blocked on, one of:\n  - `question`: the agent asked a person a question and is waiting on the answer. Carries `session_id`, the session the question is parked on - an answer is an ordinary message on that session, there is no separate resolve endpoint. Raised only for a question asked on the app's own thread; one asked in a Slack room stays `action_running`, because the reader here is a bystander to it.\n  - `waiting`: a step is watching a condition and re-checking on a cadence. Carries `checks_used` and `max_checks` (how many of the scheduled re-checks have run and the budget), and `next_check_at` / `deadline_at`. Checks triggered early by a matching event are extra reads, not scheduled ones: they leave `checks_used` and `next_check_at` alone, so the cadence the step declares is what the budget measures.\n  - `retrying`: the task is waiting for compute capacity and will retry automatically. Carries `next_retry_seconds` (the wait before the next attempt) and `retries` (attempts made so far).\n  - `action_running`: a step is in flight.\n  - `paused`: a person paused the task.\n- `summary`: short human-readable description.\n- `since`: ISO 8601 timestamp the constraint started at."
+                          nullable: true
+                          enum:
+                            - question
+                            - waiting
+                            - retrying
+                            - action_running
+                            - paused
+                        vm_state:
+                          type: string
+                          example: stopped
+                        last_activity_at:
+                          type: string
+                          example: '2026-10-29T13:08:04.000000Z'
+                          description: "ISO 8601 timestamp of the most recent activity touching this task. This is the latest of `updated_at` and any session's `last_activity_at`. Use this (not `updated_at`) for sidebar/list sorting and Today/Yesterday/Recent bucketing: sessions don't bump the parent task on each message, so `updated_at` lags behind real work."
+                          nullable: true
+                        last_event_at:
+                          type: string
+                          example: null
+                          description: 'ISO 8601 timestamp of the most recent message persisted under this task, across all of its sessions. Unlike `last_activity_at`, this only moves when the agent actually writes a message, so it is the signal to trust for whether a turn is genuinely progressing: if `is_agent_responding` is true but this timestamp has not advanced for a while, the turn has stalled. Null when no session has produced a message yet.'
+                          nullable: true
+                        last_message_preview:
+                          type: string
+                          example: null
+                          description: 'One-line, markdown-stripped summary of the last thing the agent said on this task, across all of its sessions. This is what the task last did, for a list row that wants to describe the work rather than restate the lifecycle status. Only turns carrying visible text count, so a tool-use-only or thinking-only turn leaves the previous summary standing. Null when the agent has not spoken on this task yet.'
+                          nullable: true
+                        idle_timeout_seconds:
+                          type: integer
+                          example: 300
+                          description: 'Seconds of inactivity after which sessions under this task go idle and their VMs are destroyed. Individual sessions can override this when they are created.'
+                        created_by:
+                          type: integer
+                          example: 9
+                          description: 'ID of the agent this task runs as: its execution identity, which every commit, pull request, and credential resolves to. Always an agent, never a human; the responsible human is `owner_user_id`.'
+                        created_at:
+                          type: string
+                          example: '2026-10-29T13:08:04.000000Z'
+                          description: 'ISO 8601 timestamp of when the task was created.'
+                        updated_at:
+                          type: string
+                          example: '2026-10-29T13:08:04.000000Z'
+                          description: 'ISO 8601 timestamp of the most recent change to the task record.'
+                    required:
+                      - id
+                      - account_id
+                      - account
+                      - environment_id
+                      - title
+                      - prompt
+                      - attachments
+                      - status
+                      - pipeline_id
+                      - pipeline_version_id
+                      - pipeline_version
+                      - origin
+                      - current_step_id
+                      - current_step_index
+                      - current_step_title
+                      - steps_total
+                      - is_agent_responding
+                      - fields
+                      - owner_user_id
+                      - performer_user_id
+                      - responsible_user_id
+                      - parent_task_id
+                      - paused_at
+                      - done_at
+                      - error_details
+                      - done_details
+                      - binding_constraint
+                      - last_activity_at
+                      - last_event_at
+                      - last_message_preview
+                      - idle_timeout_seconds
+                      - created_by
+                      - created_at
+                      - updated_at
+                  links:
+                    $ref: '#/components/schemas/PaginationLinks'
+                  meta:
+                    $ref: '#/components/schemas/PaginationMeta'
+        401:
+          description: 'Missing or invalid API token.'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: Unauthenticated.
+                      code: unauthenticated
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: Unauthenticated.
+                        code: unauthenticated
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: Unauthenticated.
+                        code:
+                          type: string
+                          example: unauthenticated
+        403:
+          description: 'The `account_id` account is one you belong to, but it has not been activated yet.'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: 'This account is pending activation.'
+                      code: account_pending
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: 'This account is pending activation.'
+                        code: account_pending
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: 'This account is pending activation.'
+                        code:
+                          type: string
+                          example: account_pending
+        404:
+          description: 'The `account_id` account does not exist or you do not belong to it.'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: 'Account not found.'
+                      code: not_found
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: 'Account not found.'
+                        code: not_found
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: 'Account not found.'
+                        code:
+                          type: string
+                          example: not_found
+        422:
+          description: 'Validation failed, for example an unknown `scope` or a cursor from another list.'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  message: 'The scope must be `mine` or `visible`.'
+                  errors:
+                    scope:
+                      - 'The scope must be `mine` or `visible`.'
+                properties:
+                  message:
+                    type: string
+                    example: 'The scope must be `mine` or `visible`.'
+                  errors:
+                    type: object
+                    properties:
+                      scope:
+                        type: array
+                        example:
+                          - 'The scope must be `mine` or `visible`.'
+                        items:
+                          type: string
+        429:
+          description: 'Rate limit exceeded. Check Retry-After header.'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: 'Too many requests.'
+                      code: rate_limited
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: 'Too many requests.'
+                        code: rate_limited
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: 'Too many requests.'
+                        code:
+                          type: string
+                          example: rate_limited
+      tags:
+        - Tasks
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                scope:
+                  type: string
+                  description: ''
+                  example: mine
+                  enum:
+                    - mine
+                    - visible
+                account_id:
+                  type: string
+                  description: 'Must be a valid UUID.'
+                  example: 6ff8f7f6-1eb3-3525-be4a-3932c805afed
+                  nullable: true
+                q:
+                  type: string
+                  description: 'Must not be greater than 255 characters.'
+                  example: g
+                  nullable: true
+                per_page:
+                  type: integer
+                  description: 'Must be at least 1. Must not be greater than 100.'
+                  example: 16
+                cursor:
+                  type: string
+                  description: ''
+                  example: architecto
   '/v1/accounts/{account_id}/tasks':
     get:
       summary: 'List tasks'
