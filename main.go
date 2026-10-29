@@ -215,6 +215,7 @@ func main() {
 	registerAuthCommands(baseURL, token)
 	registerGenerated(cli.Root, func() { openapiRegister(false) })
 	registerAccountTaskListPaging(cli.Root)
+	registerSecretDeliveryHelp(cli.Root)
 	registerExecCommand(accountID)
 	registerUpCommand(accountID)
 	registerHandbookCommands(accountID)
