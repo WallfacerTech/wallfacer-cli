@@ -35,7 +35,7 @@ func newGeneratedRoot(t *testing.T) (*cobra.Command, *[]url.Values) {
 	cli.Root = &cobra.Command{Use: "wallfacer"}
 	t.Cleanup(func() { cli.Root = previous })
 	registerGenerated(cli.Root, func() { openapiRegister(false) })
-	registerTaskListPaging(cli.Root)
+	registerAccountTaskListPaging(cli.Root)
 	return cli.Root, &queries
 }
 
@@ -59,7 +59,7 @@ func runRoot(t *testing.T, root *cobra.Command, args ...string) {
 func TestTaskListSearchComposesWithFiltersAndPaging(t *testing.T) {
 	root, queries := newGeneratedRoot(t)
 
-	runRoot(t, root, "tasks", "list", "acct", "--q", "login redirect", "--status", "done", "--owner-user-id", "7", "--per-page", "2", "--cursor", "abc")
+	runRoot(t, root, "tasks", "account-list", "acct", "--q", "login redirect", "--status", "done", "--owner-user-id", "7", "--per-page", "2", "--cursor", "abc")
 
 	if len(*queries) != 1 {
 		t.Fatalf("want one request, got %d", len(*queries))
@@ -76,7 +76,7 @@ func TestTaskListSearchComposesWithFiltersAndPaging(t *testing.T) {
 func TestTaskListSendsNoSearchOrCursorUnlessAsked(t *testing.T) {
 	root, queries := newGeneratedRoot(t)
 
-	runRoot(t, root, "tasks", "list", "acct", "--status", "active")
+	runRoot(t, root, "tasks", "account-list", "acct", "--status", "active")
 
 	got := (*queries)[0]
 	if got.Has("q") || got.Has("cursor") {
@@ -84,5 +84,36 @@ func TestTaskListSendsNoSearchOrCursorUnlessAsked(t *testing.T) {
 	}
 	if got.Get("status") != "active" {
 		t.Errorf("status = %q, want active", got.Get("status"))
+	}
+}
+
+func TestCrossAccountTaskListUsesNewRouteAndFilters(t *testing.T) {
+	var gotPath string
+	var gotQuery url.Values
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		gotQuery = r.URL.Query()
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":[],"meta":{"next_cursor":null}}`))
+	}))
+	defer server.Close()
+	viper.Set("server", server.URL)
+	defer viper.Set("server", "")
+
+	previous := cli.Root
+	cli.Root = &cobra.Command{Use: "wallfacer"}
+	defer func() { cli.Root = previous }()
+	registerGenerated(cli.Root, func() { openapiRegister(false) })
+	registerAccountTaskListPaging(cli.Root)
+
+	runRoot(t, cli.Root, "tasks", "list", "--scope", "visible", "--account-id", "acct", "--q", "login", "--per-page", "2", "--cursor", "next")
+
+	if gotPath != "/v1/tasks" {
+		t.Errorf("path = %q, want /v1/tasks", gotPath)
+	}
+	for key, want := range map[string]string{"scope": "visible", "account_id": "acct", "q": "login", "per_page": "2", "cursor": "next"} {
+		if got := gotQuery.Get(key); got != want {
+			t.Errorf("query %s = %q, want %q", key, got, want)
+		}
 	}
 }

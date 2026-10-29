@@ -8755,6 +8755,72 @@ func OpenapiAcceptAnInvitation(paramToken string, params *viper.Viper, body stri
 	return resp, decoded, nil
 }
 
+// OpenapiListTasksAcrossYourAccounts List tasks across your accounts
+func OpenapiListTasksAcrossYourAccounts(params *viper.Viper) (*gentleman.Response, map[string]interface{}, error) {
+	handlerPath := "listtasksacrossyouraccounts"
+	if openapiSubcommand {
+		handlerPath = "openapi " + handlerPath
+	}
+
+	server := viper.GetString("server")
+	if server == "" {
+		server = openapiServers()[viper.GetInt("server-index")]["url"]
+	}
+
+	url := server + "/v1/tasks"
+
+	req := cli.Client.Get().URL(url)
+
+	paramScope := params.GetString("scope")
+	if paramScope != "" {
+		req = req.AddQuery("scope", fmt.Sprintf("%v", paramScope))
+	}
+	paramAccountId := params.GetString("account-id")
+	if paramAccountId != "" {
+		req = req.AddQuery("account_id", fmt.Sprintf("%v", paramAccountId))
+	}
+	paramQ := params.GetString("q")
+	if paramQ != "" {
+		req = req.AddQuery("q", fmt.Sprintf("%v", paramQ))
+	}
+	paramArchived := params.GetBool("archived")
+	if paramArchived != false {
+		req = req.AddQuery("archived", fmt.Sprintf("%v", paramArchived))
+	}
+	paramPerPage := params.GetInt64("per-page")
+	if paramPerPage != 0 {
+		req = req.AddQuery("per_page", fmt.Sprintf("%v", paramPerPage))
+	}
+	paramCursor := params.GetString("cursor")
+	if paramCursor != "" {
+		req = req.AddQuery("cursor", fmt.Sprintf("%v", paramCursor))
+	}
+
+	cli.HandleBefore(handlerPath, params, req)
+
+	resp, err := req.Do()
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "Request failed")
+	}
+
+	var decoded map[string]interface{}
+
+	if resp.StatusCode < 400 {
+		if err := cli.UnmarshalResponse(resp, &decoded); err != nil {
+			return nil, nil, errors.Wrap(err, "Unmarshalling response failed")
+		}
+	} else {
+		return nil, nil, errors.Errorf("HTTP %d: %s", resp.StatusCode, resp.String())
+	}
+
+	after := cli.HandleAfter(handlerPath, params, resp, decoded)
+	if after != nil {
+		decoded = after.(map[string]interface{})
+	}
+
+	return resp, decoded, nil
+}
+
 func openapiRegister(subcommand bool) {
 	root := cli.Root
 
@@ -13121,7 +13187,7 @@ func openapiRegister(subcommand bool) {
 			var examples string
 
 			cmd := &cobra.Command{
-				Use:     "list account-id",
+				Use:     "account-list account-id",
 				Short:   "List tasks",
 				Long:    cli.Markdown("Returns tasks for the account. Without filters, ordered by most recent activity first (the latest of the task's own `updated_at` and any of its sessions' `last_activity_at`). The filters turn this list into the inbox: `needs_me=true` is the decision queue (tasks waiting on you), `awaiting_human=true` is every task waiting on a human, and the owner/status filters slice the rest.\n## Request Schema (application/json)\n\nproperties:\n  q:\n    description: Must not be greater than 255 characters.\n    example: b\n    nullable: true\n    type: string\ntype: object\n"),
 				Example: examples,
@@ -13414,6 +13480,47 @@ func openapiRegister(subcommand bool) {
 			groupCmd.AddCommand(cmd)
 
 			cmd.Flags().String("idempotency-key", "", "")
+
+			cli.SetCustomFlags(cmd)
+
+			if cmd.Flags().HasFlags() {
+				params.BindPFlags(cmd.Flags())
+			}
+
+		}()
+
+		func() {
+			params := viper.New()
+
+			var examples string
+
+			cmd := &cobra.Command{
+				Use:     "list",
+				Short:   "List tasks across your accounts",
+				Long:    cli.Markdown("Returns tasks from every account you belong to as one list, ordered by most recent activity. Use it for a task history that spans accounts, instead of listing each account's tasks and merging them.\n\nBy default (`scope=mine`) the list holds the tasks you own: those whose `owner_user_id` is you. `scope=visible` returns every task you can see in those accounts, which is the same set each account's own task list returns. Accounts still waiting on activation are left out. Narrow the list to one account with `account_id`.\n\n**Order.** Rows are sorted by `last_activity_at`, newest first, then by `id` descending, so tasks with the same activity time keep a fixed order. `q` filters the list and keeps this order.\n\n**Paging.** When more rows exist, `meta.next_cursor` holds an opaque cursor; pass it back as `cursor` with the same `scope`, `account_id`, `q` and `archived` to get the next page, and start again without a cursor when any of those change. On a list that is not changing, following cursors returns every row exactly once. A task that sees new activity while you page moves ahead of the cursor: later pages skip it, and the first page shows it at its new place. Access is checked on every request, so a cursor never returns tasks from an account you no longer belong to.\n\nEach row carries `account_id` and the account's `name`, which is everything needed to open it at `GET /v1/accounts/{account_id}/tasks/{id}`.\n## Request Schema (application/json)\n\nproperties:\n  account_id:\n    description: Must be a valid UUID.\n    example: 6ff8f7f6-1eb3-3525-be4a-3932c805afed\n    nullable: true\n    type: string\n  cursor:\n    description: \"\"\n    example: architecto\n    type: string\n  per_page:\n    description: Must be at least 1. Must not be greater than 100.\n    example: 16\n    type: integer\n  q:\n    description: Must not be greater than 255 characters.\n    example: g\n    nullable: true\n    type: string\n  scope:\n    description: \"\"\n    enum:\n    - mine\n    - visible\n    example: mine\n    type: string\ntype: object\n"),
+				Example: examples,
+				Args:    cobra.MinimumNArgs(0),
+				Run: func(cmd *cobra.Command, args []string) {
+
+					_, decoded, err := OpenapiListTasksAcrossYourAccounts(params)
+					if err != nil {
+						log.Fatal().Err(err).Msg("Error calling operation")
+					}
+
+					if err := cli.Formatter.Format(decoded); err != nil {
+						log.Fatal().Err(err).Msg("Formatting failed")
+					}
+
+				},
+			}
+			groupCmd.AddCommand(cmd)
+
+			cmd.Flags().String("scope", "", "Which tasks to return:\n\n- `mine`: tasks you own. The default.\n- `visible`: every task you can see in your accounts, whoever owns it.")
+			cmd.Flags().String("account-id", "", "Return only tasks from this account. It must be an account you belong to; any other value returns 404, whether or not the account exists.")
+			cmd.Flags().String("q", "", "Text search over each task's title, slug and prompt, run across the whole list rather than the rows already fetched. Matched the same way as global search: full-text, plus a case-insensitive substring match so short and prefix queries still return rows. Up to 255 characters.")
+			cmd.Flags().String("archived", "", "Set to true to list archived (deleted) tasks instead of active ones.")
+			cmd.Flags().Int64("per-page", 0, "Results per page, from 1 to 100. Defaults to 25.")
+			cmd.Flags().String("cursor", "", "The `meta.next_cursor` value from the previous page.")
 
 			cli.SetCustomFlags(cmd)
 

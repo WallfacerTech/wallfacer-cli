@@ -5,7 +5,8 @@ Four top-level command groups: `tasks`, `sessions`, `messages`, `attachments`. E
 ## Tasks
 
 ```bash
-wallfacer tasks list -o json
+wallfacer tasks list -o json                 # your tasks across accounts
+wallfacer tasks account-list -o json         # tasks in the configured account
 wallfacer tasks get <task-id> -o json
 
 echo '{
@@ -24,15 +25,17 @@ If `prompt` is provided on create, a session starts immediately and the prompt b
 
 ```bash
 wallfacer tasks list --q "login redirect" -o json
-wallfacer tasks list --q login --owner-user-id <user-id> --status done --per-page 20
-wallfacer tasks list --q login --owner-user-id <user-id> --status done --per-page 20 --cursor <meta.next_cursor>
+wallfacer tasks account-list --q login --owner-user-id <user-id> --status done --per-page 20
+wallfacer tasks account-list --q login --owner-user-id <user-id> --status done --per-page 20 --cursor <meta.next_cursor>
 ```
 
-`--q` searches each task's title, slug and prompt the way `wallfacer search` does: full-text, plus a case-insensitive substring match, so a short or partial word still finds rows. It narrows the listing server-side and combines with every other filter (`--status`, `--owner-user-id`, `--created-by`, `--needs-me`, ...), never widening what you can see. With `--q` set, rows come back by relevance, then id, instead of by recent activity.
+`tasks list` spans your accounts and defaults to tasks you own. Use `--scope visible` for every task you can see, or `--account-id` to narrow the feed. `tasks account-list` exposes the configured account's inbox, status, owner, and other filters.
+
+`--q` searches each task's title, slug and prompt the way `wallfacer search` does: full-text, plus a case-insensitive substring match. On `tasks account-list`, it combines with every other filter (`--status`, `--owner-user-id`, `--created-by`, `--needs-me`, ...) and orders rows by relevance, then id. On `tasks list`, it keeps the recent-activity order.
 
 Spell it with two dashes. `-q` is the global `--query` JMESPath projection, so `tasks list -q login` evaluates `login` as a JMESPath expression and searches nothing.
 
-The listing is cursor-paginated (25 per page, `--per-page` up to 100). When `meta.next_cursor` is non-null, pass it back as `--cursor` with the same `--q` and filters to fetch the next page.
+Both listings are cursor-paginated (25 per page, `--per-page` up to 100). When `meta.next_cursor` is non-null, pass it back as `--cursor` with the same `--q` and filters to fetch the next page.
 
 Optional fields: `environment_id` (default env for sessions), `idle_timeout_seconds` (60-900, default 300), `attachments` (array of MCP-aligned attachment objects), `created_by` (user ID).
 

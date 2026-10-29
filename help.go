@@ -28,7 +28,7 @@ var rootStartHere = [][2]string{
 	{"wallfacer handbook read <name|path|id>", "Read one page or playbook"},
 	{"wallfacer chat <agent> \"<request>\"", "Hand an agent work in plain language"},
 	{"wallfacer run <playbook>", "Start a task from a published playbook"},
-	{"wallfacer tasks list --needs-me true", "Tasks waiting on you"},
+	{"wallfacer tasks account-list --needs-me true", "Tasks waiting on you"},
 }
 
 var rootGlossary = [][2]string{
