@@ -6343,7 +6343,7 @@ paths:
     get:
       summary: 'List tasks across your accounts'
       operationId: listTasksAcrossYourAccounts
-      description: "Returns tasks from every account you belong to as one list, ordered by most recent activity. Use it for a task history that spans accounts, instead of listing each account's tasks and merging them.\n\nBy default (`scope=mine`) the list holds the tasks you own: those whose `owner_user_id` is you. `scope=visible` returns every task you can see in those accounts, which is the same set each account's own task list returns. Accounts still waiting on activation are left out. Narrow the list to one account with `account_id`.\n\n**Order.** Rows are sorted by `last_activity_at`, newest first, then by `id` descending, so tasks with the same activity time keep a fixed order. `q` filters the list and keeps this order.\n\n**Paging.** When more rows exist, `meta.next_cursor` holds an opaque cursor; pass it back as `cursor` with the same `scope`, `account_id`, `q` and `archived` to get the next page, and start again without a cursor when any of those change. On a list that is not changing, following cursors returns every row exactly once. A task that sees new activity while you page moves ahead of the cursor: later pages skip it, and the first page shows it at its new place. Access is checked on every request, so a cursor never returns tasks from an account you no longer belong to.\n\nEach row carries `account_id` and the account's `name`, which is everything needed to open it at `GET /v1/accounts/{account_id}/tasks/{id}`."
+      description: "Returns tasks from every account you belong to as one list, ordered by most recent activity. Use it for a task history that spans accounts, instead of listing each account's tasks and merging them.\n\nBy default (`scope=mine`) the list holds the tasks you own: those whose `owner_user_id` is you. `scope=visible` returns every task you can see in those accounts, which is the same set each account's own task list returns. Accounts still waiting on activation are left out.\n\n**Narrowing to accounts.** `account_ids` limits the list to the accounts you name. An id you cannot read (an account you do not belong to, one pending activation, or one that does not exist) is ignored, so the list holds the remaining accounts' tasks, or none when no id is readable. `account_id` narrows to a single account and refuses one you cannot read with 404 or 403. Send one or the other, not both.\n\n**Order.** Rows are sorted by `last_activity_at`, newest first, then by `id` descending, so tasks with the same activity time keep a fixed order. `q` filters the list and keeps this order.\n\n**Paging.** Every filter (`scope`, `account_ids` or `account_id`, `archived`, `q`, membership and activation) is applied before the page is cut, so every page except the last holds `per_page` rows. When more rows exist, `meta.next_cursor` holds an opaque cursor; pass it back as `cursor` with the same filters to get the next page. A cursor records the filters it was issued for: sent with different ones it returns 422, and the list starts again without a cursor. `per_page` may change between pages. On a list that is not changing, following cursors returns every row exactly once. A task that sees new activity while you page moves ahead of the cursor: later pages skip it, and the first page shows it at its new place. Access is checked on every request, so a cursor never returns tasks from an account you no longer belong to.\n\nEach row carries `account_id` and the account's `name`, which is everything needed to open it at `GET /v1/accounts/{account_id}/tasks/{id}`."
       parameters:
         -
           in: query
@@ -6361,12 +6361,22 @@ paths:
         -
           in: query
           name: account_id
-          description: 'Return only tasks from this account. It must be an account you belong to; any other value returns 404, whether or not the account exists.'
+          description: 'Return only tasks from this account. It must be an account you belong to; any other value returns 404, whether or not the account exists. Cannot be combined with `account_ids`.'
           example: null
           required: false
           schema:
             type: string
-            description: 'Return only tasks from this account. It must be an account you belong to; any other value returns 404, whether or not the account exists.'
+            description: 'Return only tasks from this account. It must be an account you belong to; any other value returns 404, whether or not the account exists. Cannot be combined with `account_ids`.'
+            example: null
+        -
+          in: query
+          name: account_ids
+          description: 'Return only tasks from these accounts, as a comma-separated list (`account_ids=a,b`) or repeated (`account_ids[]=a&account_ids[]=b`). Up to 100 ids. Ids of accounts you cannot read are ignored rather than refused.'
+          example: null
+          required: false
+          schema:
+            type: string
+            description: 'Return only tasks from these accounts, as a comma-separated list (`account_ids=a,b`) or repeated (`account_ids[]=a&account_ids[]=b`). Up to 100 ids. Ids of accounts you cannot read are ignored rather than refused.'
             example: null
         -
           in: query
@@ -6925,7 +6935,7 @@ paths:
                           type: string
                           example: not_found
         422:
-          description: 'Validation failed, for example an unknown `scope` or a cursor from another list.'
+          description: 'Validation failed, for example an unknown `scope`, a cursor from another list, or a cursor sent with filters other than the ones it was issued for.'
           content:
             application/json:
               schema:
@@ -6996,6 +7006,13 @@ paths:
                   description: 'Must be a valid UUID.'
                   example: 6ff8f7f6-1eb3-3525-be4a-3932c805afed
                   nullable: true
+                account_ids:
+                  type: array
+                  description: 'Must be a valid UUID.'
+                  example:
+                    - 6b72fe4a-5b40-307c-bc24-f79acf9a1bb9
+                  items:
+                    type: string
                 q:
                   type: string
                   description: 'Must not be greater than 255 characters.'
