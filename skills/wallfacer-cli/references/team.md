@@ -46,8 +46,8 @@ The directory does not aggregate anybody's tasks. It names the commands that do:
 
 ```bash
 wallfacer handbook read <role-page-id>          # an agent's job description
-wallfacer tasks list --created-by <agent-id>    # tasks running as that agent
-wallfacer tasks list --owner-user-id <user-id>  # tasks a person owns
+wallfacer tasks account-list --created-by <agent-id>    # tasks running as that agent
+wallfacer tasks account-list --owner-user-id <user-id>  # tasks a person owns
 ```
 
 ## `wallfacer team get <reference>`

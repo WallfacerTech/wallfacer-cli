@@ -180,7 +180,7 @@ wallfacer team get "Grace Hopper"
 wallfacer team get jin -q 'data.role_page_id' --raw
 ```
 
-The directory reports no task counts of its own. It names the commands that do: `wallfacer handbook read <role-page-id>` for an agent's job description, and `wallfacer tasks list --created-by <agent-id>` or `--owner-user-id <user-id>` for the work.
+The directory reports no task counts of its own. It names the commands that do: `wallfacer handbook read <role-page-id>` for an agent's job description, and `wallfacer tasks account-list --created-by <agent-id>` or `--owner-user-id <user-id>` for the work.
 
 ### Chat and run
 

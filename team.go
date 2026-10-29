@@ -36,7 +36,7 @@ func registerTeamCommands(accountID string) {
 Every command here is a read, and the directory never aggregates a member's work.
 Each record carries the IDs the existing commands already take, plus a ` + "`follow_up`" + `
 naming them: an agent's role page reads with ` + "`wallfacer handbook read <role-page-id>`" + `,
-and a member's tasks list with ` + "`wallfacer tasks list --created-by <agent-id>`" + ` or
+and a member's tasks list with ` + "`wallfacer tasks account-list --created-by <agent-id>`" + ` or
 ` + "`--owner-user-id <user-id>`" + `.
 
 Commands that take a ` + "`<reference>`" + ` accept a member ID, a unique display name, an
@@ -301,7 +301,7 @@ func memberFollowUp(member *teamMember) map[string]string {
 
 	switch member.Type {
 	case memberAgent:
-		out["tasks"] = fmt.Sprintf("wallfacer tasks list --created-by %s", member.ID)
+		out["tasks"] = fmt.Sprintf("wallfacer tasks account-list --created-by %s", member.ID)
 		if member.RolePageID != "" {
 			out["role_page"] = fmt.Sprintf("wallfacer handbook read %s", member.RolePageID)
 		}
@@ -309,7 +309,7 @@ func memberFollowUp(member *teamMember) map[string]string {
 			out["chat"] = fmt.Sprintf("wallfacer chat %s \"<what you need>\"", member.ID)
 		}
 	case memberHuman:
-		out["tasks"] = fmt.Sprintf("wallfacer tasks list --owner-user-id %s", member.ID)
+		out["tasks"] = fmt.Sprintf("wallfacer tasks account-list --owner-user-id %s", member.ID)
 	}
 
 	return out
@@ -483,8 +483,8 @@ func runTeamList(api *directoryAPI, kind string, includeDisabled bool, maxPages 
 		"follow_up": map[string]interface{}{
 			"member":       "wallfacer team get <id|name|handle|email>",
 			"role_page":    "wallfacer handbook read <role-page-id>",
-			"agent_tasks":  "wallfacer tasks list --created-by <agent-id>",
-			"member_tasks": "wallfacer tasks list --owner-user-id <user-id>",
+			"agent_tasks":  "wallfacer tasks account-list --created-by <agent-id>",
+			"member_tasks": "wallfacer tasks account-list --owner-user-id <user-id>",
 			"chat":         "wallfacer chat <agent> \"<what you need>\"",
 			"run":          "wallfacer run <playbook> --message \"<kickoff>\"",
 		},

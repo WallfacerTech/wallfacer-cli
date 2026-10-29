@@ -11,18 +11,18 @@ import (
 
 // The generator's before-request hooks are a process-wide registry with no
 // way to remove one, so the cursor hook is added once and reads the flag off
-// whichever `tasks list` was registered last.
+// whichever `tasks account-list` was registered last.
 var (
 	taskListCommand    *cobra.Command
 	taskListCursorHook sync.Once
 )
 
-// registerTaskListPaging gives `tasks list` a --cursor flag. The endpoint is
+// registerAccountTaskListPaging gives `tasks account-list` a --cursor flag. The endpoint is
 // cursor-paginated and answers with `meta.next_cursor`, but its spec documents
 // no cursor parameter, so the generated command could only ever read the first
 // page: past the first 100 tasks, a filtered or searched listing had no way on.
-func registerTaskListPaging(root *cobra.Command) {
-	list := findSubcommand(root, "tasks", "list")
+func registerAccountTaskListPaging(root *cobra.Command) {
+	list := findSubcommand(root, "tasks", "account-list")
 	if list == nil {
 		return
 	}

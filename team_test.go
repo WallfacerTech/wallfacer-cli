@@ -375,13 +375,13 @@ func TestTeamOutputPointsAtRolePageReadsAndTaskFilters(t *testing.T) {
 	if want := "wallfacer handbook read " + pageEngineeringID; followUp["role_page"] != want {
 		t.Errorf("role_page is %v, want %q", followUp["role_page"], want)
 	}
-	if want := "wallfacer tasks list --created-by " + agentJinID; followUp["tasks"] != want {
+	if want := "wallfacer tasks account-list --created-by " + agentJinID; followUp["tasks"] != want {
 		t.Errorf("agent tasks filter is %v, want %q", followUp["tasks"], want)
 	}
 
 	human := memberByID(t, output, humanAdaID)
 	humanFollowUp := human["follow_up"].(map[string]interface{})
-	if want := "wallfacer tasks list --owner-user-id " + humanAdaID; humanFollowUp["tasks"] != want {
+	if want := "wallfacer tasks account-list --owner-user-id " + humanAdaID; humanFollowUp["tasks"] != want {
 		t.Errorf("human tasks filter is %v, want %q", humanFollowUp["tasks"], want)
 	}
 
