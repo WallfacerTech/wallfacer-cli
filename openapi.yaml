@@ -1626,6 +1626,10 @@ components:
               type: string
               nullable: true
               description: 'A link to the conversation on that channel, when the channel has one. Null otherwise.'
+            counterpart:
+              type: string
+              nullable: true
+              description: 'Who the conversation is with, as a finished line to show verbatim and never a link. On email it reads `Name <address>`, or the bare address when the sender gave no name; other channels give the name the channel knows them by. Null when unknown, including every conversation recorded before this field existed.'
         conversation_opening:
           type: object
           nullable: true
@@ -1648,6 +1652,10 @@ components:
               type: string
               nullable: true
               description: 'A link to the thread on that channel, when the channel recorded one. Null otherwise.'
+            counterpart:
+              type: string
+              nullable: true
+              description: 'The person the platform opened the conversation with, in the same finished form as `send_restriction.counterpart`. Null when unknown, including openings recorded before this field existed.'
         analysis_mode:
           type: boolean
           description: "Whether an analysis span is open on this session right now. False on every ordinary session, and false as soon as a span closes.\n\nRead this rather than inferring the span's state from the transcript: the message that closes a span is itself stamped `mode: analysis`, so the last message of a closed span looks exactly like the last message of an open one. This is the session's own state and is separate from `mode` on a message, which says which span a message belongs to and stays `'analysis' | null` per row."
