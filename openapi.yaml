@@ -137,6 +137,9 @@ components:
         name:
           type: string
           description: 'Human-readable account name, as chosen by the account owner.'
+        palette:
+          type: string
+          description: 'Shared dashboard palette identifier for all account members, `ink-parchment` when the account has not chosen one. A variant is written `{family}/{variant}`; treat a value you do not recognise as the default. Personal light/dark appearance is independent.'
         activation_state:
           type: string
           description: "Whether the account has been granted access to the product. An account created by someone who already belongs to an active account is `active` from the start. Every other new account starts out awaiting review and cannot use product features until it is activated:\n\n- `pending`: the account is awaiting activation and cannot yet use the product.\n- `active`: the account has been activated and has full access.\n- `paused`: access was activated and later suspended.\n- `rejected`: the account was reviewed and not granted access."
@@ -1101,6 +1104,8 @@ components:
             id:
               type: string
             name:
+              type: string
+            palette:
               type: string
             activation_state:
               type: string
@@ -3002,7 +3007,7 @@ paths:
     patch:
       summary: 'Update an account'
       operationId: updateAnAccount
-      description: "Updates an account. Requires the `admin` or `owner` role on the account.\n\nTwo fields are mutable through the public API: `name`, and `collaboration_page_id`, the handbook page that tells this account's agents how to work with each other. Both are optional on a PATCH, so you can change either without restating the other. A `name` that is sent must be non-blank; sending `collaboration_page_id` as `null` clears the selection and the agents fall back to the starter guidance.\n\nThe selected page must be a page on this account. A page belonging to another account, a deleted page, and a playbook id are all rejected with `422`."
+      description: "Updates an account. Requires the `admin` or `owner` role on the account.\n\nMutable fields are `name`, `palette`, and `collaboration_page_id`, the handbook page that tells this account's agents how to work with each other. All are optional on a PATCH, so you can change one without restating the others. `palette` is shared by every member of this account and accepts `evergreen`, `ink-parchment`, `slate-lilac`, or `copper-cream`; sending `null` clears the choice. An account with no choice reads as `ink-parchment`. A variant is written `{family}/{variant}`, and a client should treat a palette it does not recognise as the default. Personal light/dark appearance is separate. A `name` that is sent must be non-blank; sending `collaboration_page_id` as `null` clears the selection and the agents fall back to the starter guidance.\n\nThe selected page must be a page on this account. A page belonging to another account, a deleted page, and a playbook id are all rejected with `422`."
       parameters: []
       responses:
         200:
@@ -3153,6 +3158,16 @@ paths:
                   type: string
                   description: 'A human-readable name for the account. Must not be greater than 255 characters.'
                   example: 'Acme Inc.'
+                palette:
+                  type: string
+                  description: 'Shared dashboard palette for every member of this account, independent of personal light/dark appearance. One of evergreen, ink-parchment, slate-lilac, or copper-cream. Send `null` to clear the choice and use the default.'
+                  example: evergreen
+                  enum:
+                    - evergreen
+                    - ink-parchment
+                    - slate-lilac
+                    - copper-cream
+                  nullable: true
                 collaboration_page_id:
                   type: string
                   description: "ID of the handbook page that tells this account's agents how to work with each other. Must be a page on this account. Send `null` to clear the selection. Must be a valid UUID."
