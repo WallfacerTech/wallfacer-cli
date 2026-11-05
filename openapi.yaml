@@ -377,6 +377,33 @@ components:
           type: string
           nullable: true
           description: 'ISO 8601 timestamp the agent was created.'
+    Agent4:
+      type: object
+      properties:
+        status:
+          type: string
+          description: "Where the agent's saved browser sign-ins stand:\n\n- `empty`: nothing is saved. The agent's next browser starts signed out.\n- `saved`: sign-ins are saved and the agent's next browser starts with them.\n- `in_use`: a browser in one of the agent's sessions is running with the saved sign-ins and saving to them.\n- `clearing`: the saved sign-ins were deleted and the browser that held them is being stopped.\n- `unavailable`: the saved sign-ins could not be loaded into the browser, which started signed out. Anything saved since was saved from that browser. See `reason_code`."
+          enum:
+            - empty
+            - saved
+            - in_use
+            - clearing
+            - unavailable
+        generation:
+          type: integer
+          description: 'Increases every time the saved sign-ins are cleared. Compare it across responses to discard a response that predates a clear. 0 when the agent has never had any.'
+        saved_at:
+          type: string
+          description: 'When the sign-ins were last saved, as ISO 8601. Null when nothing is saved.'
+          nullable: true
+        reason_code:
+          type: string
+          nullable: true
+          description: "Why the newest browser state is not the one saved, or null when nothing went wrong:\n\n- `restore_failed`: the saved sign-ins could not be loaded into the browser, which started signed out. Stays until a saved state loads cleanly or the sign-ins are cleared.\n- `save_failed`: the newest sign-ins could not be saved. The previous save still applies.\n- `state_too_large`: the newest sign-ins exceed the size that can be saved. The previous save still applies."
+          enum:
+            - restore_failed
+            - save_failed
+            - state_too_large
     AgentDomain:
       type: object
       properties:
@@ -16738,6 +16765,212 @@ paths:
                           example: unauthenticated
         403:
           description: 'Reading quiet replies is limited to account admins.'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: 'This action requires at least the admin role.'
+                      code: insufficient_role
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: 'This action requires at least the admin role.'
+                        code: insufficient_role
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: 'This action requires at least the admin role.'
+                        code:
+                          type: string
+                          example: insufficient_role
+        404:
+          description: 'Agent not found.'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: 'Resource not found.'
+                      code: not_found
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: 'Resource not found.'
+                        code: not_found
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: 'Resource not found.'
+                        code:
+                          type: string
+                          example: not_found
+      tags:
+        - Agents
+    parameters:
+      -
+        in: path
+        name: account_id
+        description: 'The ID of the account.'
+        example: architecto
+        required: true
+        schema:
+          type: string
+      -
+        in: path
+        name: agent_user_id
+        description: 'The ID of the agent user.'
+        example: 16
+        required: true
+        schema:
+          type: integer
+  '/v1/accounts/{account_id}/agents/{agent_user_id}/browser-state':
+    get:
+      summary: 'Get saved browser state'
+      operationId: getSavedBrowserState
+      description: "Returns where the agent's saved browser sign-ins stand.\n\nWhen an agent browses the web in its sandbox, the cookies, local storage and IndexedDB of the sites it signs in to are saved after each browser action and restored the next time it opens a browser, including in a later session or on a new sandbox. Only one of the agent's sessions saves at a time; another session that browses meanwhile starts signed out and saves nothing.\n\nThe response never contains the sign-ins themselves."
+      parameters: []
+      responses:
+        200:
+          description: "The agent's saved browser state."
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  data:
+                    status: saved
+                    generation: 3
+                    saved_at: '2026-11-05T16:17:04.000000Z'
+                    reason_code: null
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Agent4'
+        401:
+          description: 'Missing or invalid API token.'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: Unauthenticated.
+                      code: unauthenticated
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: Unauthenticated.
+                        code: unauthenticated
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: Unauthenticated.
+                        code:
+                          type: string
+                          example: unauthenticated
+        404:
+          description: 'Agent not found.'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: 'Resource not found.'
+                      code: not_found
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: 'Resource not found.'
+                        code: not_found
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: 'Resource not found.'
+                        code:
+                          type: string
+                          example: not_found
+      tags:
+        - Agents
+    delete:
+      summary: 'Clear saved browser state'
+      operationId: clearSavedBrowserState
+      description: "Deletes the agent's saved browser sign-ins and stops any browser of the agent's that is running with them, so the agent is signed out of every site it had signed in to. The next browser it opens starts signed out. `generation` increases, and nothing a browser saves from before the clear is kept.\n\nAnswers 204 when the clear is complete. Answers 202 with `status: clearing` while a running browser is being stopped; read the state again until it is no longer `clearing`. Repeating the request is safe: while a stop is pending it answers 202 again, and once nothing is saved it answers 204 without changing `generation`.\n\nOffboarding an agent clears its saved browser state as well."
+      parameters: []
+      responses:
+        202:
+          description: 'The saved sign-ins are deleted and the browser holding them is being stopped.'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  data:
+                    status: clearing
+                    generation: 4
+                    saved_at: null
+                    reason_code: null
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Agent4'
+        204:
+          description: 'The saved sign-ins are deleted and no browser holds them.'
+          content:
+            application/json:
+              schema:
+                type: object
+                nullable: true
+        401:
+          description: 'Missing or invalid API token.'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: Unauthenticated.
+                      code: unauthenticated
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: Unauthenticated.
+                        code: unauthenticated
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: Unauthenticated.
+                        code:
+                          type: string
+                          example: unauthenticated
+        403:
+          description: 'Clearing saved browser state is limited to account admins.'
           content:
             application/json:
               schema:
