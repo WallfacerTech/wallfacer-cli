@@ -1019,6 +1019,10 @@ components:
           type: string
           nullable: true
           description: "Sign-in state for the MCP servers on this environment that authenticate with OAuth, as an object mapping the server's name to `{status, scopes, connected_at}`. Read-only: it reflects sign-ins performed through the connections endpoints and is never accepted on create or update. Null when no server on this environment uses OAuth. `status` is one of:\n\n- `disconnected`: nobody has signed in to this server yet, or the connection was removed. Create a connection to sign in.\n- `connected`: the platform holds a working grant and renews it in the background. `scopes` lists what the grant covers and `connected_at` is when it was established.\n- `needs_reconnect`: the grant stopped working (revoked upstream, or expired with no way to renew). Sign in again to repair it; no session can use the server until you do."
+        browser_proxy:
+          type: string
+          nullable: true
+          description: "The proxy this computer's browser leaves through, or null. `{kind, host, port, username, password_set}`. `kind` is `http` or `socks5`, `host` is a hostname or IPv4 address, `username` is null when the proxy needs no login, and `password_set` says whether a password is stored. The password itself is never returned."
         base_snapshot:
           type: string
           nullable: true
@@ -3835,7 +3839,7 @@ paths:
     post:
       summary: 'Create an environment'
       operationId: createAnEnvironment
-      description: 'Creates a new environment. If a manifest is provided, a snapshot is generated automatically for faster VM boot times. Manifests that reference `${secrets.NAME}` are rejected at this stage because no secrets are configured yet on a brand-new environment; create the environment without secret references, POST the secrets, then PATCH the manifest in. Pass `source_environment_id` instead to create the environment as a copy of an existing one, which carries the source manifest, MCP servers, and secrets over in one request; secret references resolve on the copy because the secrets come with it.'
+      description: 'Creates a new environment. If a manifest is provided, a snapshot is generated automatically for faster VM boot times. Manifests that reference `${secrets.NAME}` are rejected at this stage because no secrets are configured yet on a brand-new environment; create the environment without secret references, POST the secrets, then PATCH the manifest in. Pass `source_environment_id` instead to create the environment as a copy of an existing one, which carries the source manifest, MCP servers, browser proxy, and secrets over in one request; secret references resolve on the copy because the secrets come with it.'
       parameters:
         -
           in: header
@@ -4215,9 +4219,15 @@ paths:
                   example: null
                   properties: {  }
                   nullable: true
+                browser_proxy:
+                  type: object
+                  description: "A proxy this computer's browser leaves through, so sites see its IP instead of the platform's. An object with `kind` (`http` for an HTTP CONNECT proxy, as Webshare, 2captcha and a self-run server all provide, or `socks5`), `host` (a bare hostname or IPv4 address), and `port` (1-65535); add `username` and `password` for a proxy that needs a login, or omit both. The password is stored encrypted and never returned; reads show `password_set` instead. Only the browser leaves this way; the agent's shell does not. Not part of the manifest: changing it never regenerates the snapshot and takes effect on the next session turn."
+                  example: null
+                  properties: {  }
+                  nullable: true
                 source_environment_id:
                   type: string
-                  description: "Create this computer as a copy of an existing one. Its manifest, MCP servers, and secrets are all carried over, so `manifest` and `mcp_servers` cannot be sent alongside it. Secret values are re-encrypted for the new computer without ever being readable, so a manifest that references them resolves on the copy immediately. You need edit access on the computer you are copying. MCP servers that sign in with the vendor's own OAuth are copied without their sign-in and need connecting again on the copy. Must be a valid UUID."
+                  description: "Create this computer as a copy of an existing one. Its manifest, MCP servers, browser proxy, and secrets are all carried over, so `manifest`, `mcp_servers`, and `browser_proxy` cannot be sent alongside it. Secret values are re-encrypted for the new computer without ever being readable, so a manifest that references them resolves on the copy immediately. You need edit access on the computer you are copying. MCP servers that sign in with the vendor's own OAuth are copied without their sign-in and need connecting again on the copy. Must be a valid UUID."
                   example: 9b1f2c34-5d6e-4a7b-8c9d-0e1f2a3b4c5d
               required:
                 - name
@@ -4689,6 +4699,12 @@ paths:
                 mcp_servers:
                   type: object
                   description: 'MCP servers available to the coding agent during sessions on this environment, as an object mapping each server''s name to a definition. Two kinds: a **remote** server is `{url, headers}` (an https endpoint the agent connects to; header values may reference environment secrets as `${secrets.NAME}`), and a **sandbox** server is `{command, args, env}` (a stdio MCP server the platform runs inside the session VM next to your code and tools; env values may reference environment secrets). The kind is inferred from the shape, or set explicitly with `kind`. A remote server can sign in with the vendor''s own OAuth instead of carrying a header you supply: give it `auth` of `{"type": "oauth"}`, optionally with `scopes`, and no `headers`. Its tokens are held encrypted and never appear in this object; a separate sign-in step establishes them. At most 20 servers, and each kind''s definitions must serialize to at most 32 KiB, because the environment block that carries them into the VM is bounded. Replaces the whole map when present; pass `null` to remove all servers. Not part of the manifest: changing it never regenerates the environment''s snapshot and takes effect on the next session turn.'
+                  example: null
+                  properties: {  }
+                  nullable: true
+                browser_proxy:
+                  type: object
+                  description: "A proxy this computer's browser leaves through, so sites see its IP instead of the platform's. An object with `kind` (`http` for an HTTP CONNECT proxy, as Webshare, 2captcha and a self-run server all provide, or `socks5`), `host` (a bare hostname or IPv4 address), and `port` (1-65535); add `username` and `password` for a proxy that needs a login, or omit both. The password is stored encrypted and never returned; reads show `password_set` instead. Pass `null` to remove the proxy and fall back to the account's default browser exit. Only the browser leaves this way; the agent's shell does not. Not part of the manifest: changing it never regenerates the snapshot and takes effect on the next session turn."
                   example: null
                   properties: {  }
                   nullable: true
