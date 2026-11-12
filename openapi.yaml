@@ -1022,7 +1022,7 @@ components:
         browser_proxy:
           type: string
           nullable: true
-          description: "The proxy this computer's browser leaves through, or null. `{kind, host, port, username, password_set}`. `kind` is `http` or `socks5`, `host` is a hostname or IPv4 address, `username` is null when the proxy needs no login, and `password_set` says whether a password is stored. The password itself is never returned."
+          description: "The proxy this computer's browser leaves through, or null. `{kind, host, port, username, password_set, timezone}`. `kind` is `http` or `socks5`, `host` is a hostname or IPv4 address, `username` is null when the proxy needs no login, `password_set` says whether a password is stored, and `timezone` is the IANA timezone the browser keeps as its clock, or null. The password itself is never returned."
         base_snapshot:
           type: string
           nullable: true
@@ -4221,7 +4221,7 @@ paths:
                   nullable: true
                 browser_proxy:
                   type: object
-                  description: "A proxy this computer's browser leaves through, so sites see its IP instead of the platform's. An object with `kind` (`http` for an HTTP CONNECT proxy, as Webshare, 2captcha and a self-run server all provide, or `socks5`), `host` (a bare hostname or IPv4 address), and `port` (1-65535); add `username` and `password` for a proxy that needs a login, or omit both. The password is stored encrypted and never returned; reads show `password_set` instead. Only the browser leaves this way; the agent's shell does not. Not part of the manifest: changing it never regenerates the snapshot and takes effect on the next session turn."
+                  description: "A proxy this computer's browser leaves through, so sites see its IP instead of the platform's. An object with `kind` (`http` for an HTTP CONNECT proxy, as Webshare, 2captcha and a self-run server all provide, or `socks5`), `host` (a bare hostname or IPv4 address), and `port` (1-65535); add `username` and `password` for a proxy that needs a login, or omit both. Add `timezone`, the IANA timezone the proxy's address is in (`America/Phoenix`), and the browser keeps that clock so sites see a time that matches the address; without it the browser keeps the sandbox's UTC clock. The password is stored encrypted and never returned; reads show `password_set` instead. Only the browser leaves this way; the agent's shell does not. Not part of the manifest: changing it never regenerates the snapshot and takes effect on the next session turn."
                   example: null
                   properties: {  }
                   nullable: true
@@ -4704,7 +4704,7 @@ paths:
                   nullable: true
                 browser_proxy:
                   type: object
-                  description: "A proxy this computer's browser leaves through, so sites see its IP instead of the platform's. An object with `kind` (`http` for an HTTP CONNECT proxy, as Webshare, 2captcha and a self-run server all provide, or `socks5`), `host` (a bare hostname or IPv4 address), and `port` (1-65535); add `username` and `password` for a proxy that needs a login, or omit both. The password is stored encrypted and never returned; reads show `password_set` instead. Pass `null` to remove the proxy and fall back to the account's default browser exit. Only the browser leaves this way; the agent's shell does not. Not part of the manifest: changing it never regenerates the snapshot and takes effect on the next session turn."
+                  description: "A proxy this computer's browser leaves through, so sites see its IP instead of the platform's. An object with `kind` (`http` for an HTTP CONNECT proxy, as Webshare, 2captcha and a self-run server all provide, or `socks5`), `host` (a bare hostname or IPv4 address), and `port` (1-65535); add `username` and `password` for a proxy that needs a login, or omit both. Add `timezone`, the IANA timezone the proxy's address is in (`America/Phoenix`), and the browser keeps that clock so sites see a time that matches the address; without it the browser keeps the sandbox's UTC clock. The password is stored encrypted and never returned; reads show `password_set` instead. Pass `null` to remove the proxy and fall back to the account's default browser exit. Only the browser leaves this way; the agent's shell does not. Not part of the manifest: changing it never regenerates the snapshot and takes effect on the next session turn."
                   example: null
                   properties: {  }
                   nullable: true
