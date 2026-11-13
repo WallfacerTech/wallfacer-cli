@@ -309,7 +309,14 @@ func injectAccountID(parent *cobra.Command, accountID string) {
 			cmd.Run = func(c *cobra.Command, args []string) {
 				capturedRun(c, append([]string{accountID}, args...))
 			}
-			cmd.Args = cobra.MinimumNArgs(0)
+			if validate := cmd.Args; validate != nil {
+				cmd.Args = func(c *cobra.Command, args []string) error {
+					if err := validate(c, append([]string{accountID}, args...)); err != nil {
+						return fmt.Errorf("%w\nUsage: %s", err, c.UseLine())
+					}
+					return nil
+				}
+			}
 			cmd.Use = strings.Replace(cmd.Use, "account-id ", "", 1)
 			cmd.Use = strings.Replace(cmd.Use, "account-id", "", 1)
 		}
