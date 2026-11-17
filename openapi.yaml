@@ -23,6 +23,9 @@ tags:
     name: 'Account Users'
     description: 'Manage membership and roles on an account. Admins+ can add, update, and remove users.'
   -
+    name: 'Agent Checklist'
+    description: 'What only a person can do for a newly onboarded agent: create the logins its role needs, connect its tools, enable its playbooks, add it to Slack channels. The list is written when the agent is onboarded, from its role. Items the platform can check complete on their own; the rest are marked done by a person. An open item never stops the agent working. Changes are broadcast on the account channel as `agent_checklist_item_changed`, carrying the item as this API returns it.'
+  -
     name: 'Agent Domain'
     description: "The subdomain every one of an account's agents is addressed at. Choosing it is the first thing an account does: it is what gives each agent a real email address, a mailbox, and the ability to be shared a document the way a colleague is. It is chosen once and cannot be changed afterwards, because every agent address, every document shared with one, and every message sent by one hangs off it."
   -
@@ -56,8 +59,11 @@ tags:
     name: Audit
     description: 'Admin-only. Returns audit rows across three streams: execution (what happened on tasks), policy (configuration changes), and access (who looked at what).'
   -
+    name: Avatars
+    description: "The preset pictures an agent can be given. Send a preset's `key` as `avatar_preset` when onboarding or updating an agent, and the agent shows that picture here, on its Google account, and in Slack."
+  -
     name: Connections
-    description: 'The external systems your account is linked to. A connection is established once, by an admin, and everything your agents do on that system sits inside it. Connecting Slack is what lets each of your agents have its own app there, with its own name, avatar and direct-message conversation.'
+    description: 'The external systems your account is linked to. A connection is established once, by any member of the account, and everything your agents do on that system sits inside it. Connecting Slack is what lets each of your agents have its own app there, with its own name, avatar and direct-message conversation.'
   -
     name: Credentials
     description: "Hand an agent a login the way you hand a new hire one. A credential belongs to the account, is granted to agents one at a time, and reaches a granted agent's work as a named variable it can use but never read. Values are write-only: once stored, no endpoint returns one, and replacing it is the only way to change it. Revoking a grant takes effect on the agent's next session."
@@ -74,6 +80,9 @@ tags:
     name: Events
     description: 'Lifecycle event timeline for environment snapshot generation. One row per state transition (setup started, service healthy, environment ready, etc.).'
   -
+    name: 'Experience levels'
+    description: 'The experience levels an agent can be hired at. Wallfacer maintains the list and decides what each level runs on.'
+  -
     name: 'Inbound webhook collectors'
     description: "Account-owned inbound URLs. Each collector gives you a unique URL you paste into an\nexternal system's webhook settings (for example Sentry, Linear, HubSpot, or Stripe).\nWhatever that system POSTs to the URL is captured as an event on your account stream,\nwhere a playbook's trigger can run on it. No per-system code: the raw payload lands in\nthe event `data`, and a trigger describes in plain language when it should run.\n\nLike an event key, a collector belongs to the account rather than to the person who\ncreated it, so it keeps working after that person leaves. The full URL carries the\ncollector's secret, so treat it as a credential; you can read it again at any time by\nlisting collectors, and rotate it if it ever leaks. Managing collectors (listing,\ncreating, rotating, deleting) requires an admin or owner of the account."
   -
@@ -82,6 +91,9 @@ tags:
   -
     name: Invitations
     description: 'Create and manage account invitations. Invitations are for emails that do not yet belong to a Wallfacer user; once accepted, the invitee is attached to the account with the invited role.'
+  -
+    name: Library
+    description: 'A published set of handbook pages and playbooks you can copy into your own handbook. Reading the library needs no credentials. Copying an entry in is a write to your handbook and goes through the import endpoint, which does.'
   -
     name: Logs
     description: "Per-manifest-step logs for VMs and environment snapshots. Each entry captures one step's stdout/stderr, status, exit code, and timing."
@@ -100,6 +112,9 @@ tags:
   -
     name: Pipelines
     description: 'Handbook pipelines define what your AI does for a task: an ordered list of steps (AI work, or a wait on a signal from the system the work lives in) plus triggers that spawn new tasks from inbound events.'
+  -
+    name: Roles
+    description: "The roles an agent can be hired into. Wallfacer maintains the list. Hiring an agent with a role prefills its title and adds the role's handbook pages and playbooks to your handbook."
   -
     name: Search
     description: 'Search across an account in one request. A single query returns matching environments, tasks, sessions, handbook pages, and pipelines, grouped by type.'
@@ -156,6 +171,9 @@ components:
           type: string
           nullable: true
           description: "A temporary URL to the account's avatar image, or `null` when no avatar has been uploaded. The URL expires a few hours after it is issued, so treat it as short-lived: re-read the account rather than storing it. When it is `null`, render your own placeholder."
+        is_library:
+          type: boolean
+          description: "Whether this account is the shared library: the one account whose handbook pages and playbooks every other account can read and import. Authoring in the library follows two extra rules:\n\n- A playbook step names the role that performs it, as `match:title=Software Engineer`, rather than a specific user. Publishing a version that names a user is rejected.\n- A playbook cannot be enabled where it is authored, because a library entry runs only in the accounts that import it.\n\n`false` for an ordinary account."
         collaboration_page_id:
           type: string
           nullable: true
@@ -178,8 +196,15 @@ components:
         setup:
           type: object
           properties:
+            step:
+              type: string
+            welcome_seen:
+              type: boolean
             workspace:
               type: string
+            workspace_error:
+              type: string
+              nullable: true
             slack:
               type: string
             slack_skipped:
@@ -190,7 +215,7 @@ components:
               type: boolean
             complete:
               type: boolean
-          description: "How far the account has got through setting itself up, recalculated on every read. Four things have to be true before an agent can do its job, and this reports each of them plus whether they are all met:\n\n- `workspace`: the agent domain that gives every agent a real address and mailbox. `none` when no subdomain has been chosen, `provisioning` while it is being set up, `ready` once it works, `failed` when it could not be set up.\n- `slack`: the Slack workspace the agents' apps are created in. `none` when none is connected, `active` when it works, `unhealthy` when the connection has stopped working and needs a fresh configuration token.\n- `slack_skipped`: whether an admin chose to move on without Slack. Skipping is not a way to finish: an account that skips never reports `complete`, because an agent with no Slack app cannot be reached where its colleagues work.\n- `agents`: how many agents the account currently employs. Offboarded agents are not counted.\n- `handbook_acknowledged`: whether an admin has acknowledged the explanation of what the handbook is for.\n- `complete`: true when `workspace` is `provisioning` or `ready`, `slack` is `active`, at least one agent is employed, and the handbook explanation has been acknowledged."
+          description: "How far the account has got through setting itself up, recalculated on every read. Setup is three steps, taken in order, and each has exactly one action. Any member of the account can take them.\n\n- `step`: the step the account is on: `welcome`, `workspace`, `slack`, or `done`. Render this rather than working it out from the other fields. An account that has finished can go back to a step: a domain that later fails returns it to `workspace`, and a Slack connection that stops working returns it to `slack`.\n- `welcome_seen`: whether the account has seen the setup welcome. Record it with `PATCH /v1/accounts/{account}/setup`.\n- `workspace`: the agent domain that gives every agent a real address and mailbox. `none` when no subdomain has been chosen, `provisioning` while it is being set up, `ready` once it works, `failed` when it could not be set up or has stopped working. Choose it with `PUT /v1/accounts/{account}/workspace`.\n- `workspace_error`: why `workspace` is `failed`, in plain language. `null` in every other state.\n- `slack`: the Slack workspace the agents' apps are created in. `none` when none is connected, `active` when it works, `unhealthy` when the connection has stopped working and needs a fresh configuration token. Connect it with `PUT /v1/accounts/{account}/connections/slack`.\n- `slack_skipped`: deprecated. Whether an older client recorded moving on without Slack. Slack cannot be skipped, so this has no effect on `step` or `complete`.\n- `agents`: how many agents the account currently employs. Offboarded agents are not counted. Not part of setup.\n- `handbook_acknowledged`: deprecated. Whether an older client recorded the handbook explanation as read. Has no effect on `step` or `complete`.\n- `complete`: true when `step` is `done`: the welcome has been seen, `workspace` is `provisioning` or `ready`, and `slack` is `active`."
     AccountUser:
       type: object
       properties:
@@ -256,6 +281,14 @@ components:
         email_routable:
           type: boolean
           description: 'Whether mail sent to `email` is actually delivered. False until the agent has a Google account, during which time the address resolves nowhere. A share sent to a non-routable address is accepted by Google and delivered to nobody, so never offer the address to a customer while this is false.'
+        avatar_url:
+          type: string
+          nullable: true
+          description: "The agent's picture, the one Slack and Google show, as a link that stays valid for a limited time. Null while it has none."
+        avatar_preset:
+          type: string
+          nullable: true
+          description: 'Which picture from `GET /avatars` the agent has, by its `key`. Null when its picture is not one of them.'
         title:
           type: string
           nullable: true
@@ -268,18 +301,32 @@ components:
           type: string
           nullable: true
           description: 'Id of the single environment the agent works in. Null when no environment is assigned.'
+        role_id:
+          type: string
+          nullable: true
+          description: "Id of the role the agent was hired into, from `GET /roles`. Null for an agent hired into no role, or before roles existed. A role's later edits do not change an agent already holding it."
+        level:
+          type: string
+          nullable: true
+          description: "The agent's experience level: `junior`, `senior`, or `principal`. The level decides the vendor, model, and effort the agent runs on, and Wallfacer can move every agent on a level to a newer model. When `model_admin_set` is true the agent runs on the model Wallfacer set for it instead. Null for an agent with no level."
+        model_admin_set:
+          type: boolean
+          description: "Whether Wallfacer set this agent's vendor, model, and effort directly instead of from its level. Such an agent keeps its model when the level's model changes."
+        credentials_admin_set:
+          type: boolean
+          description: "Whether the agent runs on the account's own vendor credential (an API key or a subscription seat) rather than model access supplied by Wallfacer. Only accounts Wallfacer has allowed to use their own credentials can be in this state."
         vendor:
           type: string
           nullable: true
-          description: 'The AI vendor that powers the agent, for example "claude". Null when left to the account default.'
+          description: 'The AI vendor that powers the agent, for example "claude", as its level or Wallfacer''s override sets it. Null when neither names one and the account default applies.'
         model:
           type: string
           nullable: true
-          description: 'The model the agent runs on. Null when left to the vendor default.'
+          description: "The model the agent runs on, as its level or Wallfacer's override sets it. Null when left to the vendor default."
         harness_effort:
           type: string
           nullable: true
-          description: 'Reasoning effort the agent works at, in its vendor''s own vocabulary: "low", "medium", "high" for claude and grok; "minimal", "low", "medium", "high", "xhigh" for codex. Set it with the `effort` field on update. Null when left to the harness default, and always null for a vendor with no effort control. Call `GET /models` for each vendor''s options and default.'
+          description: 'Reasoning effort the agent works at, in its vendor''s own vocabulary: "low", "medium", "high" for claude and grok; "minimal", "low", "medium", "high", "xhigh" for codex. Null when left to the harness default, and always null for a vendor with no effort control. Call `GET /models` for each vendor''s options and default.'
         effort_label:
           type: string
           nullable: true
@@ -377,6 +424,9 @@ components:
           type: string
           nullable: true
           description: 'ISO 8601 timestamp the agent was created.'
+        checklist_open_count:
+          type: integer
+          description: "How many items on the agent's onboarding checklist are still open. Read the items at `GET /agents/{agent}/checklist-items`. An open item never stops the agent working."
     Agent4:
       type: object
       properties:
@@ -404,6 +454,74 @@ components:
             - restore_failed
             - save_failed
             - state_too_large
+    AgentChecklist:
+      type: object
+      properties:
+        id:
+          type: string
+          description: 'Unique id of the checklist item. Send it as `checklist_item_id` when saving a credential for a `login` item, so the item completes once the credential is granted to the agent.'
+        agent_id:
+          type: integer
+          description: 'Id of the agent the item belongs to.'
+        kind:
+          type: string
+          description: "What the item asks for:\n\n- `login`: create a login on an outside service and save it to the keychain for this agent. Completes when a credential saved with this item's id is granted to the agent.\n- `tool`: connect an MCP server on the agent's computer. Completes when the server is connected there.\n- `playbooks`: review and enable the playbooks the agent's role brought. Completes when any one of them is enabled.\n- `google`: clear what stops the agent getting its Google account. Completes when the account is created.\n- `slack_channels`: add the agent to the Slack channels its work happens in. Marked done by a person.\n- `custom`: a step the role asks for. Marked done by a person."
+          enum:
+            - login
+            - tool
+            - playbooks
+            - google
+            - slack_channels
+            - custom
+        title:
+          type: string
+          description: 'What to do, in a few words, for example "Create a Mixpanel login".'
+        reason:
+          type: string
+          description: 'One sentence on why it matters. Null when the role gives none.'
+          nullable: true
+        state:
+          type: string
+          description: "Where the item stands:\n\n- `open`: still to do.\n- `done`: done, either seen by the platform or marked by a person.\n- `dismissed`: a person chose to skip it. It stays on the list and can be opened again."
+          enum:
+            - open
+            - done
+            - dismissed
+        verified:
+          type: boolean
+          description: 'Whether the platform completes this item itself when it sees the thing done. Such an item cannot be marked done by hand; it can still be dismissed.'
+        details:
+          type: object
+          properties:
+            service_key:
+              type: string
+            service_name:
+              type: string
+            signup_url:
+              type: string
+            credential_kind:
+              type: string
+            recommended:
+              type: boolean
+            email:
+              type: string
+              nullable: true
+          description: "What the item needs, by `kind`. Empty for `slack_channels` and `custom`.\n\nFor `login`: `service_key` and `service_name` name the service; `signup_url` is where to create the login, or null; `credential_kind` is the keychain kind to save it as (`login`, `api_key`, `token` or `totp`), or null; `recommended` says whether the role recommends it rather than needs it; `email` is the agent's email address to sign up with, read when the item is read, or null when the account has no Google Workspace.\n\nFor `tool`: `server_name`, the MCP server to connect; `display_name`, what to call it; and `environment_id`, the agent's computer, where the server is connected, or null.\n\nFor `playbooks`: `playbook_ids`, the account's copies of the role's playbooks.\n\nFor `google`: `code`, the refusal that stops the account: `no_seats_available`, `subscription_unsupported`, `workspace_not_connected`, or another identity error code."
+        credential_id:
+          type: string
+          nullable: true
+          description: 'Id of the credential saved from this `login` item. Null until one is saved.'
+        completed_at:
+          type: string
+          nullable: true
+          description: 'ISO 8601 timestamp the item was done. Null while it is not.'
+        dismissed_at:
+          type: string
+          nullable: true
+          description: 'ISO 8601 timestamp the item was dismissed. Null while it is not.'
+        created_at:
+          type: string
+          description: 'ISO 8601 timestamp the item was added.'
     AgentDomain:
       type: object
       properties:
@@ -463,6 +581,14 @@ components:
           type: string
           nullable: true
           description: 'Why the handle cannot be used, in words you can show the customer. Null when it can.'
+        suggestion:
+          type: string
+          nullable: true
+          description: 'When the handle is well-formed but taken, the next free handle made from it by adding a number, such as `saul-2`, to offer in its place. Null when the handle is available, when it breaks a naming rule, or when no numbered handle is free.'
+        domain:
+          type: string
+          description: "The account's agent domain, such as `acme.wallfaceragents.com`. The handle becomes the address `{handle}@{domain}`. Null until the account has chosen its agent domain."
+          nullable: true
     AgentIdentity:
       type: object
       properties:
@@ -490,7 +616,7 @@ components:
         error:
           type: string
           nullable: true
-          description: 'Why setup failed, when `status` is `failed`. Also carries why a rename could not be applied here, on an account that is otherwise working. Null when there is nothing wrong.'
+          description: 'Why setup failed, when `status` is `failed`. While `status` is `pending`, why the account is still on its way when that is a temporary refusal being retried on its own, such as Google being briefly unavailable. Also carries why a rename could not be applied here, on an account that is otherwise working. Null when there is nothing wrong.'
         details:
           type: object
           properties:
@@ -1146,6 +1272,8 @@ components:
             avatar_url:
               type: string
               nullable: true
+            is_library:
+              type: boolean
             collaboration_page_id:
               type: string
               nullable: true
@@ -1160,8 +1288,15 @@ components:
             setup:
               type: object
               properties:
+                step:
+                  type: string
+                welcome_seen:
+                  type: boolean
                 workspace:
                   type: string
+                workspace_error:
+                  type: string
+                  nullable: true
                 slack:
                   type: string
                 slack_skipped:
@@ -1297,6 +1432,10 @@ components:
           type: string
           nullable: true
           description: 'ISO 8601 timestamp the page was deleted. Deleted pages keep their content and history and can be restored by passing `deleted: false` on update. Null while live.'
+        library:
+          type: string
+          nullable: true
+          description: 'Where this page was copied in from, as `{id, imported_at}`: the library page and when you took it. The copy is yours to edit; this is what lets us tell you when the library page has moved on. Null for a page you wrote yourself.'
     PaginationLinks:
       type: object
       properties:
@@ -1444,6 +1583,10 @@ components:
         created_by:
           type: integer
           description: 'User who created the pipeline.'
+        library:
+          type: string
+          nullable: true
+          description: 'Where this playbook was copied in from, as `{id, version_id, imported_at}`: the library playbook, the exact version you took, and when. The copy is yours to edit and publish over; this is what lets us tell you when the library has published something newer. Null for a playbook you wrote yourself.'
     PipelineVersion:
       type: object
       properties:
@@ -2846,7 +2989,7 @@ paths:
     post:
       summary: 'Create an account'
       operationId: createAnAccount
-      description: "Creates a new account. The authenticated user is automatically attached as the `owner` of the new account.\n\nUse this when a single user needs to manage multiple accounts (for example, to separate billing or environments per organization).\n\nIf you already belong to an active account, the new account is created `active` and is usable immediately. Otherwise it is created `pending`; see `activation_state`."
+      description: "Creates a new account. The authenticated user is automatically attached as the `owner` of the new account.\n\nUse this when a single user needs to manage multiple accounts (for example, to separate billing or environments per organization).\n\nIf you already belong to an active account, the new account is created `active` and is usable immediately. Otherwise it is created `pending`; see `activation_state`.\n\nA new account's handbook starts with the platform's starter pages, copied in as the account's own to edit."
       parameters: []
       responses:
         201:
@@ -3566,7 +3709,7 @@ paths:
     patch:
       summary: 'Record a setup decision'
       operationId: recordASetupDecision
-      description: "Records one of the two setup steps that has no system behind it: choosing to move on without Slack, and acknowledging the explanation of what the handbook is for. Requires the `admin` or `owner` role.\n\nThe other two steps are not recorded here and cannot be: whether the account has an agent domain and whether it has a Slack workspace are read from those systems on every request, so they always agree with reality.\n\nPartial, like any PATCH: a field left out is unchanged. Returns the whole account, so the refreshed `setup` block comes back with it."
+      description: "Records that the account has seen the setup welcome, the first of setup's three steps and the only one with no system behind it. Any member of the account can record it.\n\nThe other two steps are not recorded here and cannot be: whether the account has an agent domain and whether it has a Slack workspace are read from those systems on every request, so they always agree with reality. Choose the domain with `PUT /v1/accounts/{account}/workspace` and connect Slack with `PUT /v1/accounts/{account}/connections/slack`. No step can be skipped.\n\n`slack_skipped` and `handbook_acknowledged` are deprecated. They are still accepted and reported back, but neither changes `setup.step` or `setup.complete`.\n\nPartial, like any PATCH: a field left out is unchanged. Returns the whole account, so the refreshed `setup` block comes back with it."
       parameters:
         -
           in: header
@@ -3631,7 +3774,7 @@ paths:
                           type: string
                           example: unauthenticated
         403:
-          description: 'Caller is a member of the account but is not an admin or owner.'
+          description: 'The account has not been activated yet.'
           content:
             application/json:
               schema:
@@ -3693,13 +3836,17 @@ paths:
             schema:
               type: object
               properties:
+                welcome_seen:
+                  type: boolean
+                  description: 'Whether the account has seen the setup welcome. Send `true` to finish the `welcome` step. Send `false` to show it again.'
+                  example: true
                 slack_skipped:
                   type: boolean
-                  description: 'Whether to move on without connecting Slack. Send `false` to put the step back in front of the admin. Skipping does not finish setup: `setup.complete` stays false until a workspace is connected.'
+                  description: 'Deprecated, and has no effect on `setup.step` or `setup.complete`: Slack cannot be skipped. Still accepted and reported back as `setup.slack_skipped` for older clients.'
                   example: true
                 handbook_acknowledged:
                   type: boolean
-                  description: 'Whether an admin has read the explanation of what the handbook is for. Send `false` to show it again.'
+                  description: 'Deprecated, and has no effect on `setup.step` or `setup.complete`. Still accepted and reported back as `setup.handbook_acknowledged` for older clients.'
                   example: true
     parameters:
       -
@@ -11268,11 +11415,426 @@ paths:
         required: true
         schema:
           type: integer
+  '/v1/accounts/{account_id}/agents/{agent_user_id}/checklist-items':
+    get:
+      summary: 'List checklist items'
+      operationId: listChecklistItems
+      description: "Returns the agent's onboarding checklist in the order to work through it, including items already done or dismissed."
+      parameters:
+        -
+          in: query
+          name: per_page
+          description: 'Results per page (max 100).'
+          example: 25
+          required: false
+          schema:
+            type: integer
+            description: 'Results per page (max 100).'
+            example: 25
+        -
+          in: query
+          name: page
+          description: 'Page number.'
+          example: 1
+          required: false
+          schema:
+            type: integer
+            description: 'Page number.'
+            example: 1
+      responses:
+        200:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  data:
+                    -
+                      id: 01a1e6d4-7460-71ff-9ef2-20e28ea96599
+                      agent_id: 377
+                      kind: login
+                      title: 'Create a Mixpanel login'
+                      reason: 'Reads the product funnel it reports on.'
+                      state: open
+                      verified: true
+                      details:
+                        service_key: mixpanel
+                        service_name: Mixpanel
+                        signup_url: 'https://mixpanel.com/register'
+                        credential_kind: login
+                        recommended: true
+                        email: null
+                      credential_id: null
+                      completed_at: null
+                      dismissed_at: null
+                      created_at: '2026-11-17T00:07:25.000000Z'
+                    -
+                      id: 01a1e6d4-747b-70f1-b284-ec8199f77104
+                      agent_id: 379
+                      kind: login
+                      title: 'Create a Mixpanel login'
+                      reason: 'Reads the product funnel it reports on.'
+                      state: open
+                      verified: true
+                      details:
+                        service_key: mixpanel
+                        service_name: Mixpanel
+                        signup_url: 'https://mixpanel.com/register'
+                        credential_kind: login
+                        recommended: true
+                        email: null
+                      credential_id: null
+                      completed_at: null
+                      dismissed_at: null
+                      created_at: '2026-11-17T00:07:25.000000Z'
+                  links:
+                    first: '/?page=1'
+                    last: '/?page=1'
+                    prev: null
+                    next: null
+                  meta:
+                    current_page: 1
+                    from: 1
+                    last_page: 1
+                    links:
+                      -
+                        url: null
+                        label: Previous
+                        page: null
+                        active: false
+                      -
+                        url: '/?page=1'
+                        label: '1'
+                        page: 1
+                        active: true
+                      -
+                        url: null
+                        label: Next
+                        page: null
+                        active: false
+                    path: /
+                    per_page: 25
+                    to: 2
+                    total: 2
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AgentChecklist'
+                  links:
+                    $ref: '#/components/schemas/PaginationLinks'
+                  meta:
+                    $ref: '#/components/schemas/PaginationMeta8'
+        401:
+          description: 'Missing or invalid API token.'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: Unauthenticated.
+                      code: unauthenticated
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: Unauthenticated.
+                        code: unauthenticated
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: Unauthenticated.
+                        code:
+                          type: string
+                          example: unauthenticated
+        403:
+          description: 'You do not belong to this account.'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: 'You do not belong to this account.'
+                      code: forbidden
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: 'You do not belong to this account.'
+                        code: forbidden
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: 'You do not belong to this account.'
+                        code:
+                          type: string
+                          example: forbidden
+        404:
+          description: 'Agent not found.'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: 'Resource not found.'
+                      code: not_found
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: 'Resource not found.'
+                        code: not_found
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: 'Resource not found.'
+                        code:
+                          type: string
+                          example: not_found
+      tags:
+        - 'Agent Checklist'
+    parameters:
+      -
+        in: path
+        name: account_id
+        description: 'The ID of the account.'
+        example: architecto
+        required: true
+        schema:
+          type: string
+      -
+        in: path
+        name: agent_user_id
+        description: 'The ID of the agent user.'
+        example: 16
+        required: true
+        schema:
+          type: integer
+      -
+        in: path
+        name: agent
+        description: 'The agent whose checklist to read.'
+        example: 42
+        required: true
+        schema:
+          type: integer
+  '/v1/accounts/{account_id}/agents/{agent_user_id}/checklist-items/{item}':
+    patch:
+      summary: 'Update a checklist item'
+      operationId: updateAChecklistItem
+      description: "Marks an item done, dismisses it, or opens it again. Open to any member of the account.\n\nOnly an item with `verified` false can be marked done by hand: the others complete when the platform sees the thing done, so a login item completes when the credential saved from it is granted to the agent. Any item can be dismissed, and a dismissed item stays on the list. Setting the state an item already has is accepted and changes nothing."
+      parameters: []
+      responses:
+        200:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  data:
+                    id: 01a1e6d4-74a0-7123-8d4a-8a23c444778b
+                    agent_id: 381
+                    kind: login
+                    title: 'Create a Mixpanel login'
+                    reason: 'Reads the product funnel it reports on.'
+                    state: open
+                    verified: true
+                    details:
+                      service_key: mixpanel
+                      service_name: Mixpanel
+                      signup_url: 'https://mixpanel.com/register'
+                      credential_kind: login
+                      recommended: true
+                      email: null
+                    credential_id: null
+                    completed_at: null
+                    dismissed_at: null
+                    created_at: '2026-11-17T00:07:25.000000Z'
+                properties:
+                  data:
+                    $ref: '#/components/schemas/AgentChecklist'
+        401:
+          description: 'Missing or invalid API token.'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: Unauthenticated.
+                      code: unauthenticated
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: Unauthenticated.
+                        code: unauthenticated
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: Unauthenticated.
+                        code:
+                          type: string
+                          example: unauthenticated
+        403:
+          description: 'You do not belong to this account.'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: 'You do not belong to this account.'
+                      code: forbidden
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: 'You do not belong to this account.'
+                        code: forbidden
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: 'You do not belong to this account.'
+                        code:
+                          type: string
+                          example: forbidden
+        404:
+          description: 'The agent or the item does not exist.'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: 'Resource not found.'
+                      code: not_found
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: 'Resource not found.'
+                        code: not_found
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: 'Resource not found.'
+                        code:
+                          type: string
+                          example: not_found
+        422:
+          description: 'The item cannot be marked done by hand.'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: 'This item completes on its own once the platform sees it done. Dismiss it instead if you mean to skip it.'
+                      code: validation_error
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: 'This item completes on its own once the platform sees it done. Dismiss it instead if you mean to skip it.'
+                        code: validation_error
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: 'This item completes on its own once the platform sees it done. Dismiss it instead if you mean to skip it.'
+                        code:
+                          type: string
+                          example: validation_error
+      tags:
+        - 'Agent Checklist'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                state:
+                  type: string
+                  description: 'The state to put the item in: `done` to mark it done, `dismissed` to skip it, or `open` to reopen it. Only an item with `verified` false can be set to `done`.'
+                  example: done
+                  enum:
+                    - open
+                    - done
+                    - dismissed
+              required:
+                - state
+    parameters:
+      -
+        in: path
+        name: account_id
+        description: 'The ID of the account.'
+        example: architecto
+        required: true
+        schema:
+          type: string
+      -
+        in: path
+        name: agent_user_id
+        description: 'The ID of the agent user.'
+        example: 16
+        required: true
+        schema:
+          type: integer
+      -
+        in: path
+        name: item
+        description: 'The checklist item to update.'
+        example: 9b1e4c1a-3f0e-4b8a-9a55-2a8c8f0f6d11
+        required: true
+        schema:
+          type: string
+      -
+        in: path
+        name: agent
+        description: 'The agent the item belongs to.'
+        example: 42
+        required: true
+        schema:
+          type: integer
   '/v1/accounts/{account_id}/workspace':
     get:
       summary: 'Get the agent domain'
       operationId: getTheAgentDomain
-      description: "Returns the account's agent domain and how far along it is. Poll this after choosing a subdomain: `status` is `provisioning` until the domain works, then `ready`. Requires the `admin` or `owner` role."
+      description: "Returns the account's agent domain and how far along it is. Poll this after choosing a subdomain: `status` is `provisioning` until the domain works, then `ready`. Any member of the account can read it."
       parameters: []
       responses:
         200:
@@ -11320,7 +11882,7 @@ paths:
                           type: string
                           example: unauthenticated
         403:
-          description: 'Caller is a member of the account but is not an admin or owner.'
+          description: 'The account has not been activated yet.'
           content:
             application/json:
               schema:
@@ -11378,7 +11940,7 @@ paths:
     put:
       summary: 'Choose the agent domain'
       operationId: chooseTheAgentDomain
-      description: "Chooses the subdomain the account's agents are addressed at, and starts setting it up. Requires the `admin` or `owner` role.\n\nSend the subdomain only: `acme`, not `acme.wallfaceragents.com`. Two to sixty-three characters, lowercase letters, digits and single hyphens, starting and ending with a letter or digit. Check one with `GET /workspace/labels/{label}` before sending it.\n\nReturns 202, because setting the domain up is a conversation with the mail and directory providers that outlasts the request. Read the response's `status` to follow it: `provisioning` while it is being set up, `ready` once agents can be given an address on it, `failed` with an `error` if it could not be. A failed attempt can be retried by sending the same subdomain again.\n\nThe choice is permanent. Once a domain is set up, sending a different subdomain is refused: changing it would change every agent address in the account."
+      description: "Chooses the subdomain the account's agents are addressed at, and starts setting it up. Any member of the account can choose it.\n\nSend the subdomain only: `acme`, not `acme.wallfaceragents.com`. Two to sixty-three characters, lowercase letters, digits and single hyphens, starting and ending with a letter or digit. Check one with `GET /workspace/labels/{label}` before sending it.\n\nReturns 202, because setting the domain up is a conversation with the mail and directory providers that outlasts the request. Read the response's `status` to follow it: `provisioning` while it is being set up, `ready` once agents can be given an address on it, `failed` with an `error` if it could not be. A failed attempt can be retried by sending the same subdomain again.\n\nThe choice is permanent. Once a domain is set up, sending a different subdomain is refused: changing it would change every agent address in the account."
       parameters:
         -
           in: header
@@ -11433,7 +11995,7 @@ paths:
                           type: string
                           example: unauthenticated
         403:
-          description: 'Caller is a member of the account but is not an admin or owner.'
+          description: 'The account has not been activated yet.'
           content:
             application/json:
               schema:
@@ -11595,7 +12157,7 @@ paths:
     get:
       summary: 'Check a subdomain'
       operationId: checkASubdomain
-      description: "Says whether a subdomain can be chosen, so an admin finds out while they are typing rather than when they submit. Requires the `admin` or `owner` role.\n\nReads nothing outside our own records and creates nothing, so it is safe to call on every keystroke."
+      description: "Says whether a subdomain can be chosen, so whoever is choosing finds out while they are typing rather than when they submit. Any member of the account can check one.\n\nReads nothing outside our own records and creates nothing, so it is safe to call on every keystroke."
       parameters: []
       responses:
         200:
@@ -11683,7 +12245,7 @@ paths:
                           type: string
                           example: unauthenticated
         403:
-          description: 'Caller is a member of the account but is not an admin or owner.'
+          description: 'The account has not been activated yet.'
           content:
             application/json:
               schema:
@@ -11804,11 +12366,20 @@ paths:
                             type: string
                             example: null
                             nullable: true
+                          suggestion:
+                            type: string
+                            example: null
+                            nullable: true
+                          domain:
+                            type: string
+                            example: acme.wallfaceragents.com
                         required:
                           - handle
                           - valid
                           - available
                           - reason
+                          - suggestion
+                          - domain
                   -
                     description: 'The handle breaks a naming rule.'
                     type: object
@@ -11834,11 +12405,60 @@ paths:
                           reason:
                             type: string
                             example: 'A handle must be lowercase. Slack does not accept capital letters in a bot name.'
+                          suggestion:
+                            type: string
+                            example: null
+                            nullable: true
+                          domain:
+                            type: string
+                            example: acme.wallfaceragents.com
                         required:
                           - handle
                           - valid
                           - available
                           - reason
+                          - suggestion
+                          - domain
+                  -
+                    description: 'The handle is taken, and a free one is suggested.'
+                    type: object
+                    example:
+                      data:
+                        handle: saul
+                        valid: true
+                        available: false
+                        reason: 'Another AI employee in this account already has this handle. A handle is never reused, even after its AI employee is offboarded, so an old message or share can never reach a different AI employee.'
+                        suggestion: saul-2
+                        domain: acme.wallfaceragents.com
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          handle:
+                            type: string
+                            example: saul
+                          valid:
+                            type: boolean
+                            example: true
+                          available:
+                            type: boolean
+                            example: false
+                          reason:
+                            type: string
+                            example: 'Another AI employee in this account already has this handle. A handle is never reused, even after its AI employee is offboarded, so an old message or share can never reach a different AI employee.'
+                          suggestion:
+                            type: string
+                            example: saul-2
+                          domain:
+                            type: string
+                            example: acme.wallfaceragents.com
+                        required:
+                          - handle
+                          - valid
+                          - available
+                          - reason
+                          - suggestion
+                          - domain
         401:
           description: 'Missing or invalid API token.'
           content:
@@ -12165,7 +12785,7 @@ paths:
     put:
       summary: 'Give an agent an identity'
       operationId: giveAnAgentAnIdentity
-      description: "Gives the agent an account on the named system. Admin-only.\n\nFor Google this creates a real account in your agent domain, with a mailbox, and assigns a licence from your subscription. The account is all or nothing: documents and a mailbox arrive together, so there is no documents-only option and no way to add mail later.\n\nFor Slack this creates a Slack app for this one agent, in the workspace your account is connected to, and hands back an install link in `details.install_url`. The app can do nothing until somebody follows that link and installs it; if your workspace has app approval turned on, the install goes to a Workspace Owner first. Connect a workspace before calling this.\n\nBoth accounts are created under the agent's own handle: `{handle}@{your agent domain}` in Google, `@{handle}` in Slack. Nothing is derived and nothing is suffixed, so if the handle turns out to be taken the request is refused and the fix is to give the agent a different one.\n\nThe request takes no body. It is safe to repeat: an agent that already holds the account gets the record it already has, and nothing is created twice. Returns 202 because a new account is not usable the moment it is made; poll the account to watch it come up."
+      description: "Gives the agent an account on the named system. A Google account can be requested by any member of the account; a Slack app is admin-only, except that any member can retry a Slack app whose creation failed, which is how a hire that could not create one is finished.\n\nEvery agent is given a Google account in the background when it is onboarded, so a request for `google` is the retry for an account that could not be created then.\n\nFor Google this creates a real account in your agent domain, with a mailbox, and assigns a licence from your subscription. The account is all or nothing: documents and a mailbox arrive together, so there is no documents-only option and no way to add mail later.\n\nFor Slack this creates a Slack app for this one agent, in the workspace your account is connected to, and hands back an install link in `details.install_url`. The app can do nothing until somebody follows that link and installs it; if your workspace has app approval turned on, the install goes to a Workspace Owner first. Connect a workspace before calling this.\n\nBoth accounts are created under the agent's own handle: `{handle}@{your agent domain}` in Google, `@{handle}` in Slack. Nothing is derived and nothing is suffixed, so if the handle turns out to be taken the request is refused and the fix is to give the agent a different one.\n\nThe request takes no body. It is safe to repeat: an agent that already holds the account gets the record it already has, and nothing is created twice. Returns 202 because a new account is not usable the moment it is made; poll the account to watch it come up."
       parameters:
         -
           in: header
@@ -12223,32 +12843,59 @@ paths:
                           type: string
                           example: unauthenticated
         403:
-          description: 'You do not belong to this account.'
+          description: ''
           content:
             application/json:
               schema:
-                type: object
-                example:
-                  errors:
-                    -
-                      message: 'You do not belong to this account.'
-                      code: forbidden
-                properties:
-                  errors:
-                    type: array
+                oneOf:
+                  -
+                    description: 'You do not belong to this account.'
+                    type: object
                     example:
-                      -
-                        message: 'You do not belong to this account.'
-                        code: forbidden
-                    items:
-                      type: object
-                      properties:
-                        message:
-                          type: string
-                          example: 'You do not belong to this account.'
-                        code:
-                          type: string
-                          example: forbidden
+                      errors:
+                        -
+                          message: 'You do not belong to this account.'
+                          code: forbidden
+                    properties:
+                      errors:
+                        type: array
+                        example:
+                          -
+                            message: 'You do not belong to this account.'
+                            code: forbidden
+                        items:
+                          type: object
+                          properties:
+                            message:
+                              type: string
+                              example: 'You do not belong to this account.'
+                            code:
+                              type: string
+                              example: forbidden
+                  -
+                    description: 'A Slack app was requested by a member who is not an admin, and it is not the retry of a failed one.'
+                    type: object
+                    example:
+                      errors:
+                        -
+                          message: 'This action requires at least the admin role.'
+                          code: insufficient_role
+                    properties:
+                      errors:
+                        type: array
+                        example:
+                          -
+                            message: 'This action requires at least the admin role.'
+                            code: insufficient_role
+                        items:
+                          type: object
+                          properties:
+                            message:
+                              type: string
+                              example: 'This action requires at least the admin role.'
+                            code:
+                              type: string
+                              example: insufficient_role
         404:
           description: 'Agent not found, or the system is not one we support.'
           content:
@@ -15503,7 +16150,7 @@ paths:
     post:
       summary: 'Onboard an agent'
       operationId: onboardAnAgent
-      description: "Onboards a new agent for the account. Open to any member; renaming or offboarding an agent stays admin-only. Pass a `template` (`software_engineer`, `code_reviewer`, or `agent`) to prefill the title and seed the role's starter handbooks, attributed to the new agent and created disabled. When no `environment_id` is given, an account-editable environment (\"{Name}'s computer\") is provisioned and set as the agent's environment so the agent is immediately runnable. The computer declares only its platform and specs (a default Linux box, no repos) and its base snapshot begins generating right away; adding repos or services to it later regenerates the snapshot.\n\nThe agent is also given a picture: a monogram of its display name on a color derived from it, stored as its avatar and mirrored onto the Google and Slack accounts it is given later. Uploading an avatar for the agent replaces it.\n\nIf the account has a Slack workspace connected, the agent is given its own Slack app at the same time, carrying its name, handle and picture, and the response carries `slack_install_url`: the link somebody has to follow before the agent can be reached in Slack. If no workspace is connected, or Slack refuses, the field is null and the agent is onboarded regardless."
+      description: "Onboards a new agent for the account. Open to any member; renaming or offboarding an agent stays admin-only. Pass a `role_id` from `GET /roles` to prefill the title, point the agent at the role's shared page, and add the role's pages and playbooks to the handbook the first time the account holds them, attributed to the new agent, with playbooks created disabled and performed by the new agent. Pass a `level` to choose the model the agent runs on; it defaults to `senior`. When no `environment_id` is given, an account-editable environment (\"{Name}'s computer\") is provisioned and set as the agent's environment so the agent is immediately runnable. The computer declares only its platform and specs (a default Linux box, no repos) and its base snapshot begins generating right away; adding repos or services to it later regenerates the snapshot.\n\nOnly `role_id`, `display_name`, `handle`, and `level` are needed. The display name must not belong to another active agent in the account.\n\nThe agent is also given a picture: the preset named by `avatar_preset`, from `GET /avatars`, or else a monogram of its display name on a color derived from it. It is stored as the agent's avatar and mirrored onto its Google and Slack accounts.\n\nEvery agent is given a Google account at its handle in your agent domain. The request does not wait for it: the account is created in the background, retried on its own while Google is unavailable or your Workspace is still being set up, and shown under the agent's identities. When something only a person can fix stops it, such as a subscription with no free seat, the agent's checklist gains an item that says what is needed.\n\nIf the account has a Slack workspace connected, the agent is given its own Slack app at the same time, carrying its name, handle and picture, and the response carries `slack_install_url`: the link somebody has to follow before the agent can be reached in Slack. If no workspace is connected, the field is null. If Slack refuses, the field is null, the agent is onboarded regardless, and its Slack identity is `failed` with the reason in `error`; giving the agent its Slack identity again retries it.\n\nWhat only a person can do arrives as the agent's onboarding checklist, written from its role: one item per login and tool the role needs, one to enable its playbooks, one to add it to Slack channels, and any steps the role adds. Read it at `GET /agents/{agent}/checklist-items`."
       parameters:
         -
           in: header
@@ -15662,25 +16309,49 @@ paths:
                   example: null
                 display_name:
                   type: string
-                  description: 'Name shown wherever this agent acts. Must not be greater than 120 characters.'
+                  description: "Name shown wherever this agent acts, including on its messages and mentions in Slack. Unique among the account's active agents, ignoring case and surrounding spaces; an offboarded agent's name can be reused. Must not be greater than 120 characters."
                   example: 'Support Engineer'
+                avatar_preset:
+                  type: string
+                  description: 'The key of a preset picture from `GET /avatars`. The agent shows it here, on its Google account, and in Slack. Omit it to give the agent a monogram of its name.'
+                  example: teal
+                  enum:
+                    - teal
+                    - coral
+                    - sky
+                    - mint
+                    - lavender
+                    - amber
+                    - slate
+                    - rose
+                  nullable: true
                 handle:
                   type: string
                   description: 'The name the agent answers to everywhere: the part before the @ in its email address, and the name people type after the @ in Slack. Lowercase letters, numbers, periods, hyphens and underscores, 2 to 64 characters, starting and ending with a letter or a number. It has to be free in this account and in your Google domain, and it is never reused once an agent has had it. Omit it to take the one derived from the display name.'
                   example: saul
                   nullable: true
+                role_id:
+                  type: string
+                  description: "Id of the role to hire the agent into, from `GET /roles`. Only a published role is accepted. The role prefills `title` when one is not given and sets `role_page_id` to the role's page when one is not given. Every agent hired into a role shares that page, so editing it changes the job for all of them. The role also brings its pages and playbooks into the handbook, attributed to the new agent, with playbooks created disabled and performed by the new agent. An entry the handbook holds, or once held and deleted, is not copied again. Everything a role sets is editable afterwards. Must be a valid UUID."
+                  example: null
+                  nullable: true
                 template:
                   type: string
-                  description: "Role template to onboard the agent from: `software_engineer` (comes with the implement/triage/research starter handbooks), `code_reviewer` (comes with the review starter handbook), or `agent` (a blank slate). Prefills `title` when one is not given and seeds the template's handbooks, attributed to the new agent and created disabled. Everything a template sets is editable afterwards."
+                  description: 'Deprecated: send `role_id`. The name of a role as it was before roles were records, such as `software_engineer` or `agent`, which maps to that role. The role must be published. Ignored when `role_id` is sent.'
                   example: software_engineer
+                  nullable: true
+                level:
+                  type: string
+                  description: "The agent's experience level: `junior`, `senior`, or `principal`. The level decides the vendor, model, and reasoning effort the agent runs on, and Wallfacer can move every agent on a level to a newer model. Defaults to `senior`."
+                  example: senior
                   enum:
-                    - software_engineer
-                    - code_reviewer
-                    - agent
+                    - junior
+                    - senior
+                    - principal
                   nullable: true
                 title:
                   type: string
-                  description: 'Display title describing the role the agent fills. Defaults from `template` when omitted. Must not be greater than 120 characters.'
+                  description: 'Display title describing the role the agent fills. Defaults from the role when omitted. Must not be greater than 120 characters.'
                   example: 'Support Engineer'
                   nullable: true
                 role_page_id:
@@ -15695,12 +16366,12 @@ paths:
                   nullable: true
                 vendor:
                   type: string
-                  description: 'The AI vendor that powers the agent. Must not be greater than 120 characters.'
+                  description: "Deprecated and ignored: the agent's `level` decides its vendor. Must not be greater than 120 characters."
                   example: claude
                   nullable: true
                 model:
                   type: string
-                  description: 'The model the agent runs on. Must not be greater than 120 characters.'
+                  description: "Deprecated and ignored: the agent's `level` decides its model. Must not be greater than 120 characters."
                   example: null
                   nullable: true
               required:
@@ -15860,7 +16531,7 @@ paths:
     patch:
       summary: 'Update an agent'
       operationId: updateAnAgent
-      description: "Updates an agent's handle, title, role, environment, model, reasoning effort, mail policy, or paused state. Changing the handle, environment, model, effort, role, mail policy, or paused state is recorded in the audit log.\n\nAdmin-only, with one exception: `paused` may be sent by any member of the account, and a request carrying nothing but `paused` is accepted from any member. Sending `paused` alongside any other field makes the request admin-only like every other update. Offboarding (DELETE) stays admin-only.\n\n`paused` is the reversible kill switch. Pausing stops the agent: it starts no new work from any entry point, and the sessions it is currently running are aborted, with their harness VMs destroyed and their tokens rotated. Those turns do not come back: their tasks and playbook steps end terminal, and resuming restores only the agent's ability to take new work. Unlike offboarding, pausing keeps the agent's Google and Slack accounts, so resuming needs no reprovisioning. Idempotent in both directions.\n\n`mail_policy` is a value object and is replaced wholesale: a request that sends it must send all of its fields, and one that leaves it out changes none of them. Every other field is patched partially, as usual.\n\nChanging the handle renames the agent on every system it holds an account on, and does not wait for them: the response comes back as soon as the change is accepted, and each account reports its own outcome under the agent's identities. Google keeps the old email address working as an alias, so mail, shared documents and calendar invitations survive the rename, and the new address can take up to ten minutes to appear everywhere.\n\nIf one system takes the new name and another does not, the one that did not carries the reason in its `error`, and its `details.handle_synced` is false. Send the same handle again to retry it."
+      description: "Updates an agent's name, picture, handle, title, role page, environment, experience level, mail policy, or paused state. A new name must not belong to another active agent in the account, and `avatar_preset` sets the agent's picture to a preset from `GET /avatars`. Changing the handle, environment, level, role page, mail policy, or paused state is recorded in the audit log.\n\nThe deprecated `vendor`, `model`, `effort`, `*_api_key`, and `*_credential_kind` fields are still accepted and are ignored. An agent's model follows its `level`, and only Wallfacer sets a model or a vendor credential directly.\n\nAdmin-only, with one exception: `paused` may be sent by any member of the account, and a request carrying nothing but `paused` is accepted from any member. Sending `paused` alongside any other field makes the request admin-only like every other update. Offboarding (DELETE) stays admin-only.\n\n`paused` is the reversible kill switch. Pausing stops the agent: it starts no new work from any entry point, and the sessions it is currently running are aborted, with their harness VMs destroyed and their tokens rotated. Those turns do not come back: their tasks and playbook steps end terminal, and resuming restores only the agent's ability to take new work. Unlike offboarding, pausing keeps the agent's Google and Slack accounts, so resuming needs no reprovisioning. Idempotent in both directions.\n\n`mail_policy` is a value object and is replaced wholesale: a request that sends it must send all of its fields, and one that leaves it out changes none of them. Every other field is patched partially, as usual.\n\nChanging the handle renames the agent on every system it holds an account on, and does not wait for them: the response comes back as soon as the change is accepted, and each account reports its own outcome under the agent's identities. Google keeps the old email address working as an alias, so mail, shared documents and calendar invitations survive the rename, and the new address can take up to ten minutes to appear everywhere.\n\nIf one system takes the new name and another does not, the one that did not carries the reason in its `error`, and its `details.handle_synced` is false. Send the same handle again to retry it."
       parameters: []
       responses:
         200:
@@ -16035,8 +16706,21 @@ paths:
               properties:
                 display_name:
                   type: string
-                  description: 'Name shown wherever this agent acts. Must not be greater than 120 characters.'
+                  description: "Name shown wherever this agent acts, including on its messages and mentions in Slack. Unique among the account's active agents, ignoring case and surrounding spaces. Renaming the agent renames its Google account and its Slack app too. Must not be greater than 120 characters."
                   example: 'Support Engineer'
+                avatar_preset:
+                  type: string
+                  description: 'The key of a preset picture from `GET /avatars`. The agent shows it here, on its Google account, and in Slack.'
+                  example: teal
+                  enum:
+                    - teal
+                    - coral
+                    - sky
+                    - mint
+                    - lavender
+                    - amber
+                    - slate
+                    - rose
                 handle:
                   type: string
                   description: 'The name the agent answers to everywhere: the part before the @ in its email address, and the name people type after the @ in Slack. Lowercase letters, numbers, periods, hyphens and underscores, 2 to 64 characters, starting and ending with a letter or a number. It has to be free in this account and in your Google domain, and it is never reused once an agent has had it. Changing it renames the agent on every system it holds an account on. The old email address keeps delivering as an alias, so mail, shared documents and calendar invitations survive, and the change can take up to ten minutes to appear everywhere. Send the handle the agent already has to retry a rename a system did not accept the first time.'
@@ -16056,21 +16740,14 @@ paths:
                   description: 'Id of the single environment the agent works in. Send null to clear it. Must be a valid UUID.'
                   example: null
                   nullable: true
-                vendor:
+                level:
                   type: string
-                  description: 'The AI vendor that powers the agent. Must not be greater than 120 characters.'
-                  example: claude
-                  nullable: true
-                model:
-                  type: string
-                  description: 'The model the agent runs on. Must not be greater than 120 characters.'
-                  example: null
-                  nullable: true
-                effort:
-                  type: string
-                  description: "Reasoning effort the agent works at, in its harness's own vocabulary (`low`/`medium`/`high` for claude; `minimal`/`low`/`medium`/`high`/`xhigh` for codex). Call `GET /models` for each harness's options and default. A value the agent's harness does not offer falls back to that harness's default when a session starts. Send null to clear it. Must not be greater than 40 characters."
-                  example: high
-                  nullable: true
+                  description: "The agent's experience level: `junior`, `senior`, or `principal`. The level decides the vendor, model, and reasoning effort the agent runs on from its next session. An agent whose model Wallfacer set directly keeps that model whatever its level."
+                  example: principal
+                  enum:
+                    - junior
+                    - senior
+                    - principal
                 voice:
                   type: string
                   description: 'The voice the agent speaks with on a call. One of `alloy`, `ash`, `ballad`, `coral`, `echo`, `sage`, `shimmer`, `verse`, `marin`, `cedar`. Send null for the default voice.'
@@ -16087,24 +16764,39 @@ paths:
                     - marin
                     - cedar
                   nullable: true
+                vendor:
+                  type: string
+                  description: "Deprecated and ignored: the agent's `level` decides its vendor. Must not be greater than 120 characters."
+                  example: claude
+                  nullable: true
+                model:
+                  type: string
+                  description: "Deprecated and ignored: the agent's `level` decides its model. Must not be greater than 120 characters."
+                  example: null
+                  nullable: true
+                effort:
+                  type: string
+                  description: "Deprecated and ignored: the agent's `level` decides its reasoning effort. Must not be greater than 40 characters."
+                  example: high
+                  nullable: true
                 anthropic_api_key:
                   type: string
-                  description: 'Anthropic credential the agent authenticates Claude calls with. Write-only: stored encrypted and never returned (the response reports `anthropic_connected` and `anthropic_credential_kind`). When `anthropic_credential_kind` is `subscription` this is the OAuth token from `claude setup-token`; otherwise a metered API key. Send null to clear it.'
+                  description: "Deprecated and ignored: an agent's own vendor credential is no longer attached through this endpoint."
                   example: null
                   nullable: true
                 openai_api_key:
                   type: string
-                  description: 'OpenAI credential the agent authenticates codex calls with. Write-only: stored encrypted and never returned (the response reports `openai_connected` and `openai_credential_kind`). When `openai_credential_kind` is `subscription` this is the verbatim contents of the codex CLI `auth.json`; otherwise a metered API key. Send null to clear it.'
+                  description: "Deprecated and ignored: an agent's own vendor credential is no longer attached through this endpoint."
                   example: null
                   nullable: true
                 xai_api_key:
                   type: string
-                  description: 'xAI credential the agent authenticates grok calls with. Write-only: stored encrypted and never returned (the response reports `xai_connected` and `xai_credential_kind`). When `xai_credential_kind` is `subscription` this is the verbatim contents of the Grok CLI `auth.json` for a SuperGrok / X Premium+ seat; otherwise a metered xAI API key. Send null to clear it.'
+                  description: "Deprecated and ignored: an agent's own vendor credential is no longer attached through this endpoint."
                   example: null
                   nullable: true
                 anthropic_credential_kind:
                   type: string
-                  description: 'Type of the Anthropic credential: `api_key` (default) or `subscription` (Claude Pro/Max). Defaults to `api_key` when a key is set without one.'
+                  description: 'Deprecated and ignored, with the matching `*_api_key` field.'
                   example: api_key
                   enum:
                     - api_key
@@ -16112,7 +16804,7 @@ paths:
                   nullable: true
                 openai_credential_kind:
                   type: string
-                  description: 'Type of the OpenAI credential: `api_key` (default) or `subscription` (ChatGPT seat). Defaults to `api_key` when a key is set without one.'
+                  description: 'Deprecated and ignored, with the matching `*_api_key` field.'
                   example: api_key
                   enum:
                     - api_key
@@ -16120,7 +16812,7 @@ paths:
                   nullable: true
                 xai_credential_kind:
                   type: string
-                  description: 'Type of the xAI credential: `api_key` (default) or `subscription` (a SuperGrok / X Premium+ seat). Defaults to `api_key` when a key is set without one.'
+                  description: 'Deprecated and ignored, with the matching `*_api_key` field.'
                   example: api_key
                   enum:
                     - api_key
@@ -18295,6 +18987,86 @@ paths:
         required: true
         schema:
           type: string
+  /v1/avatars:
+    get:
+      summary: 'List avatar presets'
+      operationId: listAvatarPresets
+      description: 'Returns the preset pictures, in the order to offer them. Each is a 512 px square PNG on its own solid background color.'
+      parameters: []
+      responses:
+        200:
+          description: 'The presets.'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  data:
+                    -
+                      key: teal
+                      image_url: 'https://example.com/images/avatars/presets/teal.png'
+                      background_color: '#2A9D8F'
+                    -
+                      key: coral
+                      image_url: 'https://example.com/images/avatars/presets/coral.png'
+                      background_color: '#F28482'
+                properties:
+                  data:
+                    type: array
+                    example:
+                      -
+                        key: teal
+                        image_url: 'https://example.com/images/avatars/presets/teal.png'
+                        background_color: '#2A9D8F'
+                      -
+                        key: coral
+                        image_url: 'https://example.com/images/avatars/presets/coral.png'
+                        background_color: '#F28482'
+                    items:
+                      type: object
+                      properties:
+                        key:
+                          type: string
+                          example: teal
+                        image_url:
+                          type: string
+                          example: 'https://example.com/images/avatars/presets/teal.png'
+                        background_color:
+                          type: string
+                          example: '#2A9D8F'
+                    required:
+                      - key
+                      - image_url
+                      - background_color
+        401:
+          description: 'Missing or invalid API token.'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: Unauthenticated.
+                      code: unauthenticated
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: Unauthenticated.
+                        code: unauthenticated
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: Unauthenticated.
+                        code:
+                          type: string
+                          example: unauthenticated
+      tags:
+        - Avatars
   '/v1/accounts/{account_id}/connections':
     get:
       summary: 'List connections'
@@ -18836,6 +19608,11 @@ paths:
                     - login
                     - token
                     - totp
+                checklist_item_id:
+                  type: string
+                  description: "The id of the `login` item on an agent's onboarding checklist this credential is saved for. Once the credential is granted to that agent, the item is done. Omit it for a credential that answers no checklist item. Must be a valid UUID."
+                  example: null
+                  nullable: true
                 username:
                   type: string
                   description: 'The username half of a `login`. Required for that kind and rejected as meaningless for the others. Held in the clear, because it is not the secret and an agent has to be able to see which login it is signing in as. This field is required when <code>kind</code> is <code>login</code>. Must not be greater than 255 characters.'
@@ -21655,6 +22432,90 @@ paths:
         required: true
         schema:
           type: string
+  /v1/levels:
+    get:
+      summary: 'List experience levels'
+      operationId: listExperienceLevels
+      description: "Returns the levels an agent can be hired at, in the order to show them. Send a level's `level` as `level` when onboarding or updating an agent."
+      parameters: []
+      responses:
+        200:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  data:
+                    -
+                      level: junior
+                      name: Junior
+                      description: 'Quick and economical. Suited to routine, well-specified work.'
+                    -
+                      level: junior
+                      name: Junior
+                      description: 'Quick and economical. Suited to routine, well-specified work.'
+                properties:
+                  data:
+                    type: array
+                    example:
+                      -
+                        level: junior
+                        name: Junior
+                        description: 'Quick and economical. Suited to routine, well-specified work.'
+                      -
+                        level: junior
+                        name: Junior
+                        description: 'Quick and economical. Suited to routine, well-specified work.'
+                    items:
+                      type: object
+                      properties:
+                        level:
+                          type: string
+                          example: junior
+                          description: 'The level. Send it as `level` when onboarding an agent. One of `junior`, `senior`, `principal`.'
+                        name:
+                          type: string
+                          example: Junior
+                          description: 'The level''s name, for example "Senior".'
+                        description:
+                          type: string
+                          example: 'Quick and economical. Suited to routine, well-specified work.'
+                          description: 'One line saying what an agent at this level is suited to.'
+                          nullable: true
+                    required:
+                      - level
+                      - name
+                      - description
+        401:
+          description: 'Missing or invalid API token.'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: Unauthenticated.
+                      code: unauthenticated
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: Unauthenticated.
+                        code: unauthenticated
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: Unauthenticated.
+                        code:
+                          type: string
+                          example: unauthenticated
+      tags:
+        - 'Experience levels'
   '/v1/accounts/{account_id}/collectors':
     get:
       summary: 'List collectors'
@@ -22427,6 +23288,599 @@ paths:
         in: path
         name: account_id
         description: 'The ID of the account.'
+        example: architecto
+        required: true
+        schema:
+          type: string
+  /v1/library:
+    get:
+      summary: 'Browse the library'
+      operationId: browseTheLibrary
+      description: 'Returns the library as one nested, ordered tree of pages and playbooks. Each node carries a `type` of `page` or `playbook`. Page nodes hold `{id, title, description, position, has_body, updated_at, children}`; their markdown body is omitted, so fetch it from the page endpoint. Playbook nodes are always leaves and hold `{id, title, description, position, version}`, where `version` summarizes the current version as `{id, version, created_at}`.'
+      parameters: []
+      responses:
+        200:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  data:
+                    tree:
+                      -
+                        type: page
+                        id: 019d78bd-4bd3-7173-b53b-8894b6b952b3
+                        title: Engineering
+                        description: 'How we build and ship.'
+                        position: 0
+                        has_body: true
+                        updated_at: '2026-06-11T18:52:44.000000Z'
+                        children:
+                          -
+                            type: playbook
+                            id: 019d78bd-4bd3-7173-b53b-8894b6b952b4
+                            title: 'Fix bugs'
+                            description: 'Validate, triage, and fix a reported defect.'
+                            position: 0
+                            version:
+                              id: 019d78bd-4bd3-7173-b53b-8894b6b952b5
+                              version: 3
+                              created_at: '2026-06-11T18:52:44.000000Z'
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      tree:
+                        type: array
+                        example:
+                          -
+                            type: page
+                            id: 019d78bd-4bd3-7173-b53b-8894b6b952b3
+                            title: Engineering
+                            description: 'How we build and ship.'
+                            position: 0
+                            has_body: true
+                            updated_at: '2026-06-11T18:52:44.000000Z'
+                            children:
+                              -
+                                type: playbook
+                                id: 019d78bd-4bd3-7173-b53b-8894b6b952b4
+                                title: 'Fix bugs'
+                                description: 'Validate, triage, and fix a reported defect.'
+                                position: 0
+                                version:
+                                  id: 019d78bd-4bd3-7173-b53b-8894b6b952b5
+                                  version: 3
+                                  created_at: '2026-06-11T18:52:44.000000Z'
+                        items:
+                          type: object
+                          properties:
+                            type:
+                              type: string
+                              example: page
+                            id:
+                              type: string
+                              example: 019d78bd-4bd3-7173-b53b-8894b6b952b3
+                            title:
+                              type: string
+                              example: Engineering
+                            description:
+                              type: string
+                              example: 'How we build and ship.'
+                            position:
+                              type: integer
+                              example: 0
+                            has_body:
+                              type: boolean
+                              example: true
+                            updated_at:
+                              type: string
+                              example: '2026-06-11T18:52:44.000000Z'
+                            children:
+                              type: array
+                              example:
+                                -
+                                  type: playbook
+                                  id: 019d78bd-4bd3-7173-b53b-8894b6b952b4
+                                  title: 'Fix bugs'
+                                  description: 'Validate, triage, and fix a reported defect.'
+                                  position: 0
+                                  version:
+                                    id: 019d78bd-4bd3-7173-b53b-8894b6b952b5
+                                    version: 3
+                                    created_at: '2026-06-11T18:52:44.000000Z'
+                              items:
+                                type: object
+                                properties:
+                                  type:
+                                    type: string
+                                    example: playbook
+                                  id:
+                                    type: string
+                                    example: 019d78bd-4bd3-7173-b53b-8894b6b952b4
+                                  title:
+                                    type: string
+                                    example: 'Fix bugs'
+                                  description:
+                                    type: string
+                                    example: 'Validate, triage, and fix a reported defect.'
+                                  position:
+                                    type: integer
+                                    example: 0
+                                  version:
+                                    type: object
+                                    properties:
+                                      id: { type: string, example: 019d78bd-4bd3-7173-b53b-8894b6b952b5 }
+                                      version: { type: integer, example: 3 }
+                                      created_at: { type: string, example: '2026-06-11T18:52:44.000000Z' }
+        404:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: 'Resource not found.'
+                      code: not_found
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: 'Resource not found.'
+                        code: not_found
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: 'Resource not found.'
+                        code:
+                          type: string
+                          example: not_found
+      tags:
+        - Library
+  '/v1/library/pages/{page}':
+    get:
+      summary: 'Get a library page'
+      operationId: getALibraryPage
+      description: 'Returns one library page including its full markdown body.'
+      parameters: []
+      responses: {  }
+      tags:
+        - Library
+    parameters:
+      -
+        in: path
+        name: page
+        description: 'The library page ID.'
+        example: 9c36b5a0-1f2d-4e3a-8b7c-6d5e4f3a2b1c
+        required: true
+        schema:
+          type: string
+  '/v1/library/playbooks/{playbook}':
+    get:
+      summary: 'Get a library playbook'
+      operationId: getALibraryPlaybook
+      description: 'Returns one library playbook with its current version, including the full definition a copy would receive.'
+      parameters: []
+      responses: {  }
+      tags:
+        - Library
+    parameters:
+      -
+        in: path
+        name: playbook
+        description: 'The library playbook ID.'
+        example: 9c36b5a0-1f2d-4e3a-8b7c-6d5e4f3a2b1c
+        required: true
+        schema:
+          type: string
+  '/v1/library/playbooks/{playbook}/versions/{version}':
+    get:
+      summary: 'Get a library playbook version'
+      operationId: getALibraryPlaybookVersion
+      description: 'Returns one published version of a library playbook, by ID or by version number. Versions are immutable, so a version you read is the version you get if you import it.'
+      parameters: []
+      responses: {  }
+      tags:
+        - Library
+    parameters:
+      -
+        in: path
+        name: playbook
+        description: 'The library playbook ID.'
+        example: 9c36b5a0-1f2d-4e3a-8b7c-6d5e4f3a2b1c
+        required: true
+        schema:
+          type: string
+      -
+        in: path
+        name: version
+        description: 'The version ID, or its sequential version number.'
+        example: '3'
+        required: true
+        schema:
+          type: string
+  '/v1/accounts/{account_id}/library/imports':
+    post:
+      summary: 'Copy a library entry into your handbook'
+      operationId: copyALibraryEntryIntoYourHandbook
+      description: "Copies a library page or playbook into this account's handbook and returns the new page or playbook.\n\nThe copy is yours: edit it, move it, publish over it. It records which library entry it came from, which is what lets us offer you the library's later improvements without ever changing your copy behind you.\n\nA page arrives as a new page, at the top level unless you name a `parent_page_id`.\n\nA playbook arrives as a new playbook whose first version is the library version, unchanged: the triggers, wake conditions, and output schemas are the ones the library tested. Who performs each step is the one thing that is resolved on the way in, because the library names roles (\"Software Engineer\") rather than people; if no agent in this account holds the role a step is performed by, the import is refused and names the role, so you can onboard for it and try again. **An imported playbook arrives disabled** and runs nothing until you enable it."
+      parameters:
+        -
+          in: header
+          name: Idempotency-Key
+          description: ''
+          example: optional-unique-request-id
+          schema:
+            type: string
+      responses:
+        404:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: 'Resource not found.'
+                      code: not_found
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: 'Resource not found.'
+                        code: not_found
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: 'Resource not found.'
+                        code:
+                          type: string
+                          example: not_found
+        422:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: 'No agent in this account has title "Software Engineer", the role this entry is performed by. Onboard an agent for that role, then import again.'
+                      code: library_performer_unmatched
+                      field: 'steps[0].config.actor'
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: 'No agent in this account has title "Software Engineer", the role this entry is performed by. Onboard an agent for that role, then import again.'
+                        code: library_performer_unmatched
+                        field: 'steps[0].config.actor'
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: 'No agent in this account has title "Software Engineer", the role this entry is performed by. Onboard an agent for that role, then import again.'
+                        code:
+                          type: string
+                          example: library_performer_unmatched
+                        field:
+                          type: string
+                          example: 'steps[0].config.actor'
+      tags:
+        - Library
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                type:
+                  type: string
+                  description: 'What you are copying in: `page` or `playbook`.'
+                  example: playbook
+                  enum:
+                    - page
+                    - playbook
+                library_id:
+                  type: string
+                  description: 'The library page or playbook ID, from the library browse endpoint. Must be a valid UUID.'
+                  example: No-example
+                version_id:
+                  type: string
+                  description: 'Copy this exact playbook version instead of the current one. Playbooks only. Must be a valid UUID.'
+                  example: null
+                  nullable: true
+                parent_page_id:
+                  type: string
+                  description: 'Page in your handbook to file the copy under. Omit or pass null to file it at the top level. Must be a valid UUID.'
+                  example: null
+                  nullable: true
+              required:
+                - type
+                - library_id
+    parameters:
+      -
+        in: path
+        name: account_id
+        description: 'The ID of the account.'
+        example: architecto
+        required: true
+        schema:
+          type: string
+  '/v1/accounts/{account_id}/pipelines/{pipeline_id}/library':
+    get:
+      summary: "Get a playbook's library entry"
+      operationId: getAPlaybooksLibraryEntry
+      description: "Returns where an imported playbook came from and whether the library has published a newer version since. `update_available` is true when it has. `imported_version` is the library version this copy was taken at and `current_version` is the library's version now, both with their full definitions, so the difference can be rendered field by field. Answers 404 for a playbook that was not copied in from the library."
+      parameters: []
+      responses:
+        200:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  data:
+                    type: playbook
+                    library_id: 019d78bd-4bd3-7173-b53b-8894b6b952b4
+                    imported_at: '2026-06-11T18:52:44.000000Z'
+                    update_available: true
+                    imported_version:
+                      id: 019d78bd-4bd3-7173-b53b-8894b6b952b5
+                      version: 2
+                      notes: null
+                      created_at: '2026-06-01T10:00:00.000000Z'
+                      definition: {  }
+                    current_version:
+                      id: 019d78bd-4bd3-7173-b53b-8894b6b952b6
+                      version: 3
+                      notes: 'Ask before looping.'
+                      created_at: '2026-06-11T18:52:44.000000Z'
+                      definition: {  }
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      type:
+                        type: string
+                        example: playbook
+                      library_id:
+                        type: string
+                        example: 019d78bd-4bd3-7173-b53b-8894b6b952b4
+                      imported_at:
+                        type: string
+                        example: '2026-06-11T18:52:44.000000Z'
+                      update_available:
+                        type: boolean
+                        example: true
+                      imported_version:
+                        type: object
+                        properties:
+                          id:
+                            type: string
+                            example: 019d78bd-4bd3-7173-b53b-8894b6b952b5
+                          version:
+                            type: integer
+                            example: 2
+                          notes:
+                            type: string
+                            example: null
+                            nullable: true
+                          created_at:
+                            type: string
+                            example: '2026-06-01T10:00:00.000000Z'
+                          definition:
+                            type: object
+                            properties: {  }
+                      current_version:
+                        type: object
+                        properties:
+                          id:
+                            type: string
+                            example: 019d78bd-4bd3-7173-b53b-8894b6b952b6
+                          version:
+                            type: integer
+                            example: 3
+                          notes:
+                            type: string
+                            example: 'Ask before looping.'
+                          created_at:
+                            type: string
+                            example: '2026-06-11T18:52:44.000000Z'
+                          definition:
+                            type: object
+                            properties: {  }
+      tags:
+        - Library
+    put:
+      summary: "Take a playbook to its library entry's current version"
+      operationId: takeAPlaybookToItsLibraryEntrysCurrentVersion
+      description: "Publishes the library's current version of this playbook as the next version of your copy and re-records which library version it now matches. Your version history is kept: this lands on top of it, it does not rewrite it. The playbook's enabled state is untouched, and an enabled copy re-arms its triggers off the new version. Who performs each step resolves against this account's agents the same way it did on the first import, so the update is refused, naming the role, when no agent holds it. An enabled copy is held to the same bar as an ordinary publish: an update carrying a step that needs a computer whose performer has none is refused rather than taken live."
+      parameters:
+        -
+          in: header
+          name: Idempotency-Key
+          description: ''
+          example: optional-unique-request-id
+          schema:
+            type: string
+      responses:
+        422:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: 'This playbook no longer has a library entry to update from.'
+                      code: library_source_missing
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: 'This playbook no longer has a library entry to update from.'
+                        code: library_source_missing
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: 'This playbook no longer has a library entry to update from.'
+                        code:
+                          type: string
+                          example: library_source_missing
+      tags:
+        - Library
+    parameters:
+      -
+        in: path
+        name: account_id
+        description: 'The ID of the account.'
+        example: architecto
+        required: true
+        schema:
+          type: string
+      -
+        in: path
+        name: pipeline_id
+        description: 'The ID of the pipeline.'
+        example: architecto
+        required: true
+        schema:
+          type: string
+  '/v1/accounts/{account_id}/pages/{page_id}/library':
+    get:
+      summary: "Get a page's library entry"
+      operationId: getAPagesLibraryEntry
+      description: 'Returns where an imported page came from and whether the library page has changed since. `update_available` is true when it has. `imported` is the page as it arrived and `current` is the library page now, both as `{title, body}`, so the difference can be rendered before anybody decides. Answers 404 for a page that was not copied in from the library.'
+      parameters: []
+      responses:
+        200:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  data:
+                    type: page
+                    library_id: 019d78bd-4bd3-7173-b53b-8894b6b952b3
+                    imported_at: '2026-06-11T18:52:44.000000Z'
+                    update_available: false
+                    imported:
+                      title: 'Writing great pull requests'
+                      body: '# Writing great pull requests'
+                    current:
+                      title: 'Writing great pull requests'
+                      body: '# Writing great pull requests'
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      type:
+                        type: string
+                        example: page
+                      library_id:
+                        type: string
+                        example: 019d78bd-4bd3-7173-b53b-8894b6b952b3
+                      imported_at:
+                        type: string
+                        example: '2026-06-11T18:52:44.000000Z'
+                      update_available:
+                        type: boolean
+                        example: false
+                      imported:
+                        type: object
+                        properties:
+                          title:
+                            type: string
+                            example: 'Writing great pull requests'
+                          body:
+                            type: string
+                            example: '# Writing great pull requests'
+                      current:
+                        type: object
+                        properties:
+                          title:
+                            type: string
+                            example: 'Writing great pull requests'
+                          body:
+                            type: string
+                            example: '# Writing great pull requests'
+      tags:
+        - Library
+    put:
+      summary: "Take a page to its library entry's current content"
+      operationId: takeAPageToItsLibraryEntrysCurrentContent
+      description: "Replaces this page's title and body with the library page's current ones and re-records when the copy was taken. The page keeps its id, its place in your handbook, and its history, so what was there before this update is still readable in the page's revisions."
+      parameters:
+        -
+          in: header
+          name: Idempotency-Key
+          description: ''
+          example: optional-unique-request-id
+          schema:
+            type: string
+      responses:
+        422:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: 'This page no longer has a library entry to update from.'
+                      code: library_source_missing
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: 'This page no longer has a library entry to update from.'
+                        code: library_source_missing
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: 'This page no longer has a library entry to update from.'
+                        code:
+                          type: string
+                          example: library_source_missing
+      tags:
+        - Library
+    parameters:
+      -
+        in: path
+        name: account_id
+        description: 'The ID of the account.'
+        example: architecto
+        required: true
+        schema:
+          type: string
+      -
+        in: path
+        name: page_id
+        description: 'The ID of the page.'
         example: architecto
         required: true
         schema:
@@ -23885,7 +25339,7 @@ paths:
     get:
       summary: 'Get the handbook tree'
       operationId: getTheHandbookTree
-      description: "Returns the account's entire handbook as one nested tree of pages and playbooks. Each node carries a `type` of `page` or `playbook`. Page nodes hold `{id, title, description, position, has_body, updated_at, children}`; their markdown body is omitted (fetch it from the page endpoint). Playbook nodes are always leaves and hold `{id, title, description, position, disabled_at, has_draft, active_version, task_count}`. Within a parent, pages and playbooks share one ordering: `position` ascending, ties broken by creation time. Archived playbooks are excluded."
+      description: "Returns the account's entire handbook as one nested tree of pages and playbooks. Each node carries a `type` of `page` or `playbook`. Page nodes hold `{id, title, description, position, has_body, updated_at, children}`; their markdown body is omitted (fetch it from the page endpoint). Playbook nodes are always leaves and hold `{id, title, description, position, disabled_at, has_draft, active_version, task_count}`. Within a parent, pages and playbooks share one ordering: `position` ascending, ties broken by creation time. Archived playbooks are excluded. An entry copied in from the library also carries `library`, holding the entry it came from, when it was copied, and `update_available`: true when the library has published something newer than what you took. It is null for everything you wrote yourself."
       parameters: []
       responses:
         200:
@@ -25208,6 +26662,100 @@ paths:
         required: true
         schema:
           type: string
+  /v1/roles:
+    get:
+      summary: 'List roles'
+      operationId: listRoles
+      description: 'Returns the roles offered for hire, in the order to show them. A role Wallfacer has retired is not listed, and agents already hired into it are unaffected.'
+      parameters: []
+      responses:
+        200:
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  data:
+                    -
+                      id: 01a1e6d4-5e8b-732e-baa4-314b982d2df4
+                      name: 'Electric Meter Installer'
+                      description: 'Quidem nostrum qui commodi incidunt iure odit.'
+                      default_title: 'Electric Meter Installer'
+                    -
+                      id: 01a1e6d4-5e92-7216-8300-cc2cf761ea77
+                      name: Drafter
+                      description: 'Ipsum nostrum omnis autem et consequatur aut dolores enim.'
+                      default_title: Drafter
+                properties:
+                  data:
+                    type: array
+                    example:
+                      -
+                        id: 01a1e6d4-5e8b-732e-baa4-314b982d2df4
+                        name: 'Electric Meter Installer'
+                        description: 'Quidem nostrum qui commodi incidunt iure odit.'
+                        default_title: 'Electric Meter Installer'
+                      -
+                        id: 01a1e6d4-5e92-7216-8300-cc2cf761ea77
+                        name: Drafter
+                        description: 'Ipsum nostrum omnis autem et consequatur aut dolores enim.'
+                        default_title: Drafter
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                          example: 01a1e6d4-5e8b-732e-baa4-314b982d2df4
+                          description: 'Unique id of the role. Send it as `role_id` when onboarding an agent.'
+                        name:
+                          type: string
+                          example: 'Electric Meter Installer'
+                          description: 'The role''s name, for example "Software Engineer".'
+                        description:
+                          type: string
+                          example: 'Quidem nostrum qui commodi incidunt iure odit.'
+                          description: 'One line saying what an agent in this role does.'
+                          nullable: true
+                        default_title:
+                          type: string
+                          example: 'Electric Meter Installer'
+                          description: 'The title an agent hired into the role gets when the hire names none. Null when the role sets no title.'
+                          nullable: true
+                    required:
+                      - id
+                      - name
+                      - description
+                      - default_title
+        401:
+          description: 'Missing or invalid API token.'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: Unauthenticated.
+                      code: unauthenticated
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: Unauthenticated.
+                        code: unauthenticated
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: Unauthenticated.
+                        code:
+                          type: string
+                          example: unauthenticated
+      tags:
+        - Roles
   '/v1/accounts/{account_id}/search':
     get:
       summary: Search
