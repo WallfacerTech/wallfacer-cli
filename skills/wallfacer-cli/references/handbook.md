@@ -115,7 +115,7 @@ Definitions are read from `--definition-file` (JSON or YAML) or from stdin. The 
 - **Publishing never enables a disabled playbook.** A disabled playbook is still disabled afterwards; the result says so and names `update-playbook --enable`.
 - **`discard-draft`** uses the draft's own delete operation and leaves the published definition exactly as it was.
 
-To submit a definition directly without saving it as a draft, the low-level `wallfacer versions create <playbook-id>` command still takes one.
+To submit a definition directly without saving it as a draft, the low-level `wallfacer pipelines create-versions <playbook-id>` command still takes one.
 
 ## Editing a page
 

@@ -206,7 +206,7 @@ is not versioned this way: a page's revisions and the playbook's linked-page set
 later runs as soon as they are saved, with no publish involved.
 
 To submit a definition directly without saving it as a draft first, the low-level
-` + "`wallfacer versions create <playbook-id>`" + ` still takes one.`),
+` + "`wallfacer pipelines create-versions <playbook-id>`" + ` still takes one.`),
 		Args: cobra.ExactArgs(1),
 		Run: handbookRun(accountID, func(api *handbookAPI, cmd *cobra.Command, args []string) error {
 			activate, _ := cmd.Flags().GetBool("activate")
