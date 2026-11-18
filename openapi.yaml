@@ -157,16 +157,14 @@ components:
           description: 'Shared dashboard palette identifier for all account members, `ink-parchment` when the account has not chosen one. A variant is written `{family}/{variant}`; treat a value you do not recognise as the default. Personal light/dark appearance is independent.'
         activation_state:
           type: string
-          description: "Whether the account has been granted access to the product. An account created by someone who already belongs to an active account is `active` from the start. Every other new account starts out awaiting review and cannot use product features until it is activated:\n\n- `pending`: the account is awaiting activation and cannot yet use the product.\n- `active`: the account has been activated and has full access.\n- `paused`: access was activated and later suspended.\n- `rejected`: the account was reviewed and not granted access."
+          description: "Whether the account may use the product. Every account is created `active`.\n\n- `active`: the account has full access.\n- `paused`: Wallfacer has suspended the account. Account requests answer `403` with code `account_suspended`, except reading the account and its owner deleting it."
           enum:
-            - pending
             - active
             - paused
-            - rejected
         activated_at:
           type: string
           nullable: true
-          description: 'ISO 8601 timestamp of when the account was activated, or `null` if it has not been activated.'
+          description: 'ISO 8601 timestamp of when the account was given access: when it was created, or when it was last resumed from a suspension. `null` while it is suspended, and for some older accounts.'
         avatar_url:
           type: string
           nullable: true
@@ -420,6 +418,9 @@ components:
         silence_threshold:
           type: number
           description: 'How sure the agent must be that a reply in a Slack thread it is part of is not meant for it before it stays quiet without reading it, between 0.5 and 1. Always present: an agent that has never been configured reports the platform default. Higher means the agent stays quiet less often. A reply that mentions the agent, and a direct message, always get an answer. Takes effect only once quiet thread replies are turned on for the account; until then every reply is judged and the agent answers as before.'
+        show_work:
+          type: boolean
+          description: 'Whether the agent shows its work in the thread while it answers. When on, a Slack turn the agent was mentioned or messaged directly in streams the tools it runs, its narration, and short excerpts of its reasoning into one collapsed working message above the answer; file, command, page and mail contents are never copied into it. When off, the thread shows only the thinking indicator and then the answer. On by default.'
         created_at:
           type: string
           nullable: true
@@ -1401,6 +1402,9 @@ components:
         account_id:
           type: string
           description: 'Account that owns this page.'
+        url:
+          type: string
+          description: 'Web address of the page in the Wallfacer app. Give this to a person who should open the page.'
         parent_page_id:
           type: string
           nullable: true
@@ -1537,6 +1541,9 @@ components:
         account_id:
           type: string
           description: 'Account that owns this pipeline.'
+        url:
+          type: string
+          description: 'Web address of the playbook in the Wallfacer app. Give this to a person who should open the playbook.'
         name:
           type: string
           description: 'Human-readable pipeline name. Unique per account among non-archived pipelines.'
@@ -1851,6 +1858,12 @@ components:
           type: string
           nullable: true
           description: 'ISO 8601 timestamp of when the session started waiting for a free machine. Non-null only while `status` is `waiting`; cleared as soon as the session starts, closes, or is set back to `idle`. Subtract it from the current time to show how long the wait has run. A session that entered the wait before this timestamp was recorded reports null while still waiting, so read null as an unknown duration rather than as evidence the session is not waiting; `status` is the authority on that.'
+        wait_reason:
+          type: string
+          nullable: true
+          description: "Why a `waiting` session is waiting. Null while `status` is anything else.\n\n- `account_computer_limit_reached`: the account is already running its limit of computers. The session starts on its own once one of them stops; stopping one, or asking Wallfacer to raise the limit, unblocks it.\n- null: no machine was free on the platform. Nothing for the client to do."
+          enum:
+            - account_computer_limit_reached
         started_at:
           type: string
           description: 'ISO 8601 timestamp of when the session record was created.'
@@ -2989,7 +3002,7 @@ paths:
     post:
       summary: 'Create an account'
       operationId: createAnAccount
-      description: "Creates a new account. The authenticated user is automatically attached as the `owner` of the new account.\n\nUse this when a single user needs to manage multiple accounts (for example, to separate billing or environments per organization).\n\nIf you already belong to an active account, the new account is created `active` and is usable immediately. Otherwise it is created `pending`; see `activation_state`.\n\nA new account's handbook starts with the platform's starter pages, copied in as the account's own to edit."
+      description: "Creates a new account. The authenticated user is automatically attached as the `owner` of the new account.\n\nUse this when a single user needs to manage multiple accounts (for example, to separate billing or environments per organization).\n\nThe new account is created `active` and is usable immediately.\n\nA new account's handbook starts with the platform's starter pages, copied in as the account's own to edit."
       parameters: []
       responses:
         201:
@@ -3774,7 +3787,7 @@ paths:
                           type: string
                           example: unauthenticated
         403:
-          description: 'The account has not been activated yet.'
+          description: 'The account is suspended.'
           content:
             application/json:
               schema:
@@ -4047,32 +4060,59 @@ paths:
                           type: string
                           example: unauthenticated
         403:
-          description: 'You do not belong to this account.'
+          description: ''
           content:
             application/json:
               schema:
-                type: object
-                example:
-                  errors:
-                    -
-                      message: 'You do not belong to this account.'
-                      code: forbidden
-                properties:
-                  errors:
-                    type: array
+                oneOf:
+                  -
+                    description: 'You do not belong to this account.'
+                    type: object
                     example:
-                      -
-                        message: 'You do not belong to this account.'
-                        code: forbidden
-                    items:
-                      type: object
-                      properties:
-                        message:
-                          type: string
-                          example: 'You do not belong to this account.'
-                        code:
-                          type: string
-                          example: forbidden
+                      errors:
+                        -
+                          message: 'You do not belong to this account.'
+                          code: forbidden
+                    properties:
+                      errors:
+                        type: array
+                        example:
+                          -
+                            message: 'You do not belong to this account.'
+                            code: forbidden
+                        items:
+                          type: object
+                          properties:
+                            message:
+                              type: string
+                              example: 'You do not belong to this account.'
+                            code:
+                              type: string
+                              example: forbidden
+                  -
+                    description: 'The caller signed up with a password and has not verified their email address yet.'
+                    type: object
+                    example:
+                      errors:
+                        -
+                          message: 'Verify your email address before starting work. Enter the code we sent you, or ask for a new one.'
+                          code: email_unverified
+                    properties:
+                      errors:
+                        type: array
+                        example:
+                          -
+                            message: 'Verify your email address before starting work. Enter the code we sent you, or ask for a new one.'
+                            code: email_unverified
+                        items:
+                          type: object
+                          properties:
+                            message:
+                              type: string
+                              example: 'Verify your email address before starting work. Enter the code we sent you, or ask for a new one.'
+                            code:
+                              type: string
+                              example: email_unverified
         404:
           description: 'The computer named by `source_environment_id` does not exist, or you cannot edit it.'
           content:
@@ -4557,32 +4597,59 @@ paths:
                           type: string
                           example: unauthenticated
         403:
-          description: 'You do not belong to this account.'
+          description: ''
           content:
             application/json:
               schema:
-                type: object
-                example:
-                  errors:
-                    -
-                      message: 'You do not belong to this account.'
-                      code: forbidden
-                properties:
-                  errors:
-                    type: array
+                oneOf:
+                  -
+                    description: 'You do not belong to this account.'
+                    type: object
                     example:
-                      -
-                        message: 'You do not belong to this account.'
-                        code: forbidden
-                    items:
-                      type: object
-                      properties:
-                        message:
-                          type: string
-                          example: 'You do not belong to this account.'
-                        code:
-                          type: string
-                          example: forbidden
+                      errors:
+                        -
+                          message: 'You do not belong to this account.'
+                          code: forbidden
+                    properties:
+                      errors:
+                        type: array
+                        example:
+                          -
+                            message: 'You do not belong to this account.'
+                            code: forbidden
+                        items:
+                          type: object
+                          properties:
+                            message:
+                              type: string
+                              example: 'You do not belong to this account.'
+                            code:
+                              type: string
+                              example: forbidden
+                  -
+                    description: 'The caller signed up with a password and has not verified their email address yet.'
+                    type: object
+                    example:
+                      errors:
+                        -
+                          message: 'Verify your email address before starting work. Enter the code we sent you, or ask for a new one.'
+                          code: email_unverified
+                    properties:
+                      errors:
+                        type: array
+                        example:
+                          -
+                            message: 'Verify your email address before starting work. Enter the code we sent you, or ask for a new one.'
+                            code: email_unverified
+                        items:
+                          type: object
+                          properties:
+                            message:
+                              type: string
+                              example: 'Verify your email address before starting work. Enter the code we sent you, or ask for a new one.'
+                            code:
+                              type: string
+                              example: email_unverified
         404:
           description: 'Environment not found.'
           content:
@@ -5227,7 +5294,61 @@ paths:
                           type: string
                           example: unauthenticated
         403:
-          description: 'You do not belong to this account.'
+          description: ''
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  -
+                    description: 'You do not belong to this account.'
+                    type: object
+                    example:
+                      errors:
+                        -
+                          message: 'You do not belong to this account.'
+                          code: forbidden
+                    properties:
+                      errors:
+                        type: array
+                        example:
+                          -
+                            message: 'You do not belong to this account.'
+                            code: forbidden
+                        items:
+                          type: object
+                          properties:
+                            message:
+                              type: string
+                              example: 'You do not belong to this account.'
+                            code:
+                              type: string
+                              example: forbidden
+                  -
+                    description: 'The caller signed up with a password and has not verified their email address yet.'
+                    type: object
+                    example:
+                      errors:
+                        -
+                          message: 'Verify your email address before starting work. Enter the code we sent you, or ask for a new one.'
+                          code: email_unverified
+                    properties:
+                      errors:
+                        type: array
+                        example:
+                          -
+                            message: 'Verify your email address before starting work. Enter the code we sent you, or ask for a new one.'
+                            code: email_unverified
+                        items:
+                          type: object
+                          properties:
+                            message:
+                              type: string
+                              example: 'Verify your email address before starting work. Enter the code we sent you, or ask for a new one.'
+                            code:
+                              type: string
+                              example: email_unverified
+        409:
+          description: 'The account already runs as many computers as its limit allows. Stop one, or ask Wallfacer to raise the limit.'
           content:
             application/json:
               schema:
@@ -5235,24 +5356,24 @@ paths:
                 example:
                   errors:
                     -
-                      message: 'You do not belong to this account.'
-                      code: forbidden
+                      message: 'This account is already running its limit of 5 computers. Stop one of them, or ask Wallfacer to raise the limit.'
+                      code: account_computer_limit_reached
                 properties:
                   errors:
                     type: array
                     example:
                       -
-                        message: 'You do not belong to this account.'
-                        code: forbidden
+                        message: 'This account is already running its limit of 5 computers. Stop one of them, or ask Wallfacer to raise the limit.'
+                        code: account_computer_limit_reached
                     items:
                       type: object
                       properties:
                         message:
                           type: string
-                          example: 'You do not belong to this account.'
+                          example: 'This account is already running its limit of 5 computers. Stop one of them, or ask Wallfacer to raise the limit.'
                         code:
                           type: string
-                          example: forbidden
+                          example: account_computer_limit_reached
         422:
           description: ''
           content:
@@ -6556,7 +6677,7 @@ paths:
     get:
       summary: 'List tasks across your accounts'
       operationId: listTasksAcrossYourAccounts
-      description: "Returns tasks from every account you belong to as one list, ordered by most recent activity. Use it for a task history that spans accounts, instead of listing each account's tasks and merging them.\n\nBy default (`scope=mine`) the list holds the tasks you own: those whose `owner_user_id` is you. `scope=visible` returns every task you can see in those accounts, which is the same set each account's own task list returns. Accounts still waiting on activation are left out.\n\n**Narrowing to accounts.** `account_ids` limits the list to the accounts you name. An id you cannot read (an account you do not belong to, one pending activation, or one that does not exist) is ignored, so the list holds the remaining accounts' tasks, or none when no id is readable. `account_id` narrows to a single account and refuses one you cannot read with 404 or 403. Send one or the other, not both.\n\n**Order.** Rows are sorted by `last_activity_at`, newest first, then by `id` descending, so tasks with the same activity time keep a fixed order. `q` filters the list and keeps this order.\n\n**Paging.** Every filter (`scope`, `account_ids` or `account_id`, `archived`, `q`, membership and activation) is applied before the page is cut, so every page except the last holds `per_page` rows. When more rows exist, `meta.next_cursor` holds an opaque cursor; pass it back as `cursor` with the same filters to get the next page. A cursor records the filters it was issued for: sent with different ones it returns 422, and the list starts again without a cursor. `per_page` may change between pages. On a list that is not changing, following cursors returns every row exactly once. A task that sees new activity while you page moves ahead of the cursor: later pages skip it, and the first page shows it at its new place. Access is checked on every request, so a cursor never returns tasks from an account you no longer belong to.\n\nEach row carries `account_id` and the account's `name`, which is everything needed to open it at `GET /v1/accounts/{account_id}/tasks/{id}`."
+      description: "Returns tasks from every account you belong to as one list, ordered by most recent activity. Use it for a task history that spans accounts, instead of listing each account's tasks and merging them.\n\nBy default (`scope=mine`) the list holds the tasks you own: those whose `owner_user_id` is you. `scope=visible` returns every task you can see in those accounts, which is the same set each account's own task list returns. Suspended accounts are left out.\n\n**Narrowing to accounts.** `account_ids` limits the list to the accounts you name. An id you cannot read (an account you do not belong to, a suspended one, or one that does not exist) is ignored, so the list holds the remaining accounts' tasks, or none when no id is readable. `account_id` narrows to a single account and refuses one you cannot read with 404 or 403. Send one or the other, not both.\n\n**Order.** Rows are sorted by `last_activity_at`, newest first, then by `id` descending, so tasks with the same activity time keep a fixed order. `q` filters the list and keeps this order.\n\n**Paging.** Every filter (`scope`, `account_ids` or `account_id`, `archived`, `q`, membership and suspension) is applied before the page is cut, so every page except the last holds `per_page` rows. When more rows exist, `meta.next_cursor` holds an opaque cursor; pass it back as `cursor` with the same filters to get the next page. A cursor records the filters it was issued for: sent with different ones it returns 422, and the list starts again without a cursor. `per_page` may change between pages. On a list that is not changing, following cursors returns every row exactly once. A task that sees new activity while you page moves ahead of the cursor: later pages skip it, and the first page shows it at its new place. Access is checked on every request, so a cursor never returns tasks from an account you no longer belong to.\n\nEach row carries `account_id` and the account's `name`, which is everything needed to open it at `GET /v1/accounts/{account_id}/tasks/{id}`."
       parameters:
         -
           in: query
@@ -6985,7 +7106,7 @@ paths:
                         binding_constraint:
                           type: string
                           example: null
-                          description: "What's blocking the task from advancing. Null while the task is advancing freely.\n\n- `kind`: what the task is blocked on, one of:\n  - `question`: the agent asked a person a question and is waiting on the answer. Carries `session_id`, the session the question is parked on - an answer is an ordinary message on that session, there is no separate resolve endpoint. Raised only for a question asked on the app's own thread; one asked in a Slack room stays `action_running`, because the reader here is a bystander to it.\n  - `waiting`: a step is watching a condition and re-checking on a cadence. Carries `checks_used` and `max_checks` (how many of the scheduled re-checks have run and the budget), and `next_check_at` / `deadline_at`. Checks triggered early by a matching event are extra reads, not scheduled ones: they leave `checks_used` and `next_check_at` alone, so the cadence the step declares is what the budget measures.\n  - `retrying`: the task is waiting for compute capacity and will retry automatically. Carries `next_retry_seconds` (the wait before the next attempt) and `retries` (attempts made so far).\n  - `action_running`: a step is in flight.\n  - `paused`: a person paused the task.\n- `summary`: short human-readable description.\n- `since`: ISO 8601 timestamp the constraint started at."
+                          description: "What's blocking the task from advancing. Null while the task is advancing freely.\n\n- `kind`: what the task is blocked on, one of:\n  - `question`: the agent asked a person a question and is waiting on the answer. Carries `session_id`, the session the question is parked on - an answer is an ordinary message on that session, there is no separate resolve endpoint. Raised only for a question asked on the app's own thread; one asked in a Slack room stays `action_running`, because the reader here is a bystander to it.\n  - `waiting`: a step is watching a condition and re-checking on a cadence. Carries `checks_used` and `max_checks` (how many of the scheduled re-checks have run and the budget), and `next_check_at` / `deadline_at`. Checks triggered early by a matching event are extra reads, not scheduled ones: they leave `checks_used` and `next_check_at` alone, so the cadence the step declares is what the budget measures.\n  - `retrying`: the task is waiting for compute capacity and will retry automatically. Carries `next_retry_seconds` (the wait before the next attempt), `retries` (attempts made so far) and `code`: `account_computer_limit_reached` when the account is already running its limit of computers (it starts on its own once one stops; stopping one, or asking Wallfacer to raise the limit, unblocks it), otherwise null.\n  - `action_running`: a step is in flight.\n  - `paused`: a person paused the task.\n- `summary`: short human-readable description.\n- `since`: ISO 8601 timestamp the constraint started at."
                           nullable: true
                           enum:
                             - question
@@ -7094,7 +7215,7 @@ paths:
                           type: string
                           example: unauthenticated
         403:
-          description: 'The `account_id` account is one you belong to, but it has not been activated yet.'
+          description: 'The `account_id` account is one you belong to, but it is suspended.'
           content:
             application/json:
               schema:
@@ -8164,32 +8285,59 @@ paths:
                           type: string
                           example: unauthenticated
         403:
-          description: 'You do not belong to this account.'
+          description: ''
           content:
             application/json:
               schema:
-                type: object
-                example:
-                  errors:
-                    -
-                      message: 'You do not belong to this account.'
-                      code: forbidden
-                properties:
-                  errors:
-                    type: array
+                oneOf:
+                  -
+                    description: 'You do not belong to this account.'
+                    type: object
                     example:
-                      -
-                        message: 'You do not belong to this account.'
-                        code: forbidden
-                    items:
-                      type: object
-                      properties:
-                        message:
-                          type: string
-                          example: 'You do not belong to this account.'
-                        code:
-                          type: string
-                          example: forbidden
+                      errors:
+                        -
+                          message: 'You do not belong to this account.'
+                          code: forbidden
+                    properties:
+                      errors:
+                        type: array
+                        example:
+                          -
+                            message: 'You do not belong to this account.'
+                            code: forbidden
+                        items:
+                          type: object
+                          properties:
+                            message:
+                              type: string
+                              example: 'You do not belong to this account.'
+                            code:
+                              type: string
+                              example: forbidden
+                  -
+                    description: 'The request resumes a paused task (`status: active`) and the caller signed up with a password and has not verified their email address yet.'
+                    type: object
+                    example:
+                      errors:
+                        -
+                          message: 'Verify your email address before starting work. Enter the code we sent you, or ask for a new one.'
+                          code: email_unverified
+                    properties:
+                      errors:
+                        type: array
+                        example:
+                          -
+                            message: 'Verify your email address before starting work. Enter the code we sent you, or ask for a new one.'
+                            code: email_unverified
+                        items:
+                          type: object
+                          properties:
+                            message:
+                              type: string
+                              example: 'Verify your email address before starting work. Enter the code we sent you, or ask for a new one.'
+                            code:
+                              type: string
+                              example: email_unverified
         404:
           description: 'Task not found.'
           content:
@@ -11882,7 +12030,7 @@ paths:
                           type: string
                           example: unauthenticated
         403:
-          description: 'The account has not been activated yet.'
+          description: 'The account is suspended.'
           content:
             application/json:
               schema:
@@ -11995,7 +12143,7 @@ paths:
                           type: string
                           example: unauthenticated
         403:
-          description: 'The account has not been activated yet.'
+          description: 'The account is suspended.'
           content:
             application/json:
               schema:
@@ -12245,7 +12393,7 @@ paths:
                           type: string
                           example: unauthenticated
         403:
-          description: 'The account has not been activated yet.'
+          description: 'The account is suspended.'
           content:
             application/json:
               schema:
@@ -16241,7 +16389,61 @@ paths:
                           type: string
                           example: unauthenticated
         403:
-          description: 'You do not belong to this account.'
+          description: ''
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  -
+                    description: 'You do not belong to this account.'
+                    type: object
+                    example:
+                      errors:
+                        -
+                          message: 'You do not belong to this account.'
+                          code: forbidden
+                    properties:
+                      errors:
+                        type: array
+                        example:
+                          -
+                            message: 'You do not belong to this account.'
+                            code: forbidden
+                        items:
+                          type: object
+                          properties:
+                            message:
+                              type: string
+                              example: 'You do not belong to this account.'
+                            code:
+                              type: string
+                              example: forbidden
+                  -
+                    description: 'The caller signed up with a password and has not verified their email address yet.'
+                    type: object
+                    example:
+                      errors:
+                        -
+                          message: 'Verify your email address before starting work. Enter the code we sent you, or ask for a new one.'
+                          code: email_unverified
+                    properties:
+                      errors:
+                        type: array
+                        example:
+                          -
+                            message: 'Verify your email address before starting work. Enter the code we sent you, or ask for a new one.'
+                            code: email_unverified
+                        items:
+                          type: object
+                          properties:
+                            message:
+                              type: string
+                              example: 'Verify your email address before starting work. Enter the code we sent you, or ask for a new one.'
+                            code:
+                              type: string
+                              example: email_unverified
+        409:
+          description: 'The account already employs as many agents as its limit allows.'
           content:
             application/json:
               schema:
@@ -16249,24 +16451,24 @@ paths:
                 example:
                   errors:
                     -
-                      message: 'You do not belong to this account.'
-                      code: forbidden
+                      message: 'This account can employ 10 agents, and it already does. Offboard an agent, or ask Wallfacer to raise the limit.'
+                      code: account_agent_limit_reached
                 properties:
                   errors:
                     type: array
                     example:
                       -
-                        message: 'You do not belong to this account.'
-                        code: forbidden
+                        message: 'This account can employ 10 agents, and it already does. Offboard an agent, or ask Wallfacer to raise the limit.'
+                        code: account_agent_limit_reached
                     items:
                       type: object
                       properties:
                         message:
                           type: string
-                          example: 'You do not belong to this account.'
+                          example: 'This account can employ 10 agents, and it already does. Offboard an agent, or ask Wallfacer to raise the limit.'
                         code:
                           type: string
-                          example: forbidden
+                          example: account_agent_limit_reached
         422:
           description: 'Validation failed.'
           content:
@@ -16857,6 +17059,10 @@ paths:
                   description: 'How sure the agent must be that a reply in a Slack thread it is part of is not meant for it before it stays quiet without reading it. Between 0.5 and 1: higher means the agent stays quiet less often. Applies only to thread replies that do not mention the agent; a mention or a direct message always gets an answer. Takes effect only once quiet thread replies are turned on for the account. Send null for the platform default. Must be between 0.5 and 1.'
                   example: 0.9
                   nullable: true
+                show_work:
+                  type: boolean
+                  description: 'Whether the agent shows its work in the thread while it answers. When on, a Slack turn the agent was mentioned or messaged directly in streams the tools it runs, its narration, and short excerpts of its reasoning into one collapsed working message above the answer; file, command, page and mail contents are never copied into it. When off, the thread shows only the thinking indicator and then the answer. On by default.'
+                  example: false
     delete:
       summary: 'Disable an agent'
       operationId: disableAnAgent
@@ -21854,6 +22060,33 @@ paths:
                     description: 'The plaintext event key. Returned only at creation time, never again.'
                 required:
                   - key
+        403:
+          description: 'The caller signed up with a password and has not verified their email address yet.'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: 'Verify your email address before starting work. Enter the code we sent you, or ask for a new one.'
+                      code: email_unverified
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: 'Verify your email address before starting work. Enter the code we sent you, or ask for a new one.'
+                        code: email_unverified
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: 'Verify your email address before starting work. Enter the code we sent you, or ask for a new one.'
+                        code:
+                          type: string
+                          example: email_unverified
       tags:
         - 'Event keys'
       requestBody:
@@ -22323,6 +22556,33 @@ paths:
                       sequence:
                         type: integer
                         example: 42
+        403:
+          description: 'The caller signed up with a password and has not verified their email address yet.'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: 'Verify your email address before starting work. Enter the code we sent you, or ask for a new one.'
+                      code: email_unverified
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: 'Verify your email address before starting work. Enter the code we sent you, or ask for a new one.'
+                        code: email_unverified
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: 'Verify your email address before starting work. Enter the code we sent you, or ask for a new one.'
+                        code:
+                          type: string
+                          example: email_unverified
       tags:
         - Events
       requestBody:
@@ -22554,6 +22814,33 @@ paths:
                       $ref: '#/components/schemas/Inboundwebhookcollector'
                   meta:
                     $ref: '#/components/schemas/PaginationMeta4'
+        403:
+          description: 'The caller signed up with a password and has not verified their email address yet.'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: 'Verify your email address before starting work. Enter the code we sent you, or ask for a new one.'
+                      code: email_unverified
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: 'Verify your email address before starting work. Enter the code we sent you, or ask for a new one.'
+                        code: email_unverified
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: 'Verify your email address before starting work. Enter the code we sent you, or ask for a new one.'
+                        code:
+                          type: string
+                          example: email_unverified
       tags:
         - 'Inbound webhook collectors'
     post:
@@ -22583,6 +22870,33 @@ paths:
                 properties:
                   data:
                     $ref: '#/components/schemas/Inboundwebhookcollector'
+        403:
+          description: 'The caller signed up with a password and has not verified their email address yet.'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: 'Verify your email address before starting work. Enter the code we sent you, or ask for a new one.'
+                      code: email_unverified
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: 'Verify your email address before starting work. Enter the code we sent you, or ask for a new one.'
+                        code: email_unverified
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: 'Verify your email address before starting work. Enter the code we sent you, or ask for a new one.'
+                        code:
+                          type: string
+                          example: email_unverified
       tags:
         - 'Inbound webhook collectors'
       requestBody:
@@ -22663,6 +22977,33 @@ paths:
                 properties:
                   data:
                     $ref: '#/components/schemas/Inboundwebhookcollector'
+        403:
+          description: 'The caller signed up with a password and has not verified their email address yet.'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  errors:
+                    -
+                      message: 'Verify your email address before starting work. Enter the code we sent you, or ask for a new one.'
+                      code: email_unverified
+                properties:
+                  errors:
+                    type: array
+                    example:
+                      -
+                        message: 'Verify your email address before starting work. Enter the code we sent you, or ask for a new one.'
+                        code: email_unverified
+                    items:
+                      type: object
+                      properties:
+                        message:
+                          type: string
+                          example: 'Verify your email address before starting work. Enter the code we sent you, or ask for a new one.'
+                        code:
+                          type: string
+                          example: email_unverified
         404:
           description: ''
           content:
@@ -25339,7 +25680,7 @@ paths:
     get:
       summary: 'Get the handbook tree'
       operationId: getTheHandbookTree
-      description: "Returns the account's entire handbook as one nested tree of pages and playbooks. Each node carries a `type` of `page` or `playbook`. Page nodes hold `{id, title, description, position, has_body, updated_at, children}`; their markdown body is omitted (fetch it from the page endpoint). Playbook nodes are always leaves and hold `{id, title, description, position, disabled_at, has_draft, active_version, task_count}`. Within a parent, pages and playbooks share one ordering: `position` ascending, ties broken by creation time. Archived playbooks are excluded. An entry copied in from the library also carries `library`, holding the entry it came from, when it was copied, and `update_available`: true when the library has published something newer than what you took. It is null for everything you wrote yourself."
+      description: "Returns the account's entire handbook as one nested tree of pages and playbooks. Each node carries a `type` of `page` or `playbook`. Page nodes hold `{id, url, title, description, position, has_body, updated_at, children}`; their markdown body is omitted (fetch it from the page endpoint). Playbook nodes are always leaves and hold `{id, url, title, description, position, disabled_at, has_draft, active_version, task_count}`. Within a parent, pages and playbooks share one ordering: `position` ascending, ties broken by creation time. `url` is the web address a person opens the entry at. Archived playbooks are excluded. An entry copied in from the library also carries `library`, holding the entry it came from, when it was copied, and `update_available`: true when the library has published something newer than what you took. It is null for everything you wrote yourself."
       parameters: []
       responses:
         200:
@@ -25419,6 +25760,9 @@ paths:
                             id:
                               type: string
                               example: 019d78bd-4bd3-7173-b53b-8894b6b952b3
+                            url:
+                              type: string
+                              example: 'https://app.wallfacer.ai/accounts/019d78bd-4bd3-7173-b53b-8894b6b952b0/handbook/pages/019d78bd-4bd3-7173-b53b-8894b6b952b3'
                             title:
                               type: string
                               example: Engineering
@@ -25460,6 +25804,9 @@ paths:
                                   id:
                                     type: string
                                     example: 019d78bd-4bd3-7173-b53b-8894b6b952b4
+                                  url:
+                                    type: string
+                                    example: 'https://app.wallfacer.ai/accounts/019d78bd-4bd3-7173-b53b-8894b6b952b0/handbook/019d78bd-4bd3-7173-b53b-8894b6b952b4'
                                   title:
                                     type: string
                                     example: 'Fix bugs'
@@ -28085,28 +28432,55 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                example:
-                  errors:
-                    -
-                      message: 'You do not belong to this account or lack the credentials required to run snapshot generation.'
-                      code: forbidden
-                properties:
-                  errors:
-                    type: array
+                oneOf:
+                  -
+                    description: ''
+                    type: object
                     example:
-                      -
-                        message: 'You do not belong to this account or lack the credentials required to run snapshot generation.'
-                        code: forbidden
-                    items:
-                      type: object
-                      properties:
-                        message:
-                          type: string
-                          example: 'You do not belong to this account or lack the credentials required to run snapshot generation.'
-                        code:
-                          type: string
-                          example: forbidden
+                      errors:
+                        -
+                          message: 'You do not belong to this account or lack the credentials required to run snapshot generation.'
+                          code: forbidden
+                    properties:
+                      errors:
+                        type: array
+                        example:
+                          -
+                            message: 'You do not belong to this account or lack the credentials required to run snapshot generation.'
+                            code: forbidden
+                        items:
+                          type: object
+                          properties:
+                            message:
+                              type: string
+                              example: 'You do not belong to this account or lack the credentials required to run snapshot generation.'
+                            code:
+                              type: string
+                              example: forbidden
+                  -
+                    description: 'The caller signed up with a password and has not verified their email address yet.'
+                    type: object
+                    example:
+                      errors:
+                        -
+                          message: 'Verify your email address before starting work. Enter the code we sent you, or ask for a new one.'
+                          code: email_unverified
+                    properties:
+                      errors:
+                        type: array
+                        example:
+                          -
+                            message: 'Verify your email address before starting work. Enter the code we sent you, or ask for a new one.'
+                            code: email_unverified
+                        items:
+                          type: object
+                          properties:
+                            message:
+                              type: string
+                              example: 'Verify your email address before starting work. Enter the code we sent you, or ask for a new one.'
+                            code:
+                              type: string
+                              example: email_unverified
         404:
           description: ''
           content:
