@@ -5556,7 +5556,7 @@ paths:
                   example: snap-019d8e44-a1b2
                 env:
                   type: object
-                  description: "Per-boot environment variable overrides, merged into the manifest's `env` block before boot. Keys and values are strings; credentials (`GIT_TOKEN`, `ANTHROPIC_API_KEY`) are injected automatically and do not need to be supplied here."
+                  description: "Per-boot environment variable overrides, merged into the manifest's `env` block before boot. Keys and values are strings; credentials (`GIT_TOKEN`, `ANTHROPIC_API_KEY`, and the agent's Google access as `GOOGLE_WORKSPACE_CLI_TOKEN`, `GOOGLE_ACCESS_TOKEN`, `GOOGLE_ACCOUNT_EMAIL`) are injected automatically and do not need to be supplied here. The Google keys are platform-owned: supplying them here has no effect, they are dropped before the merge."
                   example: null
                   properties: {  }
               required:
